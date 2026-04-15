@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI教育平台 MVP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 28px; margin-bottom: 8px; }
+        .header p { opacity: 0.9; }
+        .content { padding: 30px; }
+        .upload-section {
+            border: 2px dashed #ddd;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s;
+            background: #fafafa;
+        }
+        .upload-section:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        .upload-section.dragover {
+            border-color: #667eea;
+            background: #e8eeff;
+        }
+        input[type="text"] {
+            width: 100%;
+            max-width: 300px;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .file-label {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px;
+        }
+        .file-label:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+        .btn-primary {
+            padding: 14px 40px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 15px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result-box {
+            margin-top: 30px;
+            padding: 25px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+            display: none;
+        }
+        .result-box.show { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .result-box h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .weak-points {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .tag {
+            background: #ff6b6b;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .recommendations {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        .recommendations li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            list-style-position: inside;
+        }
+        .recommendations li:last-child { border-bottom: none; }
+        .exam-list {
+            margin-top: 40px;
+        }
+        .exam-list h3 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+        .exam-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        .exam-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+        .exam-info h4 { color: #333; margin-bottom: 5px; }
+        .exam-info p { color: #666; font-size: 14px; }
+        .exam-status {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        .status-analyzed { background: #d4edda; color: #155724; }
+        .status-pending { background: #fff3cd; color: #856404; }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        .loading.show { display: block; }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 AI教育平台 MVP</h1>
+            <p>上传试卷 → AI分析薄弱点 → 获取个性化学习方案</p>
+        </div>
+        
+        <div class="content">
+            <!-- 上传区域 -->
+            <div class="upload-section" id="dropZone">
+                <h3 style="margin-bottom: 20px; color: #555;">📤 上传学生试卷</h3>
+                <input type="text" id="studentName" placeholder="请输入学生姓名" />
+                <br>
+                <input type="file" id="fileInput" accept="image/*" />
+                <label for="fileInput" class="file-label">📷 选择试卷图片</label>
+                <p id="fileName" style="margin-top: 10px; color: #666;"></p>
+                <button class="btn-primary" id="uploadBtn" onclick="uploadAndAnalyze()" disabled>
+                    开始分析
+                </button>
+            </div>
+            
+            <!-- 加载中 -->
+            <div class="loading" id="loadingBox">
+                <div class="spinner"></div>
+                <p>正在上传并分析试卷...</p>
+                <p style="font-size: 14px; color: #999; margin-top: 10px;">预计需要 10-20 秒</p>
+            </div>
+            
+            <!-- 分析结果 -->
+            <div class="result-box" id="resultBox">
+                <h3>📊 AI分析结果</h3>
+                <p><strong>学生：</strong><span id="resultStudent"></span></p>
+                <div style="margin-top: 15px;">
+                    <strong>薄弱知识点：</strong>
+                    <div class="weak-points" id="weakPoints"></div>
+                </div>
+                <div class="recommendations">
+                    <strong>💡 针对性强化建议：</strong>
+                    <ol id="recommendations"></ol>
+                </div>
+            </div>
+            
+            <!-- 试卷列表 -->
+            <div class="exam-list">
+                <h3>📋 最近分析记录</h3>
+                <div id="examList">
+                    <div class="empty-state">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let selectedFile = null;
+        
+        // 文件选择
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                document.getElementById('fileName').textContent = '已选择: ' + selectedFile.name;
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        });
+        
+        // 拖拽上传
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            selectedFile = e.dataTransfer.files[0];
+            if (selectedFile && selectedFile.type.startsWith('image/')) {
+                document.getElementById('fileName').textContent = '已选择: ' + selectedFile.name;
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        });
+        
+        // 上传并分析
+        async function uploadAndAnalyze() {
+            const studentName = document.getElementById('studentName').value.trim();
+            if (!studentName) {
+                alert('请输入学生姓名');
+                return;
+            }
+            if (!selectedFile) {
+                alert('请选择试卷图片');
+                return;
+            }
+            
+            // 显示加载
+            document.getElementById('loadingBox').classList.add('show');
+            document.getElementById('resultBox').classList.remove('show');
+            document.getElementById('uploadBtn').disabled = true;
+            
+            try {
+                // 1. 上传
+                const formData = new FormData();
+                formData.append('student_name', studentName);
+                formData.append('file', selectedFile);
+                
+                const uploadRes = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const uploadData = await uploadRes.json();
+                
+                if (!uploadData.success) {
+                    throw new Error(uploadData.error || '上传失败');
+                }
+                
+                // 2. 分析
+                const analyzeRes = await fetch(`${API_URL}/analyze/${uploadData.id}`, {
+                    method: 'POST'
+                });
+                const analyzeData = await analyzeRes.json();
+                
+                if (!analyzeData.success) {
+                    throw new Error(analyzeData.error || '分析失败');
+                }
+                
+                // 显示结果
+                displayResult(studentName, analyzeData.analysis);
+                loadExamList();
+                
+                // 清空
+                document.getElementById('studentName').value = '';
+                document.getElementById('fileName').textContent = '';
+                document.getElementById('fileInput').value = '';
+                selectedFile = null;
+                document.getElementById('uploadBtn').disabled = true;
+                
+            } catch (error) {
+                alert('操作失败: ' + error.message);
+            } finally {
+                document.getElementById('loadingBox').classList.remove('show');
+            }
+        }
+        
+        // 显示分析结果
+        function displayResult(student, analysis) {
+            document.getElementById('resultStudent').textContent = student;
+            
+            const weakPointsHtml = analysis.weak_points.map(p => 
+                `<span class="tag">${p}</span>`
+            ).join('');
+            document.getElementById('weakPoints').innerHTML = weakPointsHtml;
+            
+            const recHtml = analysis.recommendations.map(r => 
+                `<li>${r}</li>`
+            ).join('');
+            document.getElementById('recommendations').innerHTML = recHtml;
+            
+            document.getElementById('resultBox').classList.add('show');
+        }
+        
+        // 加载试卷列表
+        async function loadExamList() {
+            try {
+                const res = await fetch(`${API_URL}/exams`);
+                const data = await res.json();
+                
+                const listHtml = data.exams.length > 0 
+                    ? data.exams.map(e => `
+                        <div class="exam-item">
+                            <div class="exam-info">
+                                <h4>${e.student}</h4>
+                                <p>${new Date(e.created).toLocaleString()}</p>
+                            </div>
+                            <span class="exam-status ${e.weak_points ? 'status-analyzed' : 'status-pending'}">
+                                ${e.weak_points ? '✅ 已分析' : '⏳ 待分析'}
+                            </span>
+                        </div>
+                    `).join('')
+                    : '<div class="empty-state">暂无数据，请先上传试卷</div>';
+                
+                document.getElementById('examList').innerHTML = listHtml;
+            } catch (error) {
+                document.getElementById('examList').innerHTML = 
+                    '<div class="empty-state">加载失败，请刷新重试</div>';
+            }
+        }
+        
+        // 页面加载时获取列表
+        loadExamList();
+    </script>
+</body>
+</html>

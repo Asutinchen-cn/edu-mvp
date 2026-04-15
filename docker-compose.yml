@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  api:
+    build: ./api
+    container_name: edu-api
+    volumes:
+      - ./uploads:/uploads
+      - ./data:/data
+    restart: unless-stopped
+    networks:
+      - edu-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: edu-web
+    ports:
+      - "8080:80"
+    volumes:
+      - ./web:/usr/share/nginx/html
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./uploads:/uploads
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - edu-network
+
+networks:
+  edu-network:
+    driver: bridge
