@@ -194,6 +194,84 @@
             padding: 40px;
             color: #999;
         }
+        .practice-section {
+            margin-top: 25px;
+            padding: 25px;
+            background: linear-gradient(135deg, #fff9e6 0%, #ffe4b5 100%);
+            border-radius: 12px;
+            display: none;
+        }
+        .practice-section.show { display: block; animation: fadeIn 0.5s; }
+        .practice-section h3 {
+            color: #e67e22;
+            margin-bottom: 20px;
+        }
+        .question-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .question-type {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .question-text {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .options {
+            margin: 10px 0;
+        }
+        .option-item {
+            padding: 10px 15px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .option-item:hover {
+            background: #e9ecef;
+        }
+        .hint-box {
+            margin-top: 15px;
+            padding: 12px;
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+            display: none;
+        }
+        .hint-box.show { display: block; }
+        .show-answer-btn {
+            padding: 8px 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .answer-text {
+            margin-top: 10px;
+            padding: 10px;
+            background: #d4edda;
+            border-radius: 6px;
+            color: #155724;
+            display: none;
+        }
+        .answer-text.show { display: block; }
     </style>
 </head>
 <body>
@@ -236,6 +314,15 @@
                     <strong>💡 针对性强化建议：</strong>
                     <ol id="recommendations"></ol>
                 </div>
+                <button class="btn-primary" id="generateBtn" onclick="generatePractice()" style="margin-top: 20px;">
+                    📝 生成5道巩固练习题
+                </button>
+            </div>
+            
+            <!-- 巩固练习题 -->
+            <div class="practice-section" id="practiceBox">
+                <h3>📝 针对性巩固练习（5道题）</h3>
+                <div id="questionsList"></div>
             </div>
             
             <!-- 试卷列表 -->
@@ -323,7 +410,8 @@
                     throw new Error(analyzeData.error || '分析失败');
                 }
                 
-                // 显示结果
+                // 保存exam_id并显示结果
+                currentExamId = uploadData.id;
                 displayResult(studentName, analyzeData.analysis);
                 loadExamList();
                 
@@ -385,6 +473,94 @@
             }
         }
         
+        // 存储当前exam_id
+        let currentExamId = null;
+
+        // 生成巩固练习题
+        async function generatePractice() {
+            if (!currentExamId) {
+                alert('请先上传并分析试卷');
+                return;
+            }
+            
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = true;
+            btn.textContent = '生成中...';
+            
+            try {
+                const res = await fetch(`${API_URL}/generate-practice/${currentExamId}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || '生成失败');
+                }
+                
+                displayQuestions(data.questions);
+                
+            } catch (error) {
+                alert('生成练习题失败: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📝 重新生成5道巩固练习题';
+            }
+        }
+        
+        // 显示练习题
+        function displayQuestions(questions) {
+            const container = document.getElementById('questionsList');
+            
+            const html = questions.map((q, index) => `
+                <div class="question-card">
+                    <div class="question-header">
+                        <span style="font-weight: bold; color: #333;">第 ${index + 1} 题</span>
+                        <span class="question-type">${q.type}</span>
+                    </div>
+                    <div class="question-text">${q.question}</div>
+                    ${q.options ? `
+                        <div class="options">
+                            ${q.options.map((opt, i) => `
+                                <div class="option-item" onclick="selectOption(this)">${String.fromCharCode(65 + i)}. ${opt}</div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    <button class="show-answer-btn" onclick="toggleAnswer(${index})">💡 查看提示/答案</button>
+                    <div class="hint-box" id="hint-${index}">
+                        <strong>提示：</strong>${q.hint}
+                        <div class="answer-text" id="answer-${index}">
+                            <strong>答案：</strong>${q.answer}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            container.innerHTML = html;
+            document.getElementById('practiceBox').classList.add('show');
+            
+            // 滚动到练习题区域
+            document.getElementById('practiceBox').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // 选择选项（视觉反馈）
+        function selectOption(element) {
+            // 移除同组其他选项的高亮
+            const siblings = element.parentElement.querySelectorAll('.option-item');
+            siblings.forEach(s => s.style.background = '#f8f9fa');
+            // 高亮当前选项
+            element.style.background = '#d4edda';
+        }
+        
+        // 切换答案显示
+        function toggleAnswer(index) {
+            const hintBox = document.getElementById(`hint-${index}`);
+            const answerText = document.getElementById(`answer-${index}`);
+            hintBox.classList.toggle('show');
+            setTimeout(() => {
+                answerText.classList.toggle('show');
+            }, 500);
+        }
+
         // 页面加载时获取列表
         loadExamList();
     </script>

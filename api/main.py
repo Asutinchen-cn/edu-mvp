@@ -73,6 +73,77 @@ def mock_analyze(ocr_text: str) -> dict:
         ]
     }
 
+# 生成巩固练习题（根据薄弱知识点）
+def generate_practice_questions(weak_points: list) -> list:
+    """根据薄弱知识点生成5道巩固练习题"""
+    # 模拟题库 - 实际可接入真实题库或AI生成
+    question_bank = {
+        "二次函数": [
+            {
+                "id": 1,
+                "type": "选择题",
+                "question": "二次函数 y = x² - 4x + 3 的顶点坐标是？",
+                "options": ["(2, -1)", "(-2, 1)", "(2, 1)", "(-2, -1)"],
+                "answer": "A",
+                "hint": "使用顶点公式 x = -b/2a"
+            },
+            {
+                "id": 2,
+                "type": "填空题",
+                "question": "若二次函数 y = ax² + bx + c 的图像开口向上，则 a ____ 0",
+                "answer": ">",
+                "hint": "开口方向由二次项系数决定"
+            },
+            {
+                "id": 3,
+                "type": "解答题",
+                "question": "求二次函数 y = -2x² + 8x - 5 的最大值及对应的x值",
+                "answer": "当x=2时，最大值y=3",
+                "hint": "开口向下，顶点处取最大值"
+            }
+        ],
+        "不等式求解": [
+            {
+                "id": 4,
+                "type": "选择题",
+                "question": "不等式 2x - 5 > 3 的解集是？",
+                "options": ["x > 4", "x < 4", "x > 1", "x < 1"],
+                "answer": "A",
+                "hint": "移项后两边同除以2"
+            },
+            {
+                "id": 5,
+                "type": "填空题",
+                "question": "若 |x - 3| < 5，则 x 的取值范围是 ____",
+                "answer": "-2 < x < 8",
+                "hint": "绝对值不等式转化为复合不等式"
+            }
+        ],
+        "默认": [
+            {
+                "id": 6,
+                "type": "选择题",
+                "question": "以下哪个是函数 y = x² 的性质？",
+                "options": ["关于y轴对称", "关于原点对称", "单调递增", "单调递减"],
+                "answer": "A",
+                "hint": "二次函数的对称性"
+            }
+        ]
+    }
+    
+    questions = []
+    # 根据薄弱知识点组卷
+    for point in weak_points:
+        if point in question_bank:
+            questions.extend(question_bank[point])
+    
+    # 如果不足5道，补充默认题目
+    while len(questions) < 5:
+        questions.extend(question_bank["默认"])
+    
+    # 返回前5道
+    return questions[:5]
+
 @app.post("/upload")
 async def upload_exam(student_name: str = Form(...), file: UploadFile = File(...)):
     """上传试卷图片"""
@@ -199,6 +270,40 @@ async def root():
         return FileResponse(web_path)
     return JSONResponse({"message": "API运行中，前端文件未找到"})
 
+@app.post("/generate-practice/{exam_id}")
+async def generate_practice(exam_id: int):
+    """根据薄弱知识点生成5道巩固练习题"""
+    try:
+        db = SessionLocal()
+        exam = db.query(Exam).filter(Exam.id == exam_id).first()
+        
+        if not exam:
+            db.close()
+            return JSONResponse({"error": "试卷不存在"}, status_code=404)
+        
+        # 获取薄弱知识点
+        weak_points = json.loads(exam.weak_points) if exam.weak_points else []
+        
+        if not weak_points:
+            db.close()
+            return JSONResponse({"error": "请先进行AI分析"}, status_code=400)
+        
+        # 生成练习题
+        questions = generate_practice_questions(weak_points)
+        
+        db.close()
+        
+        return JSONResponse({
+            "success": True,
+            "exam_id": exam_id,
+            "weak_points": weak_points,
+            "questions": questions,
+            "total": len(questions),
+            "note": "当前为模拟题库，后续可接入AI生成真实题目"
+        })
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
 @app.get("/api-info")
 async def api_info():
     """API信息"""
@@ -208,6 +313,7 @@ async def api_info():
         "endpoints": {
             "upload": "POST /upload (form-data: student_name, file)",
             "analyze": "POST /analyze/{id}",
+            "generate_practice": "POST /generate-practice/{id} - 生成5道巩固题",
             "list": "GET /exams",
             "detail": "GET /exams/{id}",
             "delete": "DELETE /exams/{id}"
