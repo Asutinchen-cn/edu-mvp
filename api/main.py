@@ -91,12 +91,52 @@ async def get_baidu_access_token() -> str:
         return _baidu_token["access_token"]
 
 async def baidu_ocr(image_bytes: bytes) -> str:
-    """调用百度通用文字识别（高精度版）"""
+    """调用百度 OCR 识别试卷（优先试卷专用接口）"""
     try:
         token = await get_baidu_access_token()
         img_b64 = base64.b64encode(image_bytes).decode("utf-8")
         
-        # 优先用高精度版，失败回退标准版
+        # 1. 试卷分析与识别（专用接口，返回结构化题目）
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                "https://aip.baidubce.com/rest/2.0/ocr/v1/doc_analysis",
+                params={"access_token": token},
+                data={
+                    "image": img_b64,
+                    "language_type": "CHN_ENG",
+                    "result_type": "big":  # 返回大图结构化
+                }
+            )
+            data = resp.json()
+            
+            if "results" in data:
+                # 结构化输出：按题目整理
+                questions = []
+                for item in data["results"]:
+                    q_text = item.get("words", "").strip()
+                    q_type = item.get("type", "")  # question/answer/handwriting
+                    if q_text:
+                        if q_type == "question":
+                            questions.append(f"【题目】{q_text}")
+                        elif q_type == "answer":
+                            questions.append(f"【作答】{q_text}")
+                        elif q_type == "handwriting":
+                            questions.append(f"【手写】{q_text}")
+                        else:
+                            questions.append(q_text)
+                
+                full_text = "\n".join(questions)
+                if full_text.strip():
+                    return full_text
+            
+            # 如果试卷接口返回words_result（有些版本），也处理
+            if "words_result" in data:
+                words = [item["words"] for item in data["words_result"]]
+                full_text = "\n".join(words)
+                if full_text.strip():
+                    return full_text
+        
+        # 2. 回退：高精度通用文字识别
         for api_url in [
             "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic",
             "https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic"
@@ -108,19 +148,13 @@ async def baidu_ocr(image_bytes: bytes) -> str:
                     data={"image": img_b64, "language_type": "CHN_ENG"}
                 )
                 data = resp.json()
-                
                 if "words_result" in data:
                     words = [item["words"] for item in data["words_result"]]
                     full_text = "\n".join(words)
                     if full_text.strip():
                         return full_text
-                
-                # 如果是额度用完，换标准版
-                if "高精度" in data.get("error_msg", ""):
-                    continue
-                    
-        # 都失败了，回退 mock
-        return f"[OCR识别失败，使用模拟数据] 识别到数学题目3道，填空题5道"
+        
+        return "[OCR识别失败，未提取到文字内容]"
         
     except Exception as e:
         print(f"Baidu OCR error: {e}")
@@ -407,7 +441,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 AI教育平台MVP API运行中",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
@@ -418,7 +452,7 @@ async def api_info():
             "detail": "GET /exams/{id}",
             "delete": "DELETE /exams/{id}"
         },
-        "status": "OCR已接入百度识别，AI分析已接入DeepSeek",
+        "status": "OCR已接入百度试卷识别+通用识别，AI分析已接入DeepSeek",
         "database": "PostgreSQL" if "postgresql" in DATABASE_URL else "SQLite"
     }
 
