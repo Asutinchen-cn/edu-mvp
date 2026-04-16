@@ -8,6 +8,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 import json
+import httpx
 from datetime import datetime
 
 # 数据库配置 - Railway 使用 PostgreSQL
@@ -18,6 +19,10 @@ if DATABASE_URL.startswith("postgres://"):
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# DeepSeek API 配置
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-9f2b01275a904d40badccff22ae2db09")
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 # 数据模型
 class Exam(Base):
@@ -56,93 +61,131 @@ def get_db():
     finally:
         db.close()
 
+# ===== DeepSeek API 调用 =====
+
+async def call_deepseek(prompt: str, temperature: float = 0.3) -> str:
+    """调用 DeepSeek API"""
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": 2000
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(DEEPSEEK_API_URL, json=payload, headers=headers)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+# ===== AI 分析（DeepSeek） =====
+
+async def ai_analyze(ocr_text: str) -> dict:
+    """使用 DeepSeek 进行错题分析"""
+    prompt = f"""你是一位资深教育分析专家。请根据以下试卷内容，进行详细的错题分析。
+
+试卷OCR识别内容：
+{ocr_text}
+
+请按以下JSON格式返回分析结果（不要包含其他文字，只返回JSON）：
+{{
+    "error_types": ["错误类型1", "错误类型2"],
+    "weak_points": ["薄弱知识点1", "薄弱知识点2"],
+    "root_cause": "根本原因分析",
+    "recommendations": [
+        "针对性建议1",
+        "针对性建议2",
+        "针对性建议3"
+    ]
+}}"""
+
+    try:
+        result = await call_deepseek(prompt)
+        # 提取JSON部分
+        result = result.strip()
+        if result.startswith("```"):
+            # 去掉markdown代码块
+            lines = result.split("\n")
+            result = "\n".join(lines[1:-1])
+        analysis = json.loads(result)
+        # 确保必要字段存在
+        analysis.setdefault("error_types", [])
+        analysis.setdefault("weak_points", [])
+        analysis.setdefault("root_cause", "")
+        analysis.setdefault("recommendations", [])
+        return analysis
+    except Exception as e:
+        # DeepSeek 调用失败时回退到模拟数据
+        print(f"DeepSeek API error: {e}")
+        return {
+            "error_types": ["分析服务暂时不可用"],
+            "weak_points": ["请稍后重试"],
+            "root_cause": f"AI分析服务异常: {str(e)[:50]}",
+            "recommendations": ["请稍后重试AI分析"]
+        }
+
+# ===== AI 生成巩固练习题（DeepSeek） =====
+
+async def ai_generate_questions(weak_points: list) -> list:
+    """使用 DeepSeek 根据薄弱知识点动态生成练习题"""
+    prompt = f"""你是一位经验丰富的出题老师。请根据以下薄弱知识点，生成5道针对性的巩固练习题。
+
+薄弱知识点：{', '.join(weak_points)}
+
+要求：
+1. 题目要有针对性，围绕薄弱知识点出题
+2. 包含选择题（2-3道）和填空题（2-3道）
+3. 难度适中，由易到难
+4. 每道题都要有提示和答案
+
+请按以下JSON格式返回（不要包含其他文字，只返回JSON数组）：
+[
+    {{
+        "id": 1,
+        "type": "选择题",
+        "question": "题目内容",
+        "options": ["A选项", "B选项", "C选项", "D选项"],
+        "answer": "A",
+        "hint": "解题提示"
+    }},
+    {{
+        "id": 2,
+        "type": "填空题",
+        "question": "题目内容",
+        "answer": "答案",
+        "hint": "解题提示"
+    }}
+]"""
+
+    try:
+        result = await call_deepseek(prompt, temperature=0.7)
+        result = result.strip()
+        if result.startswith("```"):
+            lines = result.split("\n")
+            result = "\n".join(lines[1:-1])
+        questions = json.loads(result)
+        # 确保每题有id
+        for i, q in enumerate(questions):
+            q.setdefault("id", i + 1)
+        return questions[:5]
+    except Exception as e:
+        print(f"DeepSeek generate error: {e}")
+        # 回退到简单提示
+        return [{
+            "id": 1,
+            "type": "提示",
+            "question": "AI出题服务暂时不可用，请稍后重试",
+            "answer": "",
+            "hint": str(e)[:50]
+        }]
+
 # 简易OCR模拟（后续接入百度OCR）
 def mock_ocr(image_path: str) -> str:
     return f"[OCR结果] 识别到数学题目3道，填空题5道"
 
-# AI分析模拟（后续接入混元API）
-def mock_analyze(ocr_text: str) -> dict:
-    return {
-        "error_types": ["计算错误", "概念不清"],
-        "weak_points": ["二次函数", "不等式求解"],
-        "root_cause": "对二次函数图像性质理解不透彻，导致最值判断失误",
-        "recommendations": [
-            "复习二次函数顶点式与一般式的转换",
-            "练习3道二次函数最值题目",
-            "观看二次函数图像动画演示"
-        ]
-    }
-
-# 生成巩固练习题（根据薄弱知识点）
-def generate_practice_questions(weak_points: list) -> list:
-    """根据薄弱知识点生成5道巩固练习题"""
-    # 模拟题库 - 实际可接入真实题库或AI生成
-    question_bank = {
-        "二次函数": [
-            {
-                "id": 1,
-                "type": "选择题",
-                "question": "二次函数 y = x² - 4x + 3 的顶点坐标是？",
-                "options": ["(2, -1)", "(-2, 1)", "(2, 1)", "(-2, -1)"],
-                "answer": "A",
-                "hint": "使用顶点公式 x = -b/2a"
-            },
-            {
-                "id": 2,
-                "type": "填空题",
-                "question": "若二次函数 y = ax² + bx + c 的图像开口向上，则 a ____ 0",
-                "answer": ">",
-                "hint": "开口方向由二次项系数决定"
-            },
-            {
-                "id": 3,
-                "type": "解答题",
-                "question": "求二次函数 y = -2x² + 8x - 5 的最大值及对应的x值",
-                "answer": "当x=2时，最大值y=3",
-                "hint": "开口向下，顶点处取最大值"
-            }
-        ],
-        "不等式求解": [
-            {
-                "id": 4,
-                "type": "选择题",
-                "question": "不等式 2x - 5 > 3 的解集是？",
-                "options": ["x > 4", "x < 4", "x > 1", "x < 1"],
-                "answer": "A",
-                "hint": "移项后两边同除以2"
-            },
-            {
-                "id": 5,
-                "type": "填空题",
-                "question": "若 |x - 3| < 5，则 x 的取值范围是 ____",
-                "answer": "-2 < x < 8",
-                "hint": "绝对值不等式转化为复合不等式"
-            }
-        ],
-        "默认": [
-            {
-                "id": 6,
-                "type": "选择题",
-                "question": "以下哪个是函数 y = x² 的性质？",
-                "options": ["关于y轴对称", "关于原点对称", "单调递增", "单调递减"],
-                "answer": "A",
-                "hint": "二次函数的对称性"
-            }
-        ]
-    }
-    
-    questions = []
-    # 根据薄弱知识点组卷
-    for point in weak_points:
-        if point in question_bank:
-            questions.extend(question_bank[point])
-    
-    # 如果不足5道，补充默认题目
-    while len(questions) < 5:
-        questions.extend(question_bank["默认"])
-    
-    # 返回前5道
-    return questions[:5]
+# ===== API 路由 =====
 
 @app.post("/upload")
 async def upload_exam(student_name: str = Form(...), file: UploadFile = File(...)):
@@ -181,7 +224,7 @@ async def upload_exam(student_name: str = Form(...), file: UploadFile = File(...
 
 @app.post("/analyze/{exam_id}")
 async def analyze_exam(exam_id: int):
-    """AI分析错题"""
+    """AI分析错题（DeepSeek）"""
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
@@ -190,13 +233,13 @@ async def analyze_exam(exam_id: int):
             db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
         
-        # AI分析
-        analysis = mock_analyze(exam.ocr_text)
+        # 调用 DeepSeek AI 分析
+        analysis = await ai_analyze(exam.ocr_text)
         
         # 更新记录
         exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
-        exam.weak_points = json.dumps(analysis["weak_points"], ensure_ascii=False)
-        exam.recommendations = json.dumps(analysis["recommendations"], ensure_ascii=False)
+        exam.weak_points = json.dumps(analysis.get("weak_points", []), ensure_ascii=False)
+        exam.recommendations = json.dumps(analysis.get("recommendations", []), ensure_ascii=False)
         db.commit()
         db.close()
         
@@ -205,8 +248,8 @@ async def analyze_exam(exam_id: int):
             "exam_id": exam_id,
             "analysis": analysis,
             "summary": {
-                "weak_points": analysis["weak_points"],
-                "recommendations": analysis["recommendations"][:3]
+                "weak_points": analysis.get("weak_points", []),
+                "recommendations": analysis.get("recommendations", [])[:3]
             }
         })
     except Exception as e:
@@ -272,7 +315,7 @@ async def root():
 
 @app.post("/generate-practice/{exam_id}")
 async def generate_practice(exam_id: int):
-    """根据薄弱知识点生成5道巩固练习题"""
+    """根据薄弱知识点生成5道巩固练习题（DeepSeek AI 生成）"""
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
@@ -288,8 +331,8 @@ async def generate_practice(exam_id: int):
             db.close()
             return JSONResponse({"error": "请先进行AI分析"}, status_code=400)
         
-        # 生成练习题
-        questions = generate_practice_questions(weak_points)
+        # 调用 DeepSeek AI 生成练习题
+        questions = await ai_generate_questions(weak_points)
         
         db.close()
         
@@ -299,7 +342,7 @@ async def generate_practice(exam_id: int):
             "weak_points": weak_points,
             "questions": questions,
             "total": len(questions),
-            "note": "当前为模拟题库，后续可接入AI生成真实题目"
+            "note": "由 DeepSeek AI 动态生成"
         })
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -309,16 +352,17 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 AI教育平台MVP API运行中",
-        "version": "0.1.0",
+        "version": "0.2.0",
+        "ai_provider": "DeepSeek",
         "endpoints": {
             "upload": "POST /upload (form-data: student_name, file)",
-            "analyze": "POST /analyze/{id}",
-            "generate_practice": "POST /generate-practice/{id} - 生成5道巩固题",
+            "analyze": "POST /analyze/{id} - DeepSeek AI分析",
+            "generate_practice": "POST /generate-practice/{id} - DeepSeek AI生成5道巩固题",
             "list": "GET /exams",
             "detail": "GET /exams/{id}",
             "delete": "DELETE /exams/{id}"
         },
-        "status": "OCR和AI分析当前为模拟模式，可接入真实API",
+        "status": "AI分析已接入DeepSeek，OCR仍为模拟模式",
         "database": "PostgreSQL" if "postgresql" in DATABASE_URL else "SQLite"
     }
 
