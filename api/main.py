@@ -495,7 +495,11 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
     pdf.add_page()
     
     # 尝试加载中文字体
+    project_font = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
+    )
     font_paths = [
+        project_font,  # 项目内置中文字体（Railway可用）
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
         "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
