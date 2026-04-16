@@ -477,23 +477,61 @@ async def generate_practice(exam_id: int):
 # ===== PDF 导出 =====
 
 def generate_practice_pdf(student_name: str, weak_points: list, questions: list) -> bytes:
-    """生成巩固练习题 PDF"""
+    """生成巩固练习题 PDF（中文稳定版）"""
     from fpdf import FPDF
-    
+
+    def _clean_text(v) -> str:
+        if v is None:
+            return ""
+        s = str(v)
+        # 去掉不可见控制字符，避免排版异常
+        return "".join(ch for ch in s if ch >= " " or ch in "\n\t").strip()
+
+    def _safe_multicell(pdf_obj, text: str, h: float = 7.0):
+        """更稳健的多行输出，避免 Not enough horizontal space 错误"""
+        text = _clean_text(text)
+        if not text:
+            return
+
+        # 每次写入前重置到左边距，避免可用宽度变成 0
+        pdf_obj.set_x(pdf_obj.l_margin)
+        epw = pdf_obj.w - pdf_obj.l_margin - pdf_obj.r_margin
+
+        try:
+            pdf_obj.multi_cell(epw, h, text)
+            return
+        except Exception as e:
+            # 兜底：按固定宽度分段，避免超长连续字符串撑爆行宽
+            if "Not enough horizontal space" not in str(e):
+                raise
+
+        chunk = 28
+        for line in text.split("\n"):
+            if not line:
+                pdf_obj.multi_cell(epw, h, "")
+                continue
+            start = 0
+            while start < len(line):
+                part = line[start:start + chunk]
+                pdf_obj.set_x(pdf_obj.l_margin)
+                pdf_obj.multi_cell(epw, h, part)
+                start += chunk
+
     class PracticePDF(FPDF):
         def header(self):
-            self.set_font('helvetica', 'B', 16)
-            self.cell(0, 10, 'Consolidation Practice', new_x="LMARGIN", new_y="NEXT", align='C')
+            self.set_font("helvetica", "B", 16)
+            self.cell(0, 10, "Consolidation Practice", new_x="LMARGIN", new_y="NEXT", align="C")
             self.ln(5)
-        
+
         def footer(self):
             self.set_y(-15)
-            self.set_font('helvetica', 'I', 8)
-            self.cell(0, 10, f'Page {self.page_no()}', align='C')
-    
+            self.set_font("helvetica", "I", 8)
+            self.cell(0, 10, f"Page {self.page_no()}", align="C")
+
     pdf = PracticePDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    
+
     # 尝试加载中文字体
     project_font = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
@@ -505,77 +543,71 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/System/Library/Fonts/PingFang.ttc",
     ]
-    
+
     chinese_font = None
     for fp in font_paths:
         if os.path.exists(fp):
             try:
-                pdf.add_font("zh", "", fp, uni=True)
-                pdf.add_font("zh", "B", fp, uni=True)
+                pdf.add_font("zh", "", fp)
+                pdf.add_font("zh", "B", fp)
                 chinese_font = "zh"
                 break
-            except:
+            except Exception:
                 continue
-    
+
     font = chinese_font or "helvetica"
-    
+
     # 标题
     pdf.set_font(font, "B", 18)
-    pdf.cell(0, 12, "巩固练习题", new_x="LMARGIN", new_y="NEXT", align='C')
-    pdf.ln(3)
-    
+    _safe_multicell(pdf, "巩固练习题", h=10)
+    pdf.ln(2)
+
     # 学生信息
     pdf.set_font(font, "", 11)
-    pdf.cell(0, 8, f"Student: {student_name}", new_x="LMARGIN", new_y="NEXT")
-    
+    _safe_multicell(pdf, f"学生：{_clean_text(student_name)}")
+
     # 薄弱知识点
     if weak_points:
-        wp_text = "Weak Points: " + ", ".join(weak_points)
+        wp_text = "薄弱知识点：" + "、".join([_clean_text(x) for x in weak_points])
         pdf.set_text_color(200, 0, 0)
-        pdf.multi_cell(0, 8, wp_text)
+        _safe_multicell(pdf, wp_text)
         pdf.set_text_color(0, 0, 0)
-    
-    pdf.ln(3)
-    pdf.set_draw_color(100, 100, 100)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-    
+
+    pdf.ln(2)
+
     # 题目
     for i, q in enumerate(questions):
-        q_type = q.get("type", "")
-        q_text = q.get("question", "")
-        q_hint = q.get("hint", "")
-        q_answer = q.get("answer", "")
+        q_type = _clean_text(q.get("type", ""))
+        q_text = _clean_text(q.get("question", ""))
+        q_hint = _clean_text(q.get("hint", ""))
+        q_answer = _clean_text(q.get("answer", ""))
         q_options = q.get("options", [])
-        
+
         # 题号 + 类型
         pdf.set_font(font, "B", 12)
-        label = f"{i+1}. [{q_type}]" if q_type else f"{i+1}."
-        pdf.cell(0, 8, label, new_x="LMARGIN", new_y="NEXT")
-        
+        label = f"第{i+1}题 [{q_type}]" if q_type else f"第{i+1}题"
+        _safe_multicell(pdf, label, h=8)
+
         # 题目内容
         pdf.set_font(font, "", 11)
-        pdf.multi_cell(0, 7, f"   {q_text}")
-        pdf.ln(2)
-        
+        _safe_multicell(pdf, q_text, h=7)
+
         # 选项
         if q_options:
             for j, opt in enumerate(q_options):
                 opt_label = chr(65 + j)
-                pdf.cell(0, 7, f"     {opt_label}. {opt}", new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(2)
-        
-        # 提示和答案（放在每题下方，灰色小字）
+                _safe_multicell(pdf, f"{opt_label}. {_clean_text(opt)}", h=7)
+
+        # 提示和答案
         pdf.set_font(font, "", 9)
         pdf.set_text_color(128, 128, 128)
         if q_hint:
-            pdf.multi_cell(0, 6, f"   Hint: {q_hint}")
+            _safe_multicell(pdf, f"提示：{q_hint}", h=6)
         if q_answer:
-            pdf.multi_cell(0, 6, f"   Answer: {q_answer}")
+            _safe_multicell(pdf, f"答案：{q_answer}", h=6)
         pdf.set_text_color(0, 0, 0)
-        pdf.ln(4)
-    
-    # 输出
+        pdf.ln(3)
+
     return pdf.output()
 
 @app.post("/export-practice-pdf/{exam_id}")
