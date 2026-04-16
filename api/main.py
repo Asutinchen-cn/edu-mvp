@@ -2,12 +2,13 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 import json
+import io
 import httpx
 import base64
 from datetime import datetime
@@ -473,18 +474,152 @@ async def generate_practice(exam_id: int):
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
+# ===== PDF 导出 =====
+
+def generate_practice_pdf(student_name: str, weak_points: list, questions: list) -> bytes:
+    """生成巩固练习题 PDF"""
+    from fpdf import FPDF
+    
+    class PracticePDF(FPDF):
+        def header(self):
+            self.set_font('helvetica', 'B', 16)
+            self.cell(0, 10, 'Consolidation Practice', new_x="LMARGIN", new_y="NEXT", align='C')
+            self.ln(5)
+        
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('helvetica', 'I', 8)
+            self.cell(0, 10, f'Page {self.page_no()}', align='C')
+    
+    pdf = PracticePDF()
+    pdf.add_page()
+    
+    # 尝试加载中文字体
+    font_paths = [
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/System/Library/Fonts/PingFang.ttc",
+    ]
+    
+    chinese_font = None
+    for fp in font_paths:
+        if os.path.exists(fp):
+            try:
+                pdf.add_font("zh", "", fp, uni=True)
+                pdf.add_font("zh", "B", fp, uni=True)
+                chinese_font = "zh"
+                break
+            except:
+                continue
+    
+    font = chinese_font or "helvetica"
+    
+    # 标题
+    pdf.set_font(font, "B", 18)
+    pdf.cell(0, 12, "巩固练习题", new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.ln(3)
+    
+    # 学生信息
+    pdf.set_font(font, "", 11)
+    pdf.cell(0, 8, f"Student: {student_name}", new_x="LMARGIN", new_y="NEXT")
+    
+    # 薄弱知识点
+    if weak_points:
+        wp_text = "Weak Points: " + ", ".join(weak_points)
+        pdf.set_text_color(200, 0, 0)
+        pdf.multi_cell(0, 8, wp_text)
+        pdf.set_text_color(0, 0, 0)
+    
+    pdf.ln(3)
+    pdf.set_draw_color(100, 100, 100)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    
+    # 题目
+    for i, q in enumerate(questions):
+        q_type = q.get("type", "")
+        q_text = q.get("question", "")
+        q_hint = q.get("hint", "")
+        q_answer = q.get("answer", "")
+        q_options = q.get("options", [])
+        
+        # 题号 + 类型
+        pdf.set_font(font, "B", 12)
+        label = f"{i+1}. [{q_type}]" if q_type else f"{i+1}."
+        pdf.cell(0, 8, label, new_x="LMARGIN", new_y="NEXT")
+        
+        # 题目内容
+        pdf.set_font(font, "", 11)
+        pdf.multi_cell(0, 7, f"   {q_text}")
+        pdf.ln(2)
+        
+        # 选项
+        if q_options:
+            for j, opt in enumerate(q_options):
+                opt_label = chr(65 + j)
+                pdf.cell(0, 7, f"     {opt_label}. {opt}", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+        
+        # 提示和答案（放在每题下方，灰色小字）
+        pdf.set_font(font, "", 9)
+        pdf.set_text_color(128, 128, 128)
+        if q_hint:
+            pdf.multi_cell(0, 6, f"   Hint: {q_hint}")
+        if q_answer:
+            pdf.multi_cell(0, 6, f"   Answer: {q_answer}")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(4)
+    
+    # 输出
+    return pdf.output()
+
+@app.post("/export-practice-pdf/{exam_id}")
+async def export_practice_pdf(exam_id: int):
+    """导出巩固练习题为 PDF"""
+    try:
+        db = SessionLocal()
+        exam = db.query(Exam).filter(Exam.id == exam_id).first()
+        
+        if not exam:
+            db.close()
+            return JSONResponse({"error": "试卷不存在"}, status_code=404)
+        
+        weak_points = json.loads(exam.weak_points) if exam.weak_points else []
+        if not weak_points:
+            db.close()
+            return JSONResponse({"error": "请先进行AI分析"}, status_code=400)
+        
+        # 生成练习题
+        questions = await ai_generate_questions(weak_points)
+        db.close()
+        
+        # 生成 PDF
+        pdf_bytes = generate_practice_pdf(exam.student_name, weak_points, questions)
+        
+        filename = f"practice_{exam.student_name}_{exam_id}.pdf"
+        
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
 @app.get("/api-info")
 async def api_info():
     """API信息"""
     return {
         "message": "🎓 AI教育平台MVP API运行中",
-        "version": "0.4.1",
+        "version": "0.5.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
             "upload": "POST /upload (form-data: student_name, file)",
             "analyze": "POST /analyze/{id} - DeepSeek AI分析",
             "generate_practice": "POST /generate-practice/{id} - DeepSeek AI生成5道巩固题",
+            "export_pdf": "POST /export-practice-pdf/{id} - 导出PDF",
             "list": "GET /exams",
             "detail": "GET /exams/{id}",
             "delete": "DELETE /exams/{id}"

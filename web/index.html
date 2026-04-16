@@ -389,6 +389,9 @@
                 <button class="btn-primary" id="generateBtn" onclick="generatePractice()" style="margin-top: 20px;">
                     📝 生成5道巩固练习题
                 </button>
+                <button class="btn-primary" id="exportPdfBtn" onclick="exportPdf()" style="margin-top: 20px; margin-left: 10px; background: linear-gradient(90deg, #e67e22 0%, #d35400 100%); display: none;">
+                    📄 导出PDF
+                </button>
             </div>
             
             <!-- 巩固练习题 -->
@@ -608,6 +611,37 @@
             }
         }
         
+        // 导出 PDF
+        async function exportPdf() {
+            if (!currentExamId) {
+                alert('请先上传并分析试卷');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_URL}/export-practice-pdf/${currentExamId}`, {
+                    method: 'POST'
+                });
+                
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || '导出失败');
+                }
+                
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `practice_${currentExamId}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                alert('导出PDF失败: ' + error.message);
+            }
+        }
+
         // 生成巩固练习题
         async function generatePractice() {
             if (!currentExamId) {
@@ -630,6 +664,7 @@
                 }
                 
                 displayQuestions(data.questions);
+                document.getElementById('exportPdfBtn').style.display = 'inline-block';
                 
             } catch (error) {
                 alert('生成练习题失败: ' + error.message);
