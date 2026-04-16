@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 import json
 import httpx
+import base64
 from datetime import datetime
 
 # 数据库配置 - Railway 使用 PostgreSQL
@@ -23,6 +24,10 @@ Base = declarative_base()
 # DeepSeek API 配置
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-9f2b01275a904d40badccff22ae2db09")
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+
+# 百度 OCR 配置
+BAIDU_OCR_API_KEY = os.getenv("BAIDU_OCR_API_KEY", "DIEUO1gvv10PryVLdMqVnTsJ")
+BAIDU_OCR_SECRET_KEY = os.getenv("BAIDU_OCR_SECRET_KEY", "vMvvJqBwdvBNOP25yWq9mDBuKYQvA96U")
 
 # 数据模型
 class Exam(Base):
@@ -60,6 +65,66 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# ===== 百度 OCR =====
+
+_baidu_token = {"access_token": None, "expires_at": 0}
+
+async def get_baidu_access_token() -> str:
+    """获取百度 OCR access_token（带缓存）"""
+    import time
+    now = time.time()
+    if _baidu_token["access_token"] and _baidu_token["expires_at"] > now:
+        return _baidu_token["access_token"]
+    
+    url = "https://aip.baidubce.com/oauth/2.0/token"
+    params = {
+        "grant_type": "client_credentials",
+        "client_id": BAIDU_OCR_API_KEY,
+        "client_secret": BAIDU_OCR_SECRET_KEY
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(url, params=params)
+        data = resp.json()
+        _baidu_token["access_token"] = data.get("access_token")
+        _baidu_token["expires_at"] = now + data.get("expires_in", 2592000) - 60
+        return _baidu_token["access_token"]
+
+async def baidu_ocr(image_bytes: bytes) -> str:
+    """调用百度通用文字识别（高精度版）"""
+    try:
+        token = await get_baidu_access_token()
+        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        
+        # 优先用高精度版，失败回退标准版
+        for api_url in [
+            "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic",
+            "https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic"
+        ]:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    api_url,
+                    params={"access_token": token},
+                    data={"image": img_b64, "language_type": "CHN_ENG"}
+                )
+                data = resp.json()
+                
+                if "words_result" in data:
+                    words = [item["words"] for item in data["words_result"]]
+                    full_text = "\n".join(words)
+                    if full_text.strip():
+                        return full_text
+                
+                # 如果是额度用完，换标准版
+                if "高精度" in data.get("error_msg", ""):
+                    continue
+                    
+        # 都失败了，回退 mock
+        return f"[OCR识别失败，使用模拟数据] 识别到数学题目3道，填空题5道"
+        
+    except Exception as e:
+        print(f"Baidu OCR error: {e}")
+        return f"[OCR服务异常] {str(e)[:50]}，请稍后重试"
 
 # ===== DeepSeek API 调用 =====
 
@@ -103,21 +168,17 @@ async def ai_analyze(ocr_text: str) -> dict:
 
     try:
         result = await call_deepseek(prompt)
-        # 提取JSON部分
         result = result.strip()
         if result.startswith("```"):
-            # 去掉markdown代码块
             lines = result.split("\n")
             result = "\n".join(lines[1:-1])
         analysis = json.loads(result)
-        # 确保必要字段存在
         analysis.setdefault("error_types", [])
         analysis.setdefault("weak_points", [])
         analysis.setdefault("root_cause", "")
         analysis.setdefault("recommendations", [])
         return analysis
     except Exception as e:
-        # DeepSeek 调用失败时回退到模拟数据
         print(f"DeepSeek API error: {e}")
         return {
             "error_types": ["分析服务暂时不可用"],
@@ -166,13 +227,11 @@ async def ai_generate_questions(weak_points: list) -> list:
             lines = result.split("\n")
             result = "\n".join(lines[1:-1])
         questions = json.loads(result)
-        # 确保每题有id
         for i, q in enumerate(questions):
             q.setdefault("id", i + 1)
         return questions[:5]
     except Exception as e:
         print(f"DeepSeek generate error: {e}")
-        # 回退到简单提示
         return [{
             "id": 1,
             "type": "提示",
@@ -180,10 +239,6 @@ async def ai_generate_questions(weak_points: list) -> list:
             "answer": "",
             "hint": str(e)[:50]
         }]
-
-# 简易OCR模拟（后续接入百度OCR）
-def mock_ocr(image_path: str) -> str:
-    return f"[OCR结果] 识别到数学题目3道，填空题5道"
 
 # ===== API 路由 =====
 
@@ -197,8 +252,8 @@ async def upload_exam(student_name: str = Form(...), file: UploadFile = File(...
         # 读取文件内容
         content = await file.read()
         
-        # OCR识别
-        ocr_result = mock_ocr("")
+        # 百度 OCR 识别
+        ocr_result = await baidu_ocr(content)
         
         # 创建记录
         exam = Exam(
@@ -216,7 +271,7 @@ async def upload_exam(student_name: str = Form(...), file: UploadFile = File(...
             "id": exam.id,
             "message": "上传成功",
             "student": student_name,
-            "ocr_preview": ocr_result[:100] + "...",
+            "ocr_preview": ocr_result[:200] + "..." if len(ocr_result) > 200 else ocr_result,
             "next_step": f"POST /analyze/{exam.id} 进行AI分析"
         })
     except Exception as e:
@@ -352,8 +407,9 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 AI教育平台MVP API运行中",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "ai_provider": "DeepSeek",
+        "ocr_provider": "Baidu",
         "endpoints": {
             "upload": "POST /upload (form-data: student_name, file)",
             "analyze": "POST /analyze/{id} - DeepSeek AI分析",
@@ -362,7 +418,7 @@ async def api_info():
             "detail": "GET /exams/{id}",
             "delete": "DELETE /exams/{id}"
         },
-        "status": "AI分析已接入DeepSeek，OCR仍为模拟模式",
+        "status": "OCR已接入百度识别，AI分析已接入DeepSeek",
         "database": "PostgreSQL" if "postgresql" in DATABASE_URL else "SQLite"
     }
 
