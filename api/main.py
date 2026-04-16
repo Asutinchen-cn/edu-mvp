@@ -104,7 +104,7 @@ async def baidu_ocr(image_bytes: bytes) -> str:
                 data={
                     "image": img_b64,
                     "language_type": "CHN_ENG",
-                    "result_type": "big":  # 返回大图结构化
+                    "result_type": "big"
                 }
             )
             data = resp.json()
