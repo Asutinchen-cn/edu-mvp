@@ -96,69 +96,106 @@ async def baidu_ocr(image_bytes: bytes) -> str:
         token = await get_baidu_access_token()
         img_b64 = base64.b64encode(image_bytes).decode("utf-8")
         
-        # 1. 试卷分析与识别（专用接口，返回结构化题目）
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.post(
-                "https://aip.baidubce.com/rest/2.0/ocr/v1/doc_analysis",
-                params={"access_token": token},
-                data={
-                    "image": img_b64,
-                    "language_type": "CHN_ENG",
-                    "result_type": "big"
-                }
-            )
-            data = resp.json()
-            
-            if "results" in data:
-                # 结构化输出：按题目整理
-                questions = []
-                for item in data["results"]:
-                    q_text = item.get("words", "").strip()
-                    q_type = item.get("type", "")  # question/answer/handwriting
-                    if q_text:
-                        if q_type == "question":
-                            questions.append(f"【题目】{q_text}")
-                        elif q_type == "answer":
-                            questions.append(f"【作答】{q_text}")
-                        elif q_type == "handwriting":
-                            questions.append(f"【手写】{q_text}")
-                        else:
-                            questions.append(q_text)
-                
-                full_text = "\n".join(questions)
-                if full_text.strip():
-                    return full_text
-            
-            # 如果试卷接口返回words_result（有些版本），也处理
-            if "words_result" in data:
-                words = [item["words"] for item in data["words_result"]]
-                full_text = "\n".join(words)
-                if full_text.strip():
-                    return full_text
+        # 1. 试卷分析与识别（专用接口）
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(
+                    "https://aip.baidubce.com/rest/2.0/ocr/v1/doc_analysis",
+                    params={"access_token": token},
+                    data={
+                        "image": img_b64,
+                        "language_type": "CHN_ENG"
+                    }
+                )
+                data = resp.json()
+                text = _extract_ocr_text(data)
+                if text:
+                    return text
+        except Exception as e:
+            print(f"Doc analysis OCR error: {e}")
         
-        # 2. 回退：高精度通用文字识别
-        for api_url in [
-            "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic",
-            "https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic"
-        ]:
+        # 2. 高精度通用文字识别
+        try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
-                    api_url,
+                    "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic",
                     params={"access_token": token},
                     data={"image": img_b64, "language_type": "CHN_ENG"}
                 )
                 data = resp.json()
-                if "words_result" in data:
-                    words = [item["words"] for item in data["words_result"]]
-                    full_text = "\n".join(words)
-                    if full_text.strip():
-                        return full_text
+                text = _extract_ocr_text(data)
+                if text:
+                    return text
+        except Exception as e:
+            print(f"Accurate OCR error: {e}")
+        
+        # 3. 标准通用文字识别
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    "https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic",
+                    params={"access_token": token},
+                    data={"image": img_b64, "language_type": "CHN_ENG"}
+                )
+                data = resp.json()
+                text = _extract_ocr_text(data)
+                if text:
+                    return text
+        except Exception as e:
+            print(f"General OCR error: {e}")
         
         return "[OCR识别失败，未提取到文字内容]"
         
     except Exception as e:
         print(f"Baidu OCR error: {e}")
         return f"[OCR服务异常] {str(e)[:50]}，请稍后重试"
+
+
+def _extract_ocr_text(data: dict) -> str:
+    """从百度OCR各种接口返回中提取文字，兼容不同格式"""
+    if not isinstance(data, dict):
+        return ""
+    
+    # 检查错误
+    if "error_code" in data:
+        print(f"OCR error: {data.get('error_code')} - {data.get('error_msg')}")
+        return ""
+    
+    # 格式1：试卷分析接口 - results 数组
+    if "results" in data and isinstance(data["results"], list):
+        lines = []
+        for item in data["results"]:
+            if isinstance(item, dict):
+                words = item.get("words", "")
+                if isinstance(words, str) and words.strip():
+                    q_type = item.get("type", "")
+                    if q_type == "question":
+                        lines.append(f"【题目】{words.strip()}")
+                    elif q_type == "answer":
+                        lines.append(f"【作答】{words.strip()}")
+                    elif q_type == "handwriting":
+                        lines.append(f"【手写】{words.strip()}")
+                    else:
+                        lines.append(words.strip())
+            elif isinstance(item, str) and item.strip():
+                lines.append(item.strip())
+        if lines:
+            return "\n".join(lines)
+    
+    # 格式2：通用/高精度接口 - words_result 数组
+    if "words_result" in data and isinstance(data["words_result"], list):
+        lines = []
+        for item in data["words_result"]:
+            if isinstance(item, dict):
+                words = item.get("words", "")
+                if isinstance(words, str) and words.strip():
+                    lines.append(words.strip())
+            elif isinstance(item, str) and item.strip():
+                lines.append(item.strip())
+        if lines:
+            return "\n".join(lines)
+    
+    return ""
 
 # ===== DeepSeek API 调用 =====
 
