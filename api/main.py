@@ -441,7 +441,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 AI教育平台MVP API运行中",
-        "version": "0.4.0",
+        "version": "0.4.1",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
