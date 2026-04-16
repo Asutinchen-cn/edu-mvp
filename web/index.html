@@ -96,6 +96,39 @@
             cursor: not-allowed;
             transform: none;
         }
+        .btn-secondary {
+            padding: 10px 24px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .btn-sm {
+            padding: 6px 16px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-detail {
+            background: #667eea;
+            color: white;
+        }
+        .btn-detail:hover { background: #5568d3; }
+        .btn-delete {
+            background: #ff6b6b;
+            color: white;
+            margin-left: 8px;
+        }
+        .btn-delete:hover { background: #e55a5a; }
         .result-box {
             margin-top: 30px;
             padding: 25px;
@@ -156,13 +189,21 @@
             border-radius: 8px;
             margin-bottom: 10px;
             transition: all 0.3s;
+            cursor: pointer;
         }
         .exam-item:hover {
             background: #e9ecef;
             transform: translateX(5px);
         }
+        .exam-info { flex: 1; }
         .exam-info h4 { color: #333; margin-bottom: 5px; }
         .exam-info p { color: #666; font-size: 14px; }
+        .exam-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
         .exam-status {
             padding: 6px 14px;
             border-radius: 20px;
@@ -272,6 +313,27 @@
             display: none;
         }
         .answer-text.show { display: block; }
+        .root-cause {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 4px;
+            color: #856404;
+        }
+        .error-types {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .error-tag {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
@@ -304,12 +366,22 @@
             
             <!-- 分析结果 -->
             <div class="result-box" id="resultBox">
-                <h3>📊 AI分析结果</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>📊 AI分析结果</h3>
+                    <button class="btn-secondary" onclick="hideResult()">✕ 关闭</button>
+                </div>
                 <p><strong>学生：</strong><span id="resultStudent"></span></p>
+                <p style="margin-top:5px;color:#999;font-size:13px;" id="resultTime"></p>
+                
+                <div style="margin-top: 15px;">
+                    <strong>错误类型：</strong>
+                    <div class="error-types" id="errorTypes"></div>
+                </div>
                 <div style="margin-top: 15px;">
                     <strong>薄弱知识点：</strong>
                     <div class="weak-points" id="weakPoints"></div>
                 </div>
+                <div class="root-cause" id="rootCause"></div>
                 <div class="recommendations">
                     <strong>💡 针对性强化建议：</strong>
                     <ol id="recommendations"></ol>
@@ -327,7 +399,7 @@
             
             <!-- 试卷列表 -->
             <div class="exam-list">
-                <h3>📋 最近分析记录</h3>
+                <h3>📋 历史分析记录</h3>
                 <div id="examList">
                     <div class="empty-state">加载中...</div>
                 </div>
@@ -338,6 +410,7 @@
     <script>
         const API_URL = '';
         let selectedFile = null;
+        let currentExamId = null;
         
         // 文件选择
         document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -379,13 +452,12 @@
                 return;
             }
             
-            // 显示加载
             document.getElementById('loadingBox').classList.add('show');
             document.getElementById('resultBox').classList.remove('show');
+            document.getElementById('practiceBox').classList.remove('show');
             document.getElementById('uploadBtn').disabled = true;
             
             try {
-                // 1. 上传
                 const formData = new FormData();
                 formData.append('student_name', studentName);
                 formData.append('file', selectedFile);
@@ -400,7 +472,6 @@
                     throw new Error(uploadData.error || '上传失败');
                 }
                 
-                // 2. 分析
                 const analyzeRes = await fetch(`${API_URL}/analyze/${uploadData.id}`, {
                     method: 'POST'
                 });
@@ -410,12 +481,10 @@
                     throw new Error(analyzeData.error || '分析失败');
                 }
                 
-                // 保存exam_id并显示结果
                 currentExamId = uploadData.id;
-                displayResult(studentName, analyzeData.analysis);
+                displayResult(studentName, analyzeData.analysis, new Date().toLocaleString());
                 loadExamList();
                 
-                // 清空
                 document.getElementById('studentName').value = '';
                 document.getElementById('fileName').textContent = '';
                 document.getElementById('fileInput').value = '';
@@ -430,20 +499,82 @@
         }
         
         // 显示分析结果
-        function displayResult(student, analysis) {
+        function displayResult(student, analysis, timeStr) {
             document.getElementById('resultStudent').textContent = student;
+            document.getElementById('resultTime').textContent = timeStr || '';
             
-            const weakPointsHtml = analysis.weak_points.map(p => 
+            // 错误类型
+            const errorTypes = analysis.error_types || [];
+            document.getElementById('errorTypes').innerHTML = errorTypes.map(t => 
+                `<span class="error-tag">${t}</span>`
+            ).join('');
+            
+            // 薄弱知识点
+            const weakPoints = analysis.weak_points || [];
+            document.getElementById('weakPoints').innerHTML = weakPoints.map(p => 
                 `<span class="tag">${p}</span>`
             ).join('');
-            document.getElementById('weakPoints').innerHTML = weakPointsHtml;
             
-            const recHtml = analysis.recommendations.map(r => 
+            // 根本原因
+            const rootCause = analysis.root_cause || '';
+            document.getElementById('rootCause').innerHTML = rootCause ? 
+                `<strong>🔍 根本原因：</strong>${rootCause}` : '';
+            
+            // 建议
+            const recs = analysis.recommendations || [];
+            document.getElementById('recommendations').innerHTML = recs.map(r => 
                 `<li>${r}</li>`
             ).join('');
-            document.getElementById('recommendations').innerHTML = recHtml;
             
             document.getElementById('resultBox').classList.add('show');
+            document.getElementById('resultBox').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // 关闭结果
+        function hideResult() {
+            document.getElementById('resultBox').classList.remove('show');
+            document.getElementById('practiceBox').classList.remove('show');
+        }
+        
+        // 查看历史分析详情
+        async function viewExamDetail(examId) {
+            try {
+                const res = await fetch(`${API_URL}/exams/${examId}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    // 未分析，先触发分析
+                    const analyzeRes = await fetch(`${API_URL}/analyze/${examId}`, { method: 'POST' });
+                    const analyzeData = await analyzeRes.json();
+                    if (analyzeData.success) {
+                        currentExamId = examId;
+                        displayResult(data.student || '未知', analyzeData.analysis, 
+                            data.created ? new Date(data.created).toLocaleString() : '');
+                        loadExamList();
+                    }
+                    return;
+                }
+                
+                currentExamId = examId;
+                const analysis = data.ai_analysis || {};
+                const timeStr = data.created ? new Date(data.created).toLocaleString() : '';
+                displayResult(data.student || '未知', analysis, timeStr);
+            } catch (error) {
+                alert('加载失败: ' + error.message);
+            }
+        }
+        
+        // 删除记录
+        async function deleteExam(examId, event) {
+            event.stopPropagation();
+            if (!confirm('确定删除这条记录吗？')) return;
+            
+            try {
+                await fetch(`${API_URL}/exams/${examId}`, { method: 'DELETE' });
+                loadExamList();
+            } catch (error) {
+                alert('删除失败');
+            }
         }
         
         // 加载试卷列表
@@ -454,14 +585,18 @@
                 
                 const listHtml = data.exams.length > 0 
                     ? data.exams.map(e => `
-                        <div class="exam-item">
+                        <div class="exam-item" onclick="viewExamDetail(${e.id})">
                             <div class="exam-info">
                                 <h4>${e.student}</h4>
-                                <p>${new Date(e.created).toLocaleString()}</p>
+                                <p>${e.created ? new Date(e.created).toLocaleString() : ''}</p>
                             </div>
-                            <span class="exam-status ${e.weak_points ? 'status-analyzed' : 'status-pending'}">
-                                ${e.weak_points ? '✅ 已分析' : '⏳ 待分析'}
-                            </span>
+                            <div class="exam-actions">
+                                <span class="exam-status ${e.weak_points ? 'status-analyzed' : 'status-pending'}">
+                                    ${e.weak_points ? '✅ 已分析' : '⏳ 待分析'}
+                                </span>
+                                <button class="btn-sm btn-detail" onclick="viewExamDetail(${e.id})">查看</button>
+                                <button class="btn-sm btn-delete" onclick="deleteExam(${e.id}, event)">删除</button>
+                            </div>
                         </div>
                     `).join('')
                     : '<div class="empty-state">暂无数据，请先上传试卷</div>';
@@ -473,9 +608,6 @@
             }
         }
         
-        // 存储当前exam_id
-        let currentExamId = null;
-
         // 生成巩固练习题
         async function generatePractice() {
             if (!currentExamId) {
@@ -485,7 +617,7 @@
             
             const btn = document.getElementById('generateBtn');
             btn.disabled = true;
-            btn.textContent = '生成中...';
+            btn.textContent = '⏳ AI出题中...';
             
             try {
                 const res = await fetch(`${API_URL}/generate-practice/${currentExamId}`, {
@@ -537,17 +669,13 @@
             
             container.innerHTML = html;
             document.getElementById('practiceBox').classList.add('show');
-            
-            // 滚动到练习题区域
             document.getElementById('practiceBox').scrollIntoView({ behavior: 'smooth' });
         }
         
         // 选择选项（视觉反馈）
         function selectOption(element) {
-            // 移除同组其他选项的高亮
             const siblings = element.parentElement.querySelectorAll('.option-item');
             siblings.forEach(s => s.style.background = '#f8f9fa');
-            // 高亮当前选项
             element.style.background = '#d4edda';
         }
         
