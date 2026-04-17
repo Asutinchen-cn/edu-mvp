@@ -12,6 +12,7 @@ import io
 import httpx
 import base64
 from datetime import datetime
+from urllib.parse import quote
 
 # 数据库配置 - Railway 使用 PostgreSQL
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./exam.db")
@@ -725,12 +726,18 @@ async def export_practice_pdf(exam_id: int, grade: str = None, student_name: str
         # 生成 PDF
         pdf_bytes = generate_practice_pdf(exam.student_name, weak_points, questions)
 
-        filename = f"practice_{exam.grade}_{exam.student_name}_{exam_id}.pdf"
+        # 避免 latin-1 编码错误：使用 ASCII 安全文件名 + RFC5987 filename*
+        safe_filename = f"practice_{exam_id}.pdf"
+        utf8_filename = f"practice_{exam.grade}_{exam.student_name}_{exam_id}.pdf"
+        content_disposition = (
+            f"attachment; filename={safe_filename}; "
+            f"filename*=UTF-8''{quote(utf8_filename)}"
+        )
 
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={"Content-Disposition": content_disposition}
         )
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
