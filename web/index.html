@@ -640,7 +640,8 @@
         async function loadExamList() {
             try {
                 const grade = getCurrentGrade();
-                const res = await fetch(`${API_URL}/exams${queryParamsForCurrentContext()}`);
+                const student = getCurrentStudentName();
+                const res = await fetch(`${API_URL}/exams${queryParamsForCurrentContext(true)}`);
                 const data = await res.json();
 
                 const listHtml = data.exams.length > 0
@@ -659,7 +660,7 @@
                             </div>
                         </div>
                     `).join('')
-                    : `<div class="empty-state">${grade ? `暂无【${grade}】数据，请先上传试卷` : '请先输入年级查看历史记录'}</div>`;
+                    : `<div class="empty-state">${grade ? (student ? `暂无【${grade} - ${student}】数据，请先上传试卷` : `暂无【${grade}】数据，请先上传试卷`) : '请先输入年级查看历史记录'}</div>`;
 
                 document.getElementById('examList').innerHTML = listHtml;
             } catch (error) {
@@ -785,6 +786,10 @@
         document.getElementById('grade').addEventListener('change', () => {
             const grade = getCurrentGrade();
             if (grade) localStorage.setItem(STORAGE_GRADE_KEY, grade);
+            loadExamList();
+        });
+
+        document.getElementById('studentName').addEventListener('change', () => {
             loadExamList();
         });
 
