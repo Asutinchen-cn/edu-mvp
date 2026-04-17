@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -35,7 +35,8 @@ class Exam(Base):
     __tablename__ = "exams"
     
     id = Column(Integer, primary_key=True, index=True)
-    student_name = Column(String(100))
+    grade = Column(String(50), index=True, nullable=False, default="未分类")
+    student_name = Column(String(100), index=True)
     image_path = Column(Text)
     ocr_text = Column(Text)
     ai_analysis = Column(Text)
@@ -45,6 +46,26 @@ class Exam(Base):
 
 # 创建表
 Base.metadata.create_all(bind=engine)
+
+# 兼容旧库：若已有 exams 表但无 grade 字段，启动时自动补列
+try:
+    inspector = inspect(engine)
+    if inspector.has_table("exams"):
+        cols = {c["name"] for c in inspector.get_columns("exams")}
+        if "grade" not in cols:
+            with engine.begin() as conn:
+                if "postgresql" in DATABASE_URL:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS grade VARCHAR(50)"))
+                    conn.execute(text("UPDATE exams SET grade = '未分类' WHERE grade IS NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_grade ON exams (grade)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_student_name ON exams (student_name)"))
+                else:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN grade VARCHAR(50)"))
+                    conn.execute(text("UPDATE exams SET grade = '未分类' WHERE grade IS NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_grade ON exams (grade)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_student_name ON exams (student_name)"))
+except Exception as _e:
+    print(f"DB migration warning: {_e}")
 
 app = FastAPI(title="AI教育平台MVP API")
 app.add_middleware(
@@ -315,20 +336,33 @@ async def ai_generate_questions(weak_points: list) -> list:
 # ===== API 路由 =====
 
 @app.post("/upload")
-async def upload_exam(student_name: str = Form(...), file: UploadFile = File(...)):
-    """上传试卷图片"""
+async def upload_exam(
+    student_name: str = Form(...),
+    grade: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """上传试卷图片（按 年级 + 学生名 隔离）"""
     try:
-        from sqlalchemy.orm import Session
         db = SessionLocal()
-        
+
+        student_name = (student_name or "").strip()
+        grade = (grade or "").strip()
+        if not student_name:
+            db.close()
+            return JSONResponse({"success": False, "error": "student_name 不能为空"}, status_code=400)
+        if not grade:
+            db.close()
+            return JSONResponse({"success": False, "error": "grade 不能为空"}, status_code=400)
+
         # 读取文件内容
         content = await file.read()
-        
+
         # 百度 OCR 识别
         ocr_result = await baidu_ocr(content)
-        
+
         # 创建记录
         exam = Exam(
+            grade=grade,
             student_name=student_name,
             image_path=file.filename,
             ocr_text=ocr_result
@@ -337,42 +371,53 @@ async def upload_exam(student_name: str = Form(...), file: UploadFile = File(...
         db.commit()
         db.refresh(exam)
         db.close()
-        
+
         return JSONResponse({
             "success": True,
             "id": exam.id,
             "message": "上传成功",
+            "grade": grade,
             "student": student_name,
             "ocr_preview": ocr_result[:200] + "..." if len(ocr_result) > 200 else ocr_result,
-            "next_step": f"POST /analyze/{exam.id} 进行AI分析"
+            "next_step": f"POST /analyze/{exam.id}?grade={grade}&student_name={student_name} 进行AI分析"
         })
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 @app.post("/analyze/{exam_id}")
-async def analyze_exam(exam_id: int):
-    """AI分析错题（DeepSeek）"""
+async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None):
+    """AI分析错题（DeepSeek，按 年级 + 学生名 校验）"""
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
-        
+
         if not exam:
             db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
-        
+
+        # 双字段隔离校验：仅允许操作当前年级+学生的记录
+        if grade and (exam.grade or "").strip() != grade.strip():
+            db.close()
+            return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
+        if student_name and (exam.student_name or "").strip() != student_name.strip():
+            db.close()
+            return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+
         # 调用 DeepSeek AI 分析
         analysis = await ai_analyze(exam.ocr_text)
-        
+
         # 更新记录
         exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
         exam.weak_points = json.dumps(analysis.get("weak_points", []), ensure_ascii=False)
         exam.recommendations = json.dumps(analysis.get("recommendations", []), ensure_ascii=False)
         db.commit()
         db.close()
-        
+
         return JSONResponse({
             "success": True,
             "exam_id": exam_id,
+            "grade": exam.grade,
+            "student": exam.student_name,
             "analysis": analysis,
             "summary": {
                 "weak_points": analysis.get("weak_points", []),
@@ -383,15 +428,23 @@ async def analyze_exam(exam_id: int):
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 @app.get("/exams")
-async def list_exams(limit: int = 10):
-    """获取最近上传的试卷列表"""
+async def list_exams(grade: str = None, student_name: str = None, limit: int = 10):
+    """获取最近上传的试卷列表（支持按 年级 + 学生名 过滤）"""
     db = SessionLocal()
-    exams = db.query(Exam).order_by(Exam.created_at.desc()).limit(limit).all()
+    query = db.query(Exam)
+
+    if grade:
+        query = query.filter(Exam.grade == grade.strip())
+    if student_name:
+        query = query.filter(Exam.student_name == student_name.strip())
+
+    exams = query.order_by(Exam.created_at.desc()).limit(limit).all()
     db.close()
-    
+
     return JSONResponse({
         "exams": [{
             "id": e.id,
+            "grade": e.grade,
             "student": e.student_name,
             "image": e.image_path,
             "ocr_preview": e.ocr_text[:50] + "..." if e.ocr_text else None,
@@ -401,17 +454,23 @@ async def list_exams(limit: int = 10):
     })
 
 @app.get("/exams/{exam_id}")
-async def get_exam(exam_id: int):
-    """获取单个试卷详情"""
+async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
+    """获取单个试卷详情（支持按 年级 + 学生名 校验）"""
     db = SessionLocal()
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     db.close()
-    
+
     if not exam:
         return JSONResponse({"error": "试卷不存在"}, status_code=404)
-    
+
+    if grade and (exam.grade or "").strip() != grade.strip():
+        return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
+    if student_name and (exam.student_name or "").strip() != student_name.strip():
+        return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+
     return JSONResponse({
         "id": exam.id,
+        "grade": exam.grade,
         "student": exam.student_name,
         "image": exam.image_path,
         "ocr_text": exam.ocr_text,
@@ -422,13 +481,24 @@ async def get_exam(exam_id: int):
     })
 
 @app.delete("/exams/{exam_id}")
-async def delete_exam(exam_id: int):
-    """删除试卷"""
+async def delete_exam(exam_id: int, grade: str = None, student_name: str = None):
+    """删除试卷（支持按 年级 + 学生名 校验）"""
     db = SessionLocal()
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
-    if exam:
-        db.delete(exam)
-        db.commit()
+
+    if not exam:
+        db.close()
+        return JSONResponse({"success": False, "error": "试卷不存在"}, status_code=404)
+
+    if grade and (exam.grade or "").strip() != grade.strip():
+        db.close()
+        return JSONResponse({"success": False, "error": "无权限删除该记录（年级不匹配）"}, status_code=403)
+    if student_name and (exam.student_name or "").strip() != student_name.strip():
+        db.close()
+        return JSONResponse({"success": False, "error": "无权限删除该记录（学生姓名不匹配）"}, status_code=403)
+
+    db.delete(exam)
+    db.commit()
     db.close()
     return JSONResponse({"success": True, "message": "已删除"})
 
@@ -441,31 +511,40 @@ async def root():
     return JSONResponse({"message": "API运行中，前端文件未找到"})
 
 @app.post("/generate-practice/{exam_id}")
-async def generate_practice(exam_id: int):
+async def generate_practice(exam_id: int, grade: str = None, student_name: str = None):
     """根据薄弱知识点生成5道巩固练习题（DeepSeek AI 生成）"""
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
-        
+
         if not exam:
             db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
-        
+
+        if grade and (exam.grade or "").strip() != grade.strip():
+            db.close()
+            return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
+        if student_name and (exam.student_name or "").strip() != student_name.strip():
+            db.close()
+            return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+
         # 获取薄弱知识点
         weak_points = json.loads(exam.weak_points) if exam.weak_points else []
-        
+
         if not weak_points:
             db.close()
             return JSONResponse({"error": "请先进行AI分析"}, status_code=400)
-        
+
         # 调用 DeepSeek AI 生成练习题
         questions = await ai_generate_questions(weak_points)
-        
+
         db.close()
-        
+
         return JSONResponse({
             "success": True,
             "exam_id": exam_id,
+            "grade": exam.grade,
+            "student": exam.student_name,
             "weak_points": weak_points,
             "questions": questions,
             "total": len(questions),
@@ -611,30 +690,37 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
     return pdf.output()
 
 @app.post("/export-practice-pdf/{exam_id}")
-async def export_practice_pdf(exam_id: int):
+async def export_practice_pdf(exam_id: int, grade: str = None, student_name: str = None):
     """导出巩固练习题为 PDF"""
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
-        
+
         if not exam:
             db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
-        
+
+        if grade and (exam.grade or "").strip() != grade.strip():
+            db.close()
+            return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
+        if student_name and (exam.student_name or "").strip() != student_name.strip():
+            db.close()
+            return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+
         weak_points = json.loads(exam.weak_points) if exam.weak_points else []
         if not weak_points:
             db.close()
             return JSONResponse({"error": "请先进行AI分析"}, status_code=400)
-        
+
         # 生成练习题
         questions = await ai_generate_questions(weak_points)
         db.close()
-        
+
         # 生成 PDF
         pdf_bytes = generate_practice_pdf(exam.student_name, weak_points, questions)
-        
-        filename = f"practice_{exam.student_name}_{exam_id}.pdf"
-        
+
+        filename = f"practice_{exam.grade}_{exam.student_name}_{exam_id}.pdf"
+
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -652,13 +738,13 @@ async def api_info():
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
-            "upload": "POST /upload (form-data: student_name, file)",
-            "analyze": "POST /analyze/{id} - DeepSeek AI分析",
-            "generate_practice": "POST /generate-practice/{id} - DeepSeek AI生成5道巩固题",
-            "export_pdf": "POST /export-practice-pdf/{id} - 导出PDF",
-            "list": "GET /exams",
-            "detail": "GET /exams/{id}",
-            "delete": "DELETE /exams/{id}"
+            "upload": "POST /upload (form-data: grade, student_name, file)",
+            "analyze": "POST /analyze/{id}?grade=...&student_name=... - DeepSeek AI分析",
+            "generate_practice": "POST /generate-practice/{id}?grade=...&student_name=... - DeepSeek AI生成5道巩固题",
+            "export_pdf": "POST /export-practice-pdf/{id}?grade=...&student_name=... - 导出PDF",
+            "list": "GET /exams?grade=...&student_name=...",
+            "detail": "GET /exams/{id}?grade=...&student_name=...",
+            "delete": "DELETE /exams/{id}?grade=...&student_name=..."
         },
         "status": "OCR已接入百度试卷识别+通用识别，AI分析已接入DeepSeek",
         "database": "PostgreSQL" if "postgresql" in DATABASE_URL else "SQLite"

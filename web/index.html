@@ -347,6 +347,8 @@
             <!-- 上传区域 -->
             <div class="upload-section" id="dropZone">
                 <h3 style="margin-bottom: 20px; color: #555;">📤 上传学生试卷</h3>
+                <input type="text" id="grade" placeholder="请输入年级（如：三年级）" />
+                <br>
                 <input type="text" id="studentName" placeholder="请输入学生姓名" />
                 <br>
                 <input type="file" id="fileInput" accept="image/*" />
@@ -414,6 +416,33 @@
         const API_URL = '';
         let selectedFile = null;
         let currentExamId = null;
+        let currentExamContext = { grade: '', student_name: '' };
+
+        const STORAGE_GRADE_KEY = 'edu_grade';
+        function getCurrentGrade() {
+            return (document.getElementById('grade')?.value || '').trim();
+        }
+        function getCurrentStudentName() {
+            return (document.getElementById('studentName')?.value || '').trim();
+        }
+        function queryParamsForCurrentContext(includeStudent = false) {
+            const p = new URLSearchParams();
+            const grade = getCurrentGrade();
+            if (grade) p.set('grade', grade);
+            if (includeStudent) {
+                const student = getCurrentStudentName();
+                if (student) p.set('student_name', student);
+            }
+            const qs = p.toString();
+            return qs ? `?${qs}` : '';
+        }
+        function queryParamsForExamContext() {
+            const p = new URLSearchParams();
+            if (currentExamContext.grade) p.set('grade', currentExamContext.grade);
+            if (currentExamContext.student_name) p.set('student_name', currentExamContext.student_name);
+            const qs = p.toString();
+            return qs ? `?${qs}` : '';
+        }
         
         // 文件选择
         document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -445,7 +474,12 @@
         
         // 上传并分析
         async function uploadAndAnalyze() {
-            const studentName = document.getElementById('studentName').value.trim();
+            const grade = getCurrentGrade();
+            const studentName = getCurrentStudentName();
+            if (!grade) {
+                alert('请输入年级');
+                return;
+            }
             if (!studentName) {
                 alert('请输入学生姓名');
                 return;
@@ -454,46 +488,51 @@
                 alert('请选择试卷图片');
                 return;
             }
-            
+
             document.getElementById('loadingBox').classList.add('show');
             document.getElementById('resultBox').classList.remove('show');
             document.getElementById('practiceBox').classList.remove('show');
             document.getElementById('uploadBtn').disabled = true;
-            
+
             try {
+                localStorage.setItem(STORAGE_GRADE_KEY, grade);
+
                 const formData = new FormData();
+                formData.append('grade', grade);
                 formData.append('student_name', studentName);
                 formData.append('file', selectedFile);
-                
+
                 const uploadRes = await fetch(`${API_URL}/upload`, {
                     method: 'POST',
                     body: formData
                 });
                 const uploadData = await uploadRes.json();
-                
+
                 if (!uploadData.success) {
                     throw new Error(uploadData.error || '上传失败');
                 }
-                
-                const analyzeRes = await fetch(`${API_URL}/analyze/${uploadData.id}`, {
-                    method: 'POST'
-                });
+
+                const analyzeRes = await fetch(
+                    `${API_URL}/analyze/${uploadData.id}${queryParamsForCurrentContext(true)}`,
+                    { method: 'POST' }
+                );
                 const analyzeData = await analyzeRes.json();
-                
+
                 if (!analyzeData.success) {
                     throw new Error(analyzeData.error || '分析失败');
                 }
-                
+
                 currentExamId = uploadData.id;
-                displayResult(studentName, analyzeData.analysis, new Date().toLocaleString());
+                currentExamContext = { grade, student_name: studentName };
+                displayResult(`${grade} - ${studentName}`, analyzeData.analysis, new Date().toLocaleString());
                 loadExamList();
-                
+
                 document.getElementById('studentName').value = '';
                 document.getElementById('fileName').textContent = '';
                 document.getElementById('fileInput').value = '';
                 selectedFile = null;
                 document.getElementById('uploadBtn').disabled = true;
-                
+
             } catch (error) {
                 alert('操作失败: ' + error.message);
             } finally {
@@ -542,26 +581,36 @@
         // 查看历史分析详情
         async function viewExamDetail(examId) {
             try {
-                const res = await fetch(`${API_URL}/exams/${examId}`);
+                const res = await fetch(`${API_URL}/exams/${examId}${queryParamsForCurrentContext()}`);
                 const data = await res.json();
-                
+
                 if (data.error) {
                     // 未分析，先触发分析
-                    const analyzeRes = await fetch(`${API_URL}/analyze/${examId}`, { method: 'POST' });
+                    const analyzeRes = await fetch(
+                        `${API_URL}/analyze/${examId}${queryParamsForCurrentContext(true)}`,
+                        { method: 'POST' }
+                    );
                     const analyzeData = await analyzeRes.json();
                     if (analyzeData.success) {
                         currentExamId = examId;
-                        displayResult(data.student || '未知', analyzeData.analysis, 
-                            data.created ? new Date(data.created).toLocaleString() : '');
+                        displayResult(
+                            `${data.grade || getCurrentGrade() || ''} - ${data.student || '未知'}`,
+                            analyzeData.analysis,
+                            data.created ? new Date(data.created).toLocaleString() : ''
+                        );
                         loadExamList();
                     }
                     return;
                 }
-                
+
                 currentExamId = examId;
+                currentExamContext = {
+                    grade: data.grade || getCurrentGrade() || '',
+                    student_name: data.student || ''
+                };
                 const analysis = data.ai_analysis || {};
                 const timeStr = data.created ? new Date(data.created).toLocaleString() : '';
-                displayResult(data.student || '未知', analysis, timeStr);
+                displayResult(`${data.grade || ''} - ${data.student || '未知'}`, analysis, timeStr);
             } catch (error) {
                 alert('加载失败: ' + error.message);
             }
@@ -571,9 +620,16 @@
         async function deleteExam(examId, event) {
             event.stopPropagation();
             if (!confirm('确定删除这条记录吗？')) return;
-            
+
             try {
-                await fetch(`${API_URL}/exams/${examId}`, { method: 'DELETE' });
+                const detailRes = await fetch(`${API_URL}/exams/${examId}${queryParamsForCurrentContext()}`);
+                const detailData = await detailRes.json();
+                const p = new URLSearchParams();
+                if (detailData.grade) p.set('grade', detailData.grade);
+                if (detailData.student) p.set('student_name', detailData.student);
+                const qs = p.toString();
+
+                await fetch(`${API_URL}/exams/${examId}${qs ? `?${qs}` : ''}`, { method: 'DELETE' });
                 loadExamList();
             } catch (error) {
                 alert('删除失败');
@@ -583,14 +639,15 @@
         // 加载试卷列表
         async function loadExamList() {
             try {
-                const res = await fetch(`${API_URL}/exams`);
+                const grade = getCurrentGrade();
+                const res = await fetch(`${API_URL}/exams${queryParamsForCurrentContext()}`);
                 const data = await res.json();
-                
-                const listHtml = data.exams.length > 0 
+
+                const listHtml = data.exams.length > 0
                     ? data.exams.map(e => `
                         <div class="exam-item" onclick="viewExamDetail(${e.id})">
                             <div class="exam-info">
-                                <h4>${e.student}</h4>
+                                <h4>${e.grade || ''} - ${e.student}</h4>
                                 <p>${e.created ? new Date(e.created).toLocaleString() : ''}</p>
                             </div>
                             <div class="exam-actions">
@@ -602,11 +659,11 @@
                             </div>
                         </div>
                     `).join('')
-                    : '<div class="empty-state">暂无数据，请先上传试卷</div>';
-                
+                    : `<div class="empty-state">${grade ? `暂无【${grade}】数据，请先上传试卷` : '请先输入年级查看历史记录'}</div>`;
+
                 document.getElementById('examList').innerHTML = listHtml;
             } catch (error) {
-                document.getElementById('examList').innerHTML = 
+                document.getElementById('examList').innerHTML =
                     '<div class="empty-state">加载失败，请刷新重试</div>';
             }
         }
@@ -617,22 +674,22 @@
                 alert('请先上传并分析试卷');
                 return;
             }
-            
+
             try {
-                const res = await fetch(`${API_URL}/export-practice-pdf/${currentExamId}`, {
+                const res = await fetch(`${API_URL}/export-practice-pdf/${currentExamId}${queryParamsForExamContext()}`, {
                     method: 'POST'
                 });
-                
+
                 if (!res.ok) {
                     const data = await res.json();
                     throw new Error(data.error || '导出失败');
                 }
-                
+
                 const blob = await res.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `practice_${currentExamId}.pdf`;
+                a.download = `practice_${currentExamContext.grade || getCurrentGrade() || 'grade'}_${currentExamContext.student_name || 'student'}_${currentExamId}.pdf`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
@@ -648,24 +705,24 @@
                 alert('请先上传并分析试卷');
                 return;
             }
-            
+
             const btn = document.getElementById('generateBtn');
             btn.disabled = true;
             btn.textContent = '⏳ AI出题中...';
-            
+
             try {
-                const res = await fetch(`${API_URL}/generate-practice/${currentExamId}`, {
+                const res = await fetch(`${API_URL}/generate-practice/${currentExamId}${queryParamsForExamContext()}`, {
                     method: 'POST'
                 });
                 const data = await res.json();
-                
+
                 if (!data.success) {
                     throw new Error(data.error || '生成失败');
                 }
-                
+
                 displayQuestions(data.questions);
                 document.getElementById('exportPdfBtn').style.display = 'inline-block';
-                
+
             } catch (error) {
                 alert('生成练习题失败: ' + error.message);
             } finally {
@@ -722,6 +779,19 @@
             setTimeout(() => {
                 answerText.classList.toggle('show');
             }, 500);
+        }
+
+        // 年级输入变化时刷新对应隔离视图
+        document.getElementById('grade').addEventListener('change', () => {
+            const grade = getCurrentGrade();
+            if (grade) localStorage.setItem(STORAGE_GRADE_KEY, grade);
+            loadExamList();
+        });
+
+        // 页面初始化：恢复上次年级
+        const savedGrade = localStorage.getItem(STORAGE_GRADE_KEY);
+        if (savedGrade && document.getElementById('grade')) {
+            document.getElementById('grade').value = savedGrade;
         }
 
         // 页面加载时获取列表
