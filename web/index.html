@@ -644,23 +644,25 @@
                 const res = await fetch(`${API_URL}/exams${queryParamsForCurrentContext(true)}`);
                 const data = await res.json();
 
-                const listHtml = data.exams.length > 0
-                    ? data.exams.map(e => `
-                        <div class="exam-item" onclick="viewExamDetail(${e.id})">
-                            <div class="exam-info">
-                                <h4>${e.grade || ''} - ${e.student}</h4>
-                                <p>${e.created ? new Date(e.created).toLocaleString() : ''}</p>
+                const listHtml = (!grade || !student)
+                    ? '<div class="empty-state">请先同时输入【年级】和【学生姓名】再查看历史记录</div>'
+                    : (data.exams.length > 0
+                        ? data.exams.map(e => `
+                            <div class="exam-item" onclick="viewExamDetail(${e.id})">
+                                <div class="exam-info">
+                                    <h4>${e.grade || ''} - ${e.student}</h4>
+                                    <p>${e.created ? new Date(e.created).toLocaleString() : ''}</p>
+                                </div>
+                                <div class="exam-actions">
+                                    <span class="exam-status ${e.weak_points ? 'status-analyzed' : 'status-pending'}">
+                                        ${e.weak_points ? '✅ 已分析' : '⏳ 待分析'}
+                                    </span>
+                                    <button class="btn-sm btn-detail" onclick="viewExamDetail(${e.id})">查看</button>
+                                    <button class="btn-sm btn-delete" onclick="deleteExam(${e.id}, event)">删除</button>
+                                </div>
                             </div>
-                            <div class="exam-actions">
-                                <span class="exam-status ${e.weak_points ? 'status-analyzed' : 'status-pending'}">
-                                    ${e.weak_points ? '✅ 已分析' : '⏳ 待分析'}
-                                </span>
-                                <button class="btn-sm btn-detail" onclick="viewExamDetail(${e.id})">查看</button>
-                                <button class="btn-sm btn-delete" onclick="deleteExam(${e.id}, event)">删除</button>
-                            </div>
-                        </div>
-                    `).join('')
-                    : `<div class="empty-state">${grade ? (student ? `暂无【${grade} - ${student}】数据，请先上传试卷` : `暂无【${grade}】数据，请先上传试卷`) : '请先输入年级查看历史记录'}</div>`;
+                        `).join('')
+                        : `<div class="empty-state">暂无【${grade} - ${student}】数据，请先上传试卷</div>`);
 
                 document.getElementById('examList').innerHTML = listHtml;
             } catch (error) {

@@ -429,16 +429,22 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
 
 @app.get("/exams")
 async def list_exams(grade: str = None, student_name: str = None, limit: int = 10):
-    """获取最近上传的试卷列表（支持按 年级 + 学生名 过滤）"""
+    """获取最近上传的试卷列表（必须 年级 + 学生名 同时提供）"""
+    grade = (grade or "").strip()
+    student_name = (student_name or "").strip()
+
+    # 按产品需求：只有年级不展示任何历史，必须双字段同时存在
+    if not grade or not student_name:
+        return JSONResponse({"exams": []})
+
     db = SessionLocal()
-    query = db.query(Exam)
-
-    if grade:
-        query = query.filter(Exam.grade == grade.strip())
-    if student_name:
-        query = query.filter(Exam.student_name == student_name.strip())
-
-    exams = query.order_by(Exam.created_at.desc()).limit(limit).all()
+    exams = (
+        db.query(Exam)
+        .filter(Exam.grade == grade, Exam.student_name == student_name)
+        .order_by(Exam.created_at.desc())
+        .limit(limit)
+        .all()
+    )
     db.close()
 
     return JSONResponse({
