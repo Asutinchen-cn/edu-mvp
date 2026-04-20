@@ -68,7 +68,7 @@ try:
 except Exception as _e:
     print(f"DB migration warning: {_e}")
 
-app = FastAPI(title="AI教育平台MVP API")
+app = FastAPI(title="虾胡闹教育 API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -512,10 +512,18 @@ async def delete_exam(exam_id: int, grade: str = None, student_name: str = None)
 @app.get("/")
 async def root():
     """返回前端页面"""
-    web_path = os.path.join(os.path.dirname(__file__), "..", "web", "index.html")
-    if os.path.exists(web_path):
-        return FileResponse(web_path)
-    return JSONResponse({"message": "API运行中，前端文件未找到"})
+    # 尝试多个可能的路径，兼容本地开发和 Railway 部署
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(base_dir, "..", "web", "index.html"),
+        os.path.join(base_dir, "web", "index.html"),
+        os.path.join(base_dir, "static", "index.html"),
+    ]
+    for web_path in possible_paths:
+        abs_path = os.path.normpath(web_path)
+        if os.path.exists(abs_path):
+            return FileResponse(abs_path)
+    return JSONResponse({"message": "虾胡闹教育 API运行中，前端文件未找到", "searched_paths": [os.path.normpath(p) for p in possible_paths]})
 
 @app.post("/generate-practice/{exam_id}")
 async def generate_practice(exam_id: int, grade: str = None, student_name: str = None):
@@ -746,7 +754,7 @@ async def export_practice_pdf(exam_id: int, grade: str = None, student_name: str
 async def api_info():
     """API信息"""
     return {
-        "message": "🎓 AI教育平台MVP API运行中",
+        "message": "🎓 虾胡闹教育 API运行中",
         "version": "0.5.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
