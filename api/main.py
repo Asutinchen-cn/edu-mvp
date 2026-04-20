@@ -699,13 +699,6 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
                 opt_label = chr(65 + j)
                 _safe_multicell(pdf, f"{opt_label}. {_clean_text(opt)}", h=7)
 
-        # 提示和答案
-        pdf.set_font(font, "", 9)
-        pdf.set_text_color(128, 128, 128)
-        if q_hint:
-            _safe_multicell(pdf, f"提示：{q_hint}", h=6)
-        if q_answer:
-            _safe_multicell(pdf, f"答案：{q_answer}", h=6)
         pdf.set_text_color(0, 0, 0)
         pdf.ln(3)
 
