@@ -171,6 +171,38 @@
             list-style-position: inside;
         }
         .recommendations li:last-child { border-bottom: none; }
+        .wrong-questions {
+            margin-top: 15px;
+        }
+        .wrong-question-item {
+            background: #fff3f3;
+            border: 1px solid #ffcdd2;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+        }
+        .wrong-question-item .wq-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .wrong-question-item .wq-type {
+            background: #e53935;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .wrong-question-item .wq-detail {
+            font-size: 13px;
+            color: #555;
+            line-height: 1.6;
+        }
+        .wrong-question-item .wq-detail span {
+            display: inline-block;
+            margin-right: 15px;
+        }
         .exam-list {
             margin-top: 40px;
         }
@@ -379,6 +411,10 @@
                     <strong>错误类型：</strong>
                     <div class="error-types" id="errorTypes"></div>
                 </div>
+                <div class="wrong-questions" id="wrongQuestionsSection" style="display:none;">
+                    <strong>❌ 错题列表：</strong>
+                    <div id="wrongQuestionsList"></div>
+                </div>
                 <div style="margin-top: 15px;">
                     <strong>薄弱知识点：</strong>
                     <div class="weak-points" id="weakPoints"></div>
@@ -550,6 +586,28 @@
             document.getElementById('errorTypes').innerHTML = errorTypes.map(t => 
                 `<span class="error-tag">${t}</span>`
             ).join('');
+            
+            // 错题列表
+            const wrongQuestions = analysis.wrong_questions || [];
+            const wqSection = document.getElementById('wrongQuestionsSection');
+            const wqList = document.getElementById('wrongQuestionsList');
+            if (wrongQuestions.length > 0) {
+                wqSection.style.display = 'block';
+                wqList.innerHTML = wrongQuestions.map((wq, i) => `
+                    <div class="wrong-question-item">
+                        <div class="wq-header">
+                            <strong>题目${i+1}：${wq.question || ''}</strong>
+                            <span class="wq-type">${wq.error_type || '未知类型'}</span>
+                        </div>
+                        <div class="wq-detail">
+                            <span>❌ 学生作答：${wq.student_answer || '无'}</span>
+                            <span>✅ 正确答案：${wq.correct_answer || '无'}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                wqSection.style.display = 'none';
+            }
             
             // 薄弱知识点
             const weakPoints = analysis.weak_points || [];

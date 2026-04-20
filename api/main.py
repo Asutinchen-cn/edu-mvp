@@ -250,6 +250,10 @@ async def ai_analyze(ocr_text: str) -> dict:
 
 请按以下JSON格式返回分析结果（不要包含其他文字，只返回JSON）：
 {{
+    "wrong_questions": [
+        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案"}},
+        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案"}}
+    ],
     "error_types": ["错误类型1", "错误类型2"],
     "weak_points": ["薄弱知识点1", "薄弱知识点2"],
     "root_cause": "根本原因分析",
@@ -267,6 +271,7 @@ async def ai_analyze(ocr_text: str) -> dict:
             lines = result.split("\n")
             result = "\n".join(lines[1:-1])
         analysis = json.loads(result)
+        analysis.setdefault("wrong_questions", [])
         analysis.setdefault("error_types", [])
         analysis.setdefault("weak_points", [])
         analysis.setdefault("root_cause", "")
@@ -275,6 +280,7 @@ async def ai_analyze(ocr_text: str) -> dict:
     except Exception as e:
         print(f"DeepSeek API error: {e}")
         return {
+            "wrong_questions": [],
             "error_types": ["分析服务暂时不可用"],
             "weak_points": ["请稍后重试"],
             "root_cause": f"AI分析服务异常: {str(e)[:50]}",
