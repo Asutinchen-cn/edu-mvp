@@ -30,12 +30,13 @@
         .header p { opacity: 0.9; }
         .content { padding: 30px; }
         .upload-section {
-            border: 2px dashed #ddd;
-            border-radius: 12px;
-            padding: 40px;
+            border: 2px dashed #c5cae9;
+            border-radius: 16px;
+            padding: 40px 30px;
             text-align: center;
             transition: all 0.3s;
-            background: #fafafa;
+            background: linear-gradient(180deg, #fafbff 0%, #f5f6fa 100%);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.10), inset 0 0 0 1px rgba(255,255,255,0.6);
         }
         .upload-section:hover {
             border-color: #e53935;
@@ -378,14 +379,24 @@
         <div class="content">
             <!-- 上传区域 -->
             <div class="upload-section" id="dropZone">
-                <h3 style="margin-bottom: 20px; color: #555;">📤 上传学生试卷</h3>
+                <div style="margin-bottom: 18px;">
+                    <h3 style="margin-bottom: 6px; color: #e53935; font-size: 20px;">📤 上传孩子的试卷照片</h3>
+                    <p style="color: #555; font-size: 15px; line-height: 1.6;">AI 自动识别错题、找出薄弱知识点，生成个性化强化方案 🎯</p>
+                </div>
                 <input type="text" id="grade" placeholder="请输入年级（如：三年级）" />
                 <br>
                 <input type="text" id="studentName" placeholder="请输入学生姓名" />
                 <br>
-                <input type="file" id="fileInput" accept="image/*" />
-                <label for="fileInput" class="file-label">📷 选择试卷图片</label>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 16px; margin: 14px 0;">
+                    <input type="file" id="fileInput" accept="image/*" />
+                    <label for="fileInput" class="file-label">📷 选择试卷图片</label>
+                    <div style="position: relative; cursor: pointer;" onclick="document.getElementById('fileInput').click()" title="点击此处也可上传">
+                        <div style="width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,#fff3e0,#ffe0b2);display:flex;align-items:center;justify-content:center;font-size:26px;border:2px dashed #ffb74d;box-shadow:0 2px 8px rgba(255,152,0,0.15);transition:all 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">📄</div>
+                        <span style="position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:10px;color:#e53935;white-space:nowrap;font-weight:500;">示例：点这里上传</span>
+                    </div>
+                </div>
                 <p id="fileName" style="margin-top: 10px; color: #666;"></p>
+                <p style="color: #aaa; font-size: 12px; margin-top: 8px;">支持 JPG / PNG / PDF，建议拍照时光线充足 📸</p>
                 <button class="btn-primary" id="uploadBtn" onclick="uploadAndAnalyze()" disabled>
                     开始分析
                 </button>
