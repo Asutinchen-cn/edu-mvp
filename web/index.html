@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>虾胡闹，有锦途</title>
+    <title>虾胡闹，有钳途</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,19 +29,37 @@
             gap: 12px;
         }
         .logo-icon {
-            width: 44px; height: 44px;
-            background: #2d2b55;
+            width: 48px; height: 48px;
             border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 22px;
+            font-size: 28px;
         }
         .brand h1 {
-            font-size: 20px; font-weight: 700;
-            color: #2d2b55;
+            font-size: 18px; font-weight: 700;
+            color: #1a1a4e;
         }
-        .brand p {
-            font-size: 12px; color: #999;
+        .brand .sub-brand {
+            font-size: 11px; color: #999; font-weight: 400;
         }
+        .nav-center {
+            display: flex; align-items: center; gap: 32px;
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .nav-item:hover { opacity: 0.7; }
+        .nav-icon {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+        .nav-item:nth-child(1) .nav-icon { background: #eef4ff; }
+        .nav-item:nth-child(2) .nav-icon { background: #e6faf0; }
+        .nav-item:nth-child(3) .nav-icon { background: #fff3e0; }
+        .nav-item:nth-child(4) .nav-icon { background: #eef4ff; }
+        .nav-label { font-size: 12px; color: #666; }
         .header-right {
             display: flex; align-items: center; gap: 16px;
         }
@@ -58,7 +76,7 @@
         .guide-btn:hover { background: #dde8ff; }
         .user-avatar {
             width: 36px; height: 36px;
-            background: linear-gradient(135deg, #9281FF, #4D8BFF);
+            background: linear-gradient(135deg, #3A8DFF, #8E54FF);
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             color: white; font-size: 14px; font-weight: 700;
@@ -96,7 +114,10 @@
         }
         .hero h2 {
             font-size: 32px; font-weight: 700;
-            color: #1a1a4e;
+            background: linear-gradient(90deg, #3A8DFF, #1a1a6e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-bottom: 12px;
         }
         .hero p {
@@ -236,8 +257,8 @@
             width: 100%;
             padding: 14px;
             border: none;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #4D8BFF, #9281FF);
+            border-radius: 30px;
+            background: linear-gradient(90deg, #3A8DFF 0%, #8E54FF 100%);
             color: white;
             font-size: 16px;
             font-weight: 600;
@@ -269,7 +290,7 @@
             transition: all 0.3s;
         }
         .analyze-btn.active {
-            background: linear-gradient(135deg, #4DCB9D, #36b389);
+            background: linear-gradient(90deg, #3A8DFF, #8E54FF);
             color: white;
             cursor: pointer;
         }
@@ -522,11 +543,17 @@
 <!-- HEADER -->
 <div class="header">
     <div class="header-left">
-        <div class="logo-icon">🎓</div>
+        <div class="logo-icon">🦐</div>
         <div class="brand">
-            <h1>虾胡闹, 有钳途</h1>
-            <p>AI分析薄弱点 · 获取个性化学习方案</p>
+            <h1>虾胡闹，有钳途</h1>
+            <span class="sub-brand">12K 教育</span>
         </div>
+    </div>
+    <div class="nav-center">
+        <div class="nav-item"><div class="nav-icon">📚</div><span class="nav-label">知识</span></div>
+        <div class="nav-item"><div class="nav-icon">💡</div><span class="nav-label">启发</span></div>
+        <div class="nav-item"><div class="nav-icon">📊</div><span class="nav-label">成长</span></div>
+        <div class="nav-item"><div class="nav-icon">🚀</div><span class="nav-label">未来</span></div>
     </div>
     <div class="header-right">
         <button class="guide-btn" onclick="showGuide()">📖 使用指南</button>
@@ -556,14 +583,14 @@
             </div>
         </div>
         <div class="step-item">
-            <div class="step-icon"><span>🤖</span></div>
+            <div class="step-icon"><span>AI</span></div>
             <div class="step-text">
                 <h4>AI 智能分析</h4>
                 <p>识别错题与薄弱知识点</p>
             </div>
         </div>
         <div class="step-item">
-            <div class="step-icon"><span>📋</span></div>
+            <div class="step-icon"><span>📄</span></div>
             <div class="step-text">
                 <h4>生成方案</h4>
                 <p>个性化学习强化方案</p>
@@ -613,7 +640,7 @@
         <div class="file-preview" id="filePreview"></div>
 
         <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-            📄 选择试卷图片
+            ☁️ 选择试卷图片
         </button>
 
         <div class="example-link" onclick="loadExample()">示例：点击查看上传示例</div>
