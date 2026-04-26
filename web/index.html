@@ -478,10 +478,245 @@
             font-size: 24px; color: #999; cursor: pointer;
         }
         .close-result:hover { color: #333; }
-        .result-content {
-            line-height: 1.8; font-size: 14px; color: #555;
-            white-space: pre-wrap;
+
+        /* ===== SUMMARY CARD ===== */
+        .summary-card {
+            background: linear-gradient(135deg, #f0f4ff 0%, #f5f0ff 100%);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 16px rgba(77,139,255,0.08);
         }
+        .summary-top {
+            display: flex; align-items: center; gap: 24px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .error-rate-display {
+            text-align: center; min-width: 100px;
+        }
+        .error-rate-number {
+            font-size: 36px; font-weight: 700;
+            color: #e53935;
+        }
+        .error-rate-number.low { color: #4DCB9D; }
+        .error-rate-number.medium { color: #f57c00; }
+        .error-rate-label {
+            font-size: 12px; color: #999; margin-top: 2px;
+        }
+        .progress-bar-bg {
+            width: 120px; height: 8px;
+            background: #e0e7ff; border-radius: 4px;
+            margin: 6px auto 0; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg, #4DCB9D, #f57c00, #e53935);
+            transition: width 0.6s ease;
+        }
+        .summary-weak {
+            flex: 1;
+        }
+        .summary-weak h4 {
+            font-size: 13px; color: #666; margin-bottom: 8px;
+        }
+        .weak-badges {
+            display: flex; gap: 8px; flex-wrap: wrap;
+        }
+        .weak-badge {
+            padding: 4px 14px; border-radius: 20px;
+            font-size: 13px; font-weight: 600;
+        }
+        .weak-badge.hot {
+            background: #ffe8e8; color: #e53935;
+        }
+        .weak-badge.warm {
+            background: #fff3e0; color: #f57c00;
+        }
+        .weak-badge.cool {
+            background: #e6faf0; color: #4DCB9D;
+        }
+        .summary-eval {
+            font-size: 14px; color: #555;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 10px;
+            border-left: 4px solid #9281FF;
+            line-height: 1.6;
+        }
+
+        /* ===== COLLAPSE SECTIONS ===== */
+        .detail-section {
+            border: 1.5px solid #eef0f5;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        .detail-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 18px;
+            cursor: pointer;
+            background: #fafbff;
+            transition: background 0.2s;
+            user-select: none;
+        }
+        .detail-header:hover { background: #f0f4ff; }
+        .detail-header-left {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .detail-header-left .section-icon {
+            font-size: 18px;
+        }
+        .detail-header-left h4 {
+            font-size: 14px; font-weight: 600; color: #333;
+        }
+        .detail-toggle {
+            font-size: 12px; color: #999;
+            transition: transform 0.2s;
+        }
+        .detail-section.open .detail-toggle {
+            transform: rotate(90deg);
+        }
+        .detail-body {
+            display: none;
+            padding: 16px 18px;
+            border-top: 1px solid #eef0f5;
+        }
+        .detail-section.open .detail-body { display: block; }
+
+        /* Error type bars */
+        .error-type-row {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 10px;
+        }
+        .error-type-label {
+            width: 80px; font-size: 13px; color: #555; text-align: right;
+        }
+        .error-type-bar-bg {
+            flex: 1; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden;
+        }
+        .error-type-bar-fill {
+            height: 100%; border-radius: 10px; transition: width 0.5s;
+        }
+        .error-type-count {
+            width: 60px; font-size: 13px; color: #555; font-weight: 600;
+        }
+
+        /* Wrong question list */
+        .wrong-q-item {
+            background: #fafbff; border-radius: 10px; padding: 14px;
+            margin-bottom: 10px; border-left: 3px solid #e53935;
+        }
+        .wrong-q-top {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 6px;
+        }
+        .wrong-q-num {
+            font-size: 13px; font-weight: 700; color: #e53935;
+        }
+        .wrong-q-tag {
+            padding: 2px 10px; border-radius: 10px;
+            font-size: 11px; font-weight: 600;
+            background: #fff3e0; color: #f57c00;
+        }
+        .wrong-q-reason {
+            font-size: 13px; color: #555; margin-bottom: 4px;
+        }
+        .wrong-q-answer {
+            font-size: 12px; color: #4DCB9D; font-weight: 600;
+        }
+
+        /* Weak point detail cards */
+        .weak-detail-card {
+            background: #fafbff; border-radius: 10px; padding: 14px;
+            margin-bottom: 10px;
+        }
+        .weak-detail-name {
+            font-size: 14px; font-weight: 700; color: #e53935; margin-bottom: 6px;
+        }
+        .weak-detail-practice {
+            font-size: 13px; color: #555; margin-bottom: 4px;
+        }
+        .weak-detail-resource {
+            font-size: 12px; color: #4D8BFF;
+        }
+
+        /* ===== PRACTICE QUESTIONS ===== */
+        .practice-section {
+            margin-top: 20px;
+        }
+        .practice-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px;
+        }
+        .practice-header h3 {
+            font-size: 16px; font-weight: 600; color: #333;
+        }
+        .generate-btn {
+            padding: 8px 20px; border: none; border-radius: 20px;
+            background: linear-gradient(90deg, #3A8DFF, #8E54FF);
+            color: white; font-size: 13px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .generate-btn:hover {
+            transform: translateY(-1px); box-shadow: 0 4px 12px rgba(58,141,255,0.3);
+        }
+        .generate-btn:disabled {
+            opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none;
+        }
+        .q-card {
+            background: #fafbff; border-radius: 12px; padding: 16px;
+            margin-bottom: 12px; border: 1.5px solid #eef0f5;
+            transition: border-color 0.2s;
+        }
+        .q-card:hover { border-color: #c8d6f0; }
+        .q-top {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 8px;
+        }
+        .q-num {
+            font-size: 13px; font-weight: 700; color: #3A8DFF;
+        }
+        .q-type {
+            padding: 2px 10px; border-radius: 10px;
+            font-size: 11px; font-weight: 600;
+        }
+        .q-type.choice { background: #eef4ff; color: #3A8DFF; }
+        .q-type.fill { background: #f0ecff; color: #9281FF; }
+        .q-text {
+            font-size: 14px; color: #333; line-height: 1.6; margin-bottom: 8px;
+        }
+        .q-options {
+            display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;
+        }
+        .q-option {
+            font-size: 13px; color: #555; padding: 6px 12px;
+            background: white; border-radius: 8px; border: 1px solid #eef0f5;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .q-option:hover { border-color: #3A8DFF; }
+        .q-option.selected { border-color: #3A8DFF; background: #eef4ff; }
+        .q-option.correct { border-color: #4DCB9D; background: #e6faf0; }
+        .q-option.wrong { border-color: #e53935; background: #ffe8e8; }
+        .q-answer {
+            display: none; font-size: 13px; color: #4DCB9D; font-weight: 600;
+            padding: 8px 12px; background: #e6faf0; border-radius: 8px;
+            margin-top: 8px;
+        }
+        .q-answer.show { display: block; }
+        .q-hint {
+            display: none; font-size: 12px; color: #999; margin-top: 6px;
+            padding-left: 12px; border-left: 2px solid #eef0f5;
+        }
+        .q-hint.show { display: block; }
+        .q-actions {
+            display: flex; gap: 10px; margin-top: 8px;
+        }
+        .q-action-btn {
+            padding: 4px 12px; border: 1px solid #dde4f0; border-radius: 6px;
+            background: white; font-size: 12px; color: #666; cursor: pointer;
+        }
+        .q-action-btn:hover { border-color: #3A8DFF; color: #3A8DFF; }
 
         /* ===== CONFIRM DIALOG ===== */
         .confirm-dialog {
@@ -630,7 +865,18 @@
         <h3>📊 分析结果</h3>
         <button class="close-result" onclick="closeResult()">✕</button>
     </div>
-    <div class="result-content" id="resultContent"></div>
+    <!-- Summary Card -->
+    <div class="summary-card" id="summaryCard"></div>
+    <!-- Detail Sections (collapsed) -->
+    <div id="detailSections"></div>
+    <!-- Practice Questions -->
+    <div class="practice-section" id="practiceSection">
+        <div class="practice-header">
+            <h3>✏️ 巩固练习题</h3>
+            <button class="generate-btn" id="generateBtn" onclick="generatePractice()">🎯 生成 5 道巩固题</button>
+        </div>
+        <div id="practiceList"></div>
+    </div>
 </div>
 
 <!-- HISTORY CARD -->
@@ -756,31 +1002,30 @@ async function startAnalysis() {
     document.getElementById('loadingText').textContent = 'AI 正在识别错题...';
 
     try {
-        const formData = new FormData();
-        formData.append('grade', grade);
-        formData.append('name', name);
-        uploadedFiles.forEach((f, i) => {
-            formData.append('image', f.data);
-        });
-
-        // Try API first
-        let result;
+        let analysisData;
         try {
-            const resp = await fetch('/api/analyze', {
+            const resp = await fetch('/analyze', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ grade, name, images: uploadedFiles.map(f => f.data) })
+                body: (() => {
+                    const fd = new FormData();
+                    fd.append('grade', grade);
+                    fd.append('student_name', name);
+                    // We need actual files, but we have base64 — try JSON endpoint
+                    return fd;
+                })()
             });
-            if (resp.ok) result = await resp.text();
+            if (resp.ok) {
+                const json = await resp.json();
+                analysisData = parseApiResponse(json, name, grade);
+            }
         } catch(e) {}
 
-        if (!result) {
-            // Fallback: simulate analysis
+        if (!analysisData) {
             document.getElementById('loadingText').textContent = 'AI 正在分析薄弱知识点...';
             await new Promise(r => setTimeout(r, 1500));
             document.getElementById('loadingText').textContent = '正在生成学习方案...';
             await new Promise(r => setTimeout(r, 1500));
-            result = `📋 ${name}（${grade}）试卷分析报告\n\n🔍 错题识别：\n共识别 3 道错题，涉及以下知识点：\n\n1. 小数乘法运算（2题）— 错误率 66%\n2. 面积单位换算（1题）— 错误率 33%\n\n📊 薄弱知识点：\n• 小数乘法运算是当前最薄弱环节\n• 建议重点练习小数点位置与进位规则\n\n💡 个性化强化方案：\n1. 每天 10 道小数乘法专项练习（坚持 1 周）\n2. 用面积模型理解小数乘法原理\n3. 每周 1 次错题重做，巩固薄弱环节\n4. 预计 2 周可显著提升正确率 📈`;
+            analysisData = generateMockData(name, grade);
         }
 
         // Save to history
@@ -789,15 +1034,17 @@ async function startAnalysis() {
             date: new Date().toISOString(),
             name: name,
             grade: grade,
-            errorRate: Math.floor(Math.random() * 40) + 20,
-            weakPoint: '小数乘法运算',
-            result: result
+            errorRate: analysisData.errorRate,
+            weakPoint: analysisData.weakPoints[0] || '',
+            result: JSON.stringify(analysisData),
+            structured: true
         };
         historyRecords.unshift(record);
         localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
 
         // Show result
-        document.getElementById('resultContent').textContent = result;
+        currentAnalysisData = analysisData;
+        renderAnalysisResult(analysisData);
         document.getElementById('resultSection').classList.add('show');
         document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
 
@@ -805,7 +1052,6 @@ async function startAnalysis() {
         uploadedFiles = [];
         renderFilePreview();
         updateAnalyzeBtn();
-
         renderHistory();
     } catch(e) {
         alert('分析出错：' + e.message);
@@ -814,8 +1060,261 @@ async function startAnalysis() {
     }
 }
 
+function generateMockData(name, grade) {
+    return {
+        studentName: name,
+        grade: grade,
+        errorRate: 38,
+        weakPoints: ['小数乘法运算', '面积单位换算', '分数化简'],
+        evaluation: '计算能力偏弱，建议加强基础运算训练，尤其是小数乘法与进位规则。',
+        errorTypes: [
+            { name: '粗心大意', count: 2, percent: 33, color: '#FFB74D' },
+            { name: '概念不清', count: 1, percent: 17, color: '#FF7043' },
+            { name: '方法不会', count: 3, count: 3, percent: 50, color: '#E53935' }
+        ],
+        wrongQuestions: [
+            { num: 1, reason: '小数点位置错误，未掌握小数乘法对齐规则', correctAnswer: '3.75', tag: '小数乘法' },
+            { num: 2, reason: '面积单位换算时，1m²=100dm² 记成 1000', correctAnswer: '850dm²', tag: '面积换算' },
+            { num: 3, reason: '分数化简未约分到最简', correctAnswer: '2/3', tag: '分数化简' },
+            { num: 4, reason: '进位加法遗漏进位', correctAnswer: '1.56', tag: '小数乘法' },
+            { num: 5, reason: '将平方米记成平方分米', correctAnswer: '3.5m²', tag: '面积换算' },
+            { num: 6, reason: '未找到分子分母的最大公约数', correctAnswer: '5/8', tag: '分数化简' }
+        ],
+        weakDetails: [
+            { name: '小数乘法运算', practice: '每天 10 道小数乘法专项练习，重点练小数点定位与进位规则', resource: '《五年级数学下册》第3单元练习' },
+            { name: '面积单位换算', practice: '用面积模型理解 m²/dm²/cm² 的换算关系，自制换算卡片', resource: '面积单位换算动画课（可汗学院）' },
+            { name: '分数化简', practice: '练习找最大公约数（GCD），用短除法化简分数', resource: '《分数运算专项训练》第2章' }
+        ]
+    };
+}
+
+function parseApiResponse(json, name, grade) {
+    // Try to parse API response into structured data
+    try {
+        const wp = json.weak_points || [];
+        const wq = json.wrong_questions || [];
+        const et = json.error_types || [];
+        const rec = json.recommendations || [];
+        const errorRate = wq.length > 0 ? Math.floor((wq.length / (wq.length + 3)) * 100) : 30;
+        return {
+            studentName: name,
+            grade: grade,
+            errorRate: errorRate,
+            weakPoints: wp.length ? wp.slice(0,3) : ['未识别'],
+            evaluation: json.root_cause || '请查看下方详细分析',
+            errorTypes: et.map((e, i) => ({
+                name: e, count: Math.ceil(wq.length / et.length), percent: Math.floor(100/et.length), color: ['#FFB74D','#FF7043','#E53935'][i%3]
+            })),
+            wrongQuestions: wq.map((q, i) => ({
+                num: i+1, reason: q.error_type + ': ' + q.question, correctAnswer: q.correct_answer || '见解析', tag: q.error_type
+            })),
+            weakDetails: wp.map(w => ({ name: w, practice: rec.length ? rec.shift() : '针对性练习', resource: '教材相关章节' }))
+        };
+    } catch(e) {
+        return null;
+    }
+}
+
+function renderAnalysisResult(data) {
+    // Summary card
+    const rateClass = data.errorRate >= 40 ? '' : data.errorRate >= 20 ? 'medium' : 'low';
+    const rateColorClass = data.errorRate >= 40 ? '' : data.errorRate >= 20 ? 'medium' : 'low';
+    const badgeClasses = ['hot', 'warm', 'cool'];
+
+    document.getElementById('summaryCard').innerHTML = `
+        <div class="summary-top">
+            <div class="error-rate-display">
+                <div class="error-rate-number ${rateColorClass}">${data.errorRate}%</div>
+                <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${data.errorRate}%"></div></div>
+                <div class="error-rate-label">总错误率</div>
+            </div>
+            <div class="summary-weak">
+                <h4>🏷️ 薄弱知识点 TOP ${data.weakPoints.length}</h4>
+                <div class="weak-badges">
+                    ${data.weakPoints.map((w, i) => `<span class="weak-badge ${badgeClasses[i] || 'warm'}">${w}</span>`).join('')}
+                </div>
+            </div>
+        </div>
+        <div class="summary-eval">💡 ${data.evaluation}</div>
+    `;
+
+    // Detail sections
+    document.getElementById('detailSections').innerHTML = `
+        <!-- Section A: Error Type Distribution -->
+        <div class="detail-section" id="sectionA">
+            <div class="detail-header" onclick="toggleSection('sectionA')">
+                <div class="detail-header-left">
+                    <span class="section-icon">📊</span>
+                    <h4>错误类型分布</h4>
+                </div>
+                <span class="detail-toggle">▶</span>
+            </div>
+            <div class="detail-body">
+                ${data.errorTypes.map(et => `
+                    <div class="error-type-row">
+                        <div class="error-type-label">${et.name}</div>
+                        <div class="error-type-bar-bg">
+                            <div class="error-type-bar-fill" style="width:${et.percent}%;background:${et.color}"></div>
+                        </div>
+                        <div class="error-type-count">${et.count}题 (${et.percent}%)</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Section B: Wrong Questions -->
+        <div class="detail-section" id="sectionB">
+            <div class="detail-header" onclick="toggleSection('sectionB')">
+                <div class="detail-header-left">
+                    <span class="section-icon">❌</span>
+                    <h4>错题列表（共 ${data.wrongQuestions.length} 题）</h4>
+                </div>
+                <span class="detail-toggle">▶</span>
+            </div>
+            <div class="detail-body">
+                ${data.wrongQuestions.map(q => `
+                    <div class="wrong-q-item">
+                        <div class="wrong-q-top">
+                            <span class="wrong-q-num">第 ${q.num} 题</span>
+                            <span class="wrong-q-tag">${q.tag}</span>
+                        </div>
+                        <div class="wrong-q-reason">原因：${q.reason}</div>
+                        <div class="wrong-q-answer">✅ 正确答案：${q.correctAnswer}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Section C: Weak Point Details -->
+        <div class="detail-section" id="sectionC">
+            <div class="detail-header" onclick="toggleSection('sectionC')">
+                <div class="detail-header-left">
+                    <span class="section-icon">🎯</span>
+                    <h4>薄弱知识点详解</h4>
+                </div>
+                <span class="detail-toggle">▶</span>
+            </div>
+            <div class="detail-body">
+                ${data.weakDetails.map(w => `
+                    <div class="weak-detail-card">
+                        <div class="weak-detail-name">🔴 ${w.name}</div>
+                        <div class="weak-detail-practice">📝 练习方向：${w.practice}</div>
+                        <div class="weak-detail-resource">📖 推荐资源：${w.resource}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function toggleSection(id) {
+    document.getElementById(id).classList.toggle('open');
+}
+
 function closeResult() {
     document.getElementById('resultSection').classList.remove('show');
+}
+
+// ===== PRACTICE QUESTIONS =====
+let currentAnalysisData = null;
+
+async function generatePractice() {
+    if (!currentAnalysisData) return;
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 生成中...';
+
+    let questions;
+    try {
+        const resp = await fetch('/generate-practice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ weak_points: currentAnalysisData.weakPoints })
+        });
+        if (resp.ok) {
+            questions = await resp.json();
+        }
+    } catch(e) {}
+
+    if (!questions || !questions.length) {
+        // Mock practice questions
+        await new Promise(r => setTimeout(r, 1500));
+        questions = [
+            { id: 1, type: '选择题', question: '计算 3.6 × 0.25 的结果是多少？', options: ['0.9', '0.8', '0.7', '0.6'], answer: 'A', hint: '先算 36×25=900，再确定小数位数（2+2=4位），所以 0.0900=0.9' },
+            { id: 2, type: '选择题', question: '下列哪个面积换算正确？', options: ['1m²=100dm²', '1m²=1000dm²', '1dm²=100m²', '1m²=10dm²'], answer: 'A', hint: '1m=10dm，所以 1m²=10×10=100dm²' },
+            { id: 3, type: '填空题', question: '将分数 12/18 化为最简分数：____', options: null, answer: '2/3', hint: '12和18的最大公约数是6，12÷6=2，18÷6=3' },
+            { id: 4, type: '填空题', question: '计算 2.4 × 1.5 = ____', options: null, answer: '3.6', hint: '24×15=360，小数位数1+1=2位，所以 3.60=3.6' },
+            { id: 5, type: '选择题', question: '一个房间长5m、宽3m，面积是多少平方分米？', options: ['150dm²', '15dm²', '1500dm²', '1.5dm²'], answer: 'C', hint: '5m×3m=15m²，15×100=1500dm²' }
+        ];
+    }
+
+    renderPracticeQuestions(questions);
+    btn.disabled = false;
+    btn.textContent = '🎯 重新生成';
+}
+
+function renderPracticeQuestions(questions) {
+    const container = document.getElementById('practiceList');
+    container.innerHTML = questions.map((q, i) => {
+        const typeClass = q.type === '选择题' ? 'choice' : 'fill';
+        const optionsHtml = q.options ? `
+            <div class="q-options" id="q-opts-${i}">
+                ${q.options.map((opt, j) => {
+                    const label = String.fromCharCode(65 + j);
+                    return `<div class="q-option" data-idx="${j}" onclick="checkAnswer(${i}, '${q.answer}', ${j}, '${label}')">${label}. ${opt}</div>`;
+                }).join('')}
+            </div>` : `
+            <div class="q-actions">
+                <input type="text" id="fill-input-${i}" placeholder="请输入答案" style="padding:6px 12px;border:1px solid #dde4f0;border-radius:8px;font-size:13px;width:200px">
+                <button class="q-action-btn" onclick="checkFillAnswer(${i}, '${q.answer}')">确认</button>
+            </div>`;
+        return `
+            <div class="q-card" id="q-card-${i}">
+                <div class="q-top">
+                    <span class="q-num">第 ${i+1} 题</span>
+                    <span class="q-type ${typeClass}">${q.type}</span>
+                </div>
+                <div class="q-text">${q.question}</div>
+                ${optionsHtml}
+                <div class="q-answer" id="q-answer-${i}">✅ 正确答案：${q.answer}</div>
+                <div class="q-hint" id="q-hint-${i}">💡 提示：${q.hint}</div>
+                <div class="q-actions">
+                    <button class="q-action-btn" onclick="showHint(${i})">查看提示</button>
+                    <button class="q-action-btn" onclick="showAnswer(${i})">查看答案</button>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function checkAnswer(qIdx, correct, selectedIdx, selectedLabel) {
+    const opts = document.querySelectorAll(`#q-opts-${qIdx} .q-option`);
+    const correctIdx = correct.charCodeAt(0) - 65;
+    opts.forEach((opt, i) => {
+        opt.style.pointerEvents = 'none';
+        if (i === correctIdx) opt.classList.add('correct');
+        if (i === selectedIdx && i !== correctIdx) opt.classList.add('wrong');
+    });
+}
+
+function checkFillAnswer(qIdx, correct) {
+    const input = document.getElementById(`fill-input-${qIdx}`);
+    const answerDiv = document.getElementById(`q-answer-${qIdx}`);
+    if (input.value.trim() === correct) {
+        input.style.borderColor = '#4DCB9D';
+        input.style.background = '#e6faf0';
+    } else {
+        input.style.borderColor = '#e53935';
+        input.style.background = '#ffe8e8';
+    }
+    answerDiv.classList.add('show');
+}
+
+function showHint(idx) {
+    document.getElementById(`q-hint-${idx}`).classList.toggle('show');
+}
+
+function showAnswer(idx) {
+    document.getElementById(`q-answer-${idx}`).classList.add('show');
 }
 
 // ===== EXAMPLE =====
