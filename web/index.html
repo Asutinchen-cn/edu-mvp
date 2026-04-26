@@ -874,6 +874,7 @@
         <div class="practice-header">
             <h3>✏️ 巩固练习题</h3>
             <button class="generate-btn" id="generateBtn" onclick="generatePractice()">🎯 生成 5 道巩固题</button>
+            <button class="generate-btn" id="exportPdfBtn" style="display:none;background:linear-gradient(90deg,#4DCB9D,#36b389)" onclick="exportPracticePdf()">📄 导出 PDF（无答案）</button>
         </div>
         <div id="practiceList"></div>
     </div>
@@ -1251,6 +1252,7 @@ async function generatePractice() {
     renderPracticeQuestions(questions);
     btn.disabled = false;
     btn.textContent = '🎯 重新生成';
+    document.getElementById('exportPdfBtn').style.display = 'inline-block';
 }
 
 function renderPracticeQuestions(questions) {
@@ -1315,6 +1317,57 @@ function showHint(idx) {
 
 function showAnswer(idx) {
     document.getElementById(`q-answer-${idx}`).classList.add('show');
+}
+
+// ===== EXPORT PDF =====
+function exportPracticePdf() {
+    if (!currentAnalysisData) return;
+    const cards = document.querySelectorAll('.q-card');
+    if (!cards.length) return;
+
+    // Build printable HTML
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>巩固练习题 - ${currentAnalysisData.studentName}(${currentAnalysisData.grade})</title>
+    <style>
+        body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;padding:40px;color:#333;line-height:1.8}
+        h1{font-size:20px;text-align:center;margin-bottom:4px}
+        .info{text-align:center;font-size:13px;color:#666;margin-bottom:24px}
+        .q{margin-bottom:20px;page-break-inside:avoid}
+        .q-title{font-size:14px;font-weight:700;margin-bottom:6px}
+        .q-text{font-size:14px;margin-bottom:6px}
+        .q-option{font-size:13px;margin-left:20px;margin-bottom:2px}
+        .q-fill{font-size:13px;margin-left:20px;border-bottom:1px solid #ccc;display:inline-block;min-width:120px}
+        .divider{border-top:1px dashed #ccc;margin:20px 0}
+        .footer{text-align:center;font-size:11px;color:#999;margin-top:30px}
+    </style></head><body>`;
+    html += `<h1>🎯 巩固练习题</h1>`;
+    html += `<div class="info">学生：${currentAnalysisData.studentName} | 年级：${currentAnalysisData.grade} | 薄弱知识点：${currentAnalysisData.weakPoints.join('、')}</div>`;
+    html += `<div class="divider"></div>`;
+
+    cards.forEach((card, i) => {
+        const type = card.querySelector('.q-type')?.textContent || '';
+        const text = card.querySelector('.q-text')?.textContent || '';
+        html += `<div class="q">`;
+        html += `<div class="q-title">第 ${i+1} 题 [${type}]</div>`;
+        html += `<div class="q-text">${text}</div>`;
+        const options = card.querySelectorAll('.q-option');
+        if (options.length) {
+            options.forEach(opt => {
+                html += `<div class="q-option">${opt.textContent}</div>`;
+            });
+        } else {
+            html += `<div class="q-fill">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>`;
+        }
+        html += `</div>`;
+    });
+    html += `<div class="footer">虾胡闹，有钳途 · AI 个性化学习方案</div>`;
+    html += `</body></html>`;
+
+    // Open print dialog
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => { win.print(); };
 }
 
 // ===== EXAMPLE =====
