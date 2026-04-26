@@ -32,7 +32,10 @@
             width: 48px; height: 48px;
             border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 28px;
+            overflow: hidden;
+        }
+        .logo-icon img {
+            width: 100%; height: 100%; object-fit: contain;
         }
         .brand h1 {
             font-size: 18px; font-weight: 700;
@@ -543,7 +546,7 @@
 <!-- HEADER -->
 <div class="header">
     <div class="header-left">
-        <div class="logo-icon">🦐</div>
+        <div class="logo-icon"><img src="logo.png" alt="虾胡闹"></div>
         <div class="brand">
             <h1>虾胡闹，有钳途</h1>
             <span class="sub-brand">12K 教育</span>
