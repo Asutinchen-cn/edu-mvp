@@ -30,7 +30,7 @@
         }
         .logo-icon {
             width: 44px; height: 44px;
-            background: linear-gradient(135deg, #4D8BFF, #9281FF);
+            background: #2d2b55;
             border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
             font-size: 22px;
@@ -65,18 +65,38 @@
             cursor: pointer;
         }
 
+        /* Floating decorative cubes */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 8px;
+            opacity: 0.08;
+            z-index: 0;
+            pointer-events: none;
+        }
+        body::before {
+            width: 80px; height: 80px;
+            background: #4D8BFF;
+            top: 15%; left: 5%;
+            transform: rotate(25deg);
+        }
+        body::after {
+            width: 60px; height: 60px;
+            background: #9281FF;
+            top: 60%; right: 8%;
+            transform: rotate(-15deg);
+        }
+
         /* ===== HERO ===== */
         .hero {
             text-align: center;
             padding: 30px 20px 10px;
             position: relative;
+            overflow: visible;
         }
         .hero h2 {
             font-size: 32px; font-weight: 700;
-            background: linear-gradient(135deg, #4D8BFF, #9281FF);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #1a1a4e;
             margin-bottom: 12px;
         }
         .hero p {
@@ -84,14 +104,21 @@
         }
         .hero-illustrations {
             display: flex; justify-content: space-between;
-            max-width: 900px; margin: 20px auto 0;
+            max-width: 900px; margin: 10px auto -10px;
             pointer-events: none;
         }
         .hero-illust {
-            width: 140px; height: 120px;
+            width: 160px; height: 130px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 60px;
-            filter: drop-shadow(0 4px 12px rgba(77,139,255,0.2));
+            position: relative;
+        }
+        .hero-illust-left {
+            font-size: 80px;
+            filter: drop-shadow(0 8px 20px rgba(77,139,255,0.15));
+        }
+        .hero-illust-right {
+            font-size: 80px;
+            filter: drop-shadow(0 8px 20px rgba(146,129,255,0.15));
         }
 
         /* ===== MAIN CARD ===== */
@@ -512,8 +539,8 @@
     <h2>AI 智能分析, 精准提升学习效率</h2>
     <p>上传试卷, AI 自动识别错题, 找出薄弱知识点, 生成个性化强化方案 🎯</p>
     <div class="hero-illustrations">
-        <div class="hero-illust">📱</div>
-        <div class="hero-illust">📊</div>
+        <div class="hero-illust hero-illust-left">📝</div>
+        <div class="hero-illust hero-illust-right">📈</div>
     </div>
 </div>
 
@@ -586,7 +613,7 @@
         <div class="file-preview" id="filePreview"></div>
 
         <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-            ☁️ 选择试卷图片
+            📄 选择试卷图片
         </button>
 
         <div class="example-link" onclick="loadExample()">示例：点击查看上传示例</div>
@@ -837,7 +864,7 @@ function renderHistory() {
     if (records.length === 0) {
         list.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">🔍</div>
+                <div class="empty-icon">📋🔍</div>
                 <div class="empty-title">暂无历史记录</div>
                 <div class="empty-desc">上传试卷并完成分析后, 记录将显示在这里</div>
             </div>`;
