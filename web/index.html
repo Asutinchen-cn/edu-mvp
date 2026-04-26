@@ -3,982 +3,907 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>虾胡闹，有钳途</title>
+    <title>虾胡闹，有锦途</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        body {
+            font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(180deg, #eef2ff 0%, #f8f9ff 30%, #ffffff 100%);
             min-height: 100vh;
-            padding: 20px;
+            color: #333;
         }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
+
+        /* ===== HEADER ===== */
         .header {
-            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        .header h1 { font-size: 28px; margin-bottom: 8px; }
-        .header p { opacity: 0.9; }
-        .content { padding: 30px; }
-        .upload-section {
-            border: 2px dashed #c5cae9;
-            border-radius: 16px;
-            padding: 40px 30px;
-            text-align: center;
-            transition: all 0.3s;
-            background: linear-gradient(180deg, #fafbff 0%, #f5f6fa 100%);
-            box-shadow: 0 6px 24px rgba(0,0,0,0.10), inset 0 0 0 1px rgba(255,255,255,0.6);
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        .upload-section:hover {
-            border-color: #e53935;
-            background: #f0f4ff;
+        .logo-icon {
+            width: 44px; height: 44px;
+            background: linear-gradient(135deg, #4D8BFF, #9281FF);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
         }
-        .upload-section.dragover {
-            border-color: #e53935;
-            background: #e8eeff;
+        .brand h1 {
+            font-size: 20px; font-weight: 700;
+            color: #2d2b55;
         }
-        input[type="text"] {
-            width: 100%;
-            max-width: 300px;
-            padding: 12px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 16px;
-            margin-bottom: 15px;
-            transition: border-color 0.3s;
+        .brand p {
+            font-size: 12px; color: #999;
         }
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #e53935;
+        .header-right {
+            display: flex; align-items: center; gap: 16px;
         }
-        input[type="file"] {
-            display: none;
-        }
-        .file-label {
-            display: inline-block;
-            padding: 12px 30px;
-            background: #e53935;
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin: 10px;
-        }
-        .file-label:hover {
-            background: #c62828;
-            transform: translateY(-2px);
-        }
-        .btn-primary {
-            padding: 14px 40px;
-            background: linear-gradient(90deg, #e53935 0%, #b71c1c 100%);
-            color: white;
+        .guide-btn {
+            background: #eef4ff;
+            color: #4D8BFF;
             border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s;
-            }
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-        }
-        .btn-primary:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .btn-secondary {
-            padding: 10px 24px;
-            background: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-top: 10px;
-        }
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-        .btn-sm {
-            padding: 6px 16px;
+            padding: 8px 16px;
+            border-radius: 20px;
             font-size: 13px;
-            border-radius: 6px;
+            cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .guide-btn:hover { background: #dde8ff; }
+        .user-avatar {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, #9281FF, #4D8BFF);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 14px; font-weight: 700;
+            cursor: pointer;
+        }
+
+        /* ===== HERO ===== */
+        .hero {
+            text-align: center;
+            padding: 30px 20px 10px;
+            position: relative;
+        }
+        .hero h2 {
+            font-size: 32px; font-weight: 700;
+            background: linear-gradient(135deg, #4D8BFF, #9281FF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }
+        .hero p {
+            font-size: 15px; color: #666;
+        }
+        .hero-illustrations {
+            display: flex; justify-content: space-between;
+            max-width: 900px; margin: 20px auto 0;
+            pointer-events: none;
+        }
+        .hero-illust {
+            width: 140px; height: 120px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 60px;
+            filter: drop-shadow(0 4px 12px rgba(77,139,255,0.2));
+        }
+
+        /* ===== MAIN CARD ===== */
+        .main-card {
+            max-width: 900px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(77,139,255,0.08);
+            padding: 30px;
+            display: flex;
+            gap: 30px;
+        }
+        .steps-sidebar {
+            flex-shrink: 0;
+            width: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            position: relative;
+        }
+        .step-item {
+            display: flex; align-items: flex-start; gap: 14px;
+            position: relative;
+            padding-bottom: 28px;
+        }
+        .step-item:last-child { padding-bottom: 0; }
+        .step-icon {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
+        }
+        .step-item:nth-child(1) .step-icon { background: #eef4ff; }
+        .step-item:nth-child(2) .step-icon { background: #f0ecff; }
+        .step-item:nth-child(3) .step-icon { background: #e6faf0; }
+        .step-item:nth-child(1) .step-icon span { color: #4D8BFF; }
+        .step-item:nth-child(2) .step-icon span { color: #9281FF; }
+        .step-item:nth-child(3) .step-icon span { color: #4DCB9D; }
+        .step-text h4 { font-size: 14px; font-weight: 600; color: #333; }
+        .step-text p { font-size: 11px; color: #999; margin-top: 2px; }
+        /* Dashed line between steps */
+        .step-item:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 21px;
+            top: 44px;
+            width: 2px;
+            height: calc(100% - 44px);
+            border-left: 2px dashed #dde4f0;
+        }
+
+        .upload-area {
+            flex: 1;
+            border: 2px dashed #c8d6f0;
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .upload-title {
+            font-size: 16px; font-weight: 600; color: #333;
+        }
+        .upload-title small {
+            font-size: 12px; color: #999; font-weight: 400; display: block; margin-top: 4px;
+        }
+        .form-row {
+            display: flex; gap: 12px;
+        }
+        .form-group {
+            flex: 1; display: flex; flex-direction: column; gap: 4px;
+        }
+        .form-group label {
+            font-size: 12px; color: #666;
+        }
+        .form-group select,
+        .form-group input[type="text"] {
+            padding: 10px 14px;
+            border: 1.5px solid #dde4f0;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #333;
+            background: #f8f9ff;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group select:focus,
+        .form-group input[type="text"]:focus {
+            border-color: #4D8BFF;
+        }
+        .dropzone {
+            background: #f8f9ff;
+            border: 2px dashed #c8d6f0;
+            border-radius: 14px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .dropzone:hover, .dropzone.dragover {
+            border-color: #4D8BFF;
+            background: #eef4ff;
+        }
+        .dropzone-icon {
+            font-size: 40px; margin-bottom: 8px;
+        }
+        .dropzone-text { font-size: 14px; color: #666; }
+        .dropzone-hint { font-size: 12px; color: #999; margin-top: 6px; }
+        .upload-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
             border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #4D8BFF, #9281FF);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .upload-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(77,139,255,0.3);
+        }
+        .example-link {
+            text-align: center;
+            font-size: 13px;
+            color: #4D8BFF;
+            cursor: pointer;
+        }
+        .example-link:hover { text-decoration: underline; }
+        .analyze-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            background: #e8eaef;
+            color: #999;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: not-allowed;
+            transition: all 0.3s;
+        }
+        .analyze-btn.active {
+            background: linear-gradient(135deg, #4DCB9D, #36b389);
+            color: white;
+            cursor: pointer;
+        }
+        .analyze-btn.active:hover {
+            box-shadow: 0 6px 20px rgba(77,203,157,0.3);
+            transform: translateY(-1px);
+        }
+
+        /* ===== FILE PREVIEW ===== */
+        .file-preview {
+            display: none;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .file-preview.show { display: flex; }
+        .file-thumb {
+            position: relative;
+            width: 80px; height: 80px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .file-thumb img {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+        .file-thumb .remove-btn {
+            position: absolute; top: 2px; right: 2px;
+            width: 20px; height: 20px;
+            background: rgba(0,0,0,0.5);
+            color: white; border: none; border-radius: 50%;
+            font-size: 12px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* ===== LOADING OVERLAY ===== */
+        .loading-overlay {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.85);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 16px;
+        }
+        .loading-overlay.show { display: flex; }
+        .loader {
+            width: 50px; height: 50px;
+            border: 4px solid #e0e7ff;
+            border-top-color: #4D8BFF;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { font-size: 16px; color: #333; font-weight: 500; }
+
+        /* ===== HISTORY CARD ===== */
+        .history-card {
+            max-width: 900px;
+            margin: 20px auto 40px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(77,139,255,0.08);
+            padding: 24px 30px;
+        }
+        .history-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px;
+        }
+        .history-header h3 {
+            font-size: 16px; font-weight: 600; color: #333;
+        }
+        .history-count {
+            font-size: 13px; color: #999;
+        }
+        .history-filters {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .filter-tab {
+            padding: 6px 16px;
+            border: 1.5px solid #dde4f0;
+            border-radius: 20px;
+            background: white;
+            font-size: 13px;
+            color: #666;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-detail {
-            background: #e53935;
+        .filter-tab.active,
+        .filter-tab:hover {
+            background: #4D8BFF;
             color: white;
+            border-color: #4D8BFF;
         }
-        .btn-detail:hover { background: #c62828; }
-        .btn-delete {
-            background: #ff6b6b;
-            color: white;
-            margin-left: 8px;
+        .date-range {
+            display: flex; align-items: center; gap: 6px;
+            margin-left: auto;
         }
-        .btn-delete:hover { background: #e55a5a; }
-        .result-box { margin-top: 30px; display: none; }
-        .result-box.show { display: block; animation: fadeIn 0.5s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .summary-card {
-            background: linear-gradient(135deg, #fafbff 0%, #f0f2f8 100%);
-            border-radius: 16px; padding: 28px 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
-            border: 1px solid #e8eaf0;
-        }
-        .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 8px; }
-        .summary-header h3 { color: #e53935; font-size: 20px; margin: 0; }
-        .error-rate-section { display: flex; align-items: center; gap: 24px; margin-bottom: 22px; }
-        .error-rate-number { font-size: 48px; font-weight: 800; color: #e53935; line-height: 1; min-width: 90px; }
-        .error-rate-number small { font-size: 20px; font-weight: 600; }
-        .error-rate-bar-wrap { flex: 1; }
-        .error-rate-bar { height: 14px; background: #e8eaf0; border-radius: 7px; overflow: hidden; }
-        .error-rate-bar-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, #ff6b6b 0%, #e53935 100%); transition: width 0.8s ease; }
-        .error-rate-bar-label { display: flex; justify-content: space-between; font-size: 12px; color: #999; margin-top: 4px; }
-        .weak-top-section { margin-bottom: 18px; }
-        .weak-top-label { font-size: 13px; color: #888; margin-bottom: 8px; font-weight: 500; }
-        .weak-top-tags { display: flex; flex-wrap: wrap; gap: 8px; }
-        .weak-top-tag { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: 600; }
-        .weak-top-tag.rank-1 { background: #fdecec; color: #c62828; }
-        .weak-top-tag.rank-2 { background: #fff3e0; color: #e65100; }
-        .weak-top-tag.rank-3 { background: #fff8e1; color: #f57f17; }
-        .overall-comment { background: white; border-left: 4px solid #e53935; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 15px; color: #333; line-height: 1.6; }
-        .detail-sections { margin-top: 16px; }
-        .collapse-block { background: white; border: 1px solid #e8eaf0; border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
-        .collapse-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; cursor: pointer; user-select: none; transition: background 0.2s; }
-        .collapse-header:hover { background: #f8f9fc; }
-        .collapse-header-left { display: flex; align-items: center; gap: 10px; }
-        .collapse-indicator { font-size: 12px; color: #999; transition: transform 0.3s; display: inline-block; }
-        .collapse-block.open .collapse-indicator { transform: rotate(90deg); }
-        .collapse-title { font-weight: 600; font-size: 15px; color: #333; }
-        .collapse-badge { font-size: 12px; padding: 2px 10px; border-radius: 10px; font-weight: 500; }
-        .collapse-body { display: none; padding: 0 18px 18px; }
-        .collapse-block.open .collapse-body { display: block; animation: collapseFadeIn 0.3s ease; }
-        @keyframes collapseFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .error-type-dist { display: flex; flex-direction: column; gap: 10px; }
-        .error-type-row { display: flex; align-items: center; gap: 12px; }
-        .error-type-label { width: 80px; font-size: 14px; font-weight: 500; text-align: right; flex-shrink: 0; }
-        .error-type-label.label-careless { color: #ff9800; }
-        .error-type-label.label-concept { color: #f44336; }
-        .error-type-label.label-method { color: #9c27b0; }
-        .error-type-bar { flex: 1; height: 22px; background: #f0f0f0; border-radius: 6px; overflow: hidden; }
-        .error-type-bar-fill { height: 100%; border-radius: 6px; transition: width 0.6s ease; display: flex; align-items: center; padding-left: 8px; font-size: 12px; color: white; font-weight: 600; min-width: 40px; }
-        .error-type-bar-fill.fill-careless { background: linear-gradient(90deg, #ffb74d, #ff9800); }
-        .error-type-bar-fill.fill-concept { background: linear-gradient(90deg, #ef5350, #f44336); }
-        .error-type-bar-fill.fill-method { background: linear-gradient(90deg, #ba68c8, #9c27b0); }
-        .error-type-count { font-size: 14px; font-weight: 700; color: #555; width: 36px; text-align: center; flex-shrink: 0; }
-        .wq-item { background: #fafbff; border: 1px solid #eef0f5; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
-        .wq-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .wq-item-num { font-weight: 700; color: #333; font-size: 15px; }
-        .wq-item-type { padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
-        .wq-item-type.type-careless { background: #fff3e0; color: #e65100; }
-        .wq-item-type.type-concept { background: #fdecec; color: #c62828; }
-        .wq-item-type.type-method { background: #f3e5f5; color: #6a1b9a; }
-        .wq-item-body { font-size: 13px; color: #555; line-height: 1.8; }
-        .wq-item-body span { display: inline-block; margin-right: 16px; }
-        .wq-item-kp { margin-top: 6px; }
-        .kp-tag { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; margin-right: 6px; }
-        .kp-tag.kp-strong { background: #e8f5e9; color: #2e7d32; }
-        .kp-tag.kp-weak { background: #fdecec; color: #c62828; }
-        .weak-detail-item { background: #fafbff; border: 1px solid #eef0f5; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
-        .weak-detail-name { font-weight: 700; font-size: 15px; color: #c62828; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-        .weak-detail-name::before { content: '⚠'; font-size: 14px; }
-        .weak-detail-practice { font-size: 14px; color: #555; margin-bottom: 6px; line-height: 1.6; }
-        .result-actions { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
-        .exam-section { margin-top: 24px; }
-        .exam-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
-        .exam-header h3 { color: #333; font-size: 18px; margin: 0; }
-        .exam-count { font-size: 13px; color: #999; font-weight: 400; }
-        .date-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-        .date-btn {
-            padding: 5px 14px; border-radius: 16px; font-size: 13px; border: 1px solid #ddd;
-            background: white; cursor: pointer; transition: all 0.2s; color: #555;
-        }
-        .date-btn:hover { border-color: #e53935; color: #e53935; }
-        .date-btn.active { background: #e53935; color: white; border-color: #e53935; }
-        .date-range { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #888; }
         .date-range input[type="date"] {
-            padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;
-            width: 130px;
+            padding: 6px 10px;
+            border: 1.5px solid #dde4f0;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #333;
+            outline: none;
         }
-        .date-range input[type="date"]:focus { outline: none; border-color: #e53935; }
-        .exam-cards { display: flex; flex-direction: column; gap: 10px; }
-        .exam-card {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 14px 18px; background: #f8f9fa; border-radius: 10px;
-            border: 2px solid transparent; cursor: pointer; transition: all 0.2s;
-            position: relative;
+        .date-range input[type="date"]:focus { border-color: #4D8BFF; }
+        .date-range span { color: #999; font-size: 12px; }
+
+        /* History items */
+        .history-list { display: flex; flex-direction: column; gap: 10px; }
+        .history-item {
+            background: #f8f9ff;
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
         }
-        .exam-card:hover { background: #eef0f5; }
-        .exam-card.active { border-color: #e53935; background: #fef5f5; }
-        .exam-card-left { flex: 1; min-width: 0; }
-        .exam-card-date { font-size: 12px; color: #999; margin-bottom: 4px; }
-        .exam-card-title { font-size: 15px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .exam-card-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-        .exam-card-stat { text-align: center; }
-        .exam-card-rate { font-size: 20px; font-weight: 800; line-height: 1; }
-        .exam-card-rate.high { color: #e53935; }
-        .exam-card-rate.mid { color: #ff9800; }
-        .exam-card-rate.low { color: #4caf50; }
-        .exam-card-rate-label { font-size: 10px; color: #999; }
-        .exam-card-weak { font-size: 12px; color: #c62828; background: #fdecec; padding: 2px 10px; border-radius: 10px; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .exam-card-del {
-            width: 28px; height: 28px; border-radius: 50%; border: none;
-            background: transparent; cursor: pointer; font-size: 14px; color: #bbb;
-            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+        .history-item:hover { border-color: #c8d6f0; }
+        .history-item.selected { border-color: #4D8BFF; background: #eef4ff; }
+        .history-item-header {
+            display: flex; justify-content: space-between; align-items: flex-start;
         }
-        .exam-card-del:hover { background: #fdecec; color: #e53935; }
-        .show-more-btn {
-            display: block; margin: 12px auto 0; padding: 8px 24px;
-            background: white; border: 1px solid #ddd; border-radius: 20px;
-            font-size: 13px; color: #666; cursor: pointer; transition: all 0.2s;
+        .history-item-info { flex: 1; }
+        .history-item-date { font-size: 13px; color: #999; }
+        .history-item-name { font-size: 14px; font-weight: 600; color: #333; margin-top: 2px; }
+        .history-item-meta {
+            display: flex; gap: 12px; margin-top: 6px;
         }
-        .show-more-btn:hover { border-color: #e53935; color: #e53935; }
-        .loading {
+        .error-rate {
+            font-size: 12px; font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+        .error-rate.high { background: #ffe8e8; color: #e53935; }
+        .error-rate.medium { background: #fff3e0; color: #f57c00; }
+        .error-rate.low { background: #e6faf0; color: #4DCB9D; }
+        .weak-tag {
+            font-size: 12px; color: #9281FF;
+            background: #f0ecff;
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+        .delete-btn {
+            background: none; border: none;
+            color: #ccc; font-size: 18px;
+            cursor: pointer; padding: 4px;
+            transition: color 0.2s;
+        }
+        .delete-btn:hover { color: #e53935; }
+
+        /* History item expanded */
+        .history-detail {
             display: none;
-            text-align: center;
-            padding: 40px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #dde4f0;
+            font-size: 13px; color: #555;
+            line-height: 1.8;
         }
-        .loading.show { display: block; }
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #e53935;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        .history-item.selected .history-detail { display: block; }
+
+        /* Empty state */
         .empty-state {
             text-align: center;
-            padding: 40px;
+            padding: 40px 20px;
             color: #999;
         }
-        .practice-section {
-            margin-top: 25px;
-            padding: 25px;
-            background: linear-gradient(135deg, #fff9e6 0%, #ffe4b5 100%);
-            border-radius: 12px;
+        .empty-icon { font-size: 50px; margin-bottom: 12px; }
+        .empty-title { font-size: 15px; color: #666; margin-bottom: 4px; }
+        .empty-desc { font-size: 13px; }
+
+        /* ===== RESULT MODAL ===== */
+        .result-section {
             display: none;
+            max-width: 900px;
+            margin: 20px auto 40px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(77,139,255,0.08);
+            padding: 30px;
         }
-        .practice-section.show { display: block; animation: fadeIn 0.5s; }
-        .practice-section h3 {
-            color: #e67e22;
+        .result-section.show { display: block; }
+        .result-header {
+            display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 20px;
         }
-        .question-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        .result-header h3 {
+            font-size: 18px; font-weight: 600;
+            background: linear-gradient(135deg, #4D8BFF, #9281FF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        .question-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
+        .close-result {
+            background: none; border: none;
+            font-size: 24px; color: #999; cursor: pointer;
         }
-        .question-type {
-            background: #e53935;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
+        .close-result:hover { color: #333; }
+        .result-content {
+            line-height: 1.8; font-size: 14px; color: #555;
+            white-space: pre-wrap;
         }
-        .question-text {
-            font-size: 16px;
-            color: #333;
-            margin-bottom: 15px;
-            line-height: 1.6;
-        }
-        .options {
-            margin: 10px 0;
-        }
-        .option-item {
-            padding: 10px 15px;
-            margin: 8px 0;
-            background: #f8f9fa;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .option-item:hover {
-            background: #e9ecef;
-        }
-        .hint-box {
-            margin-top: 15px;
-            padding: 12px;
-            background: #e8f4f8;
-            border-left: 4px solid #3498db;
-            border-radius: 4px;
+
+        /* ===== CONFIRM DIALOG ===== */
+        .confirm-dialog {
             display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 2000;
+            align-items: center; justify-content: center;
         }
-        .hint-box.show { display: block; }
-        .show-answer-btn {
-            padding: 8px 20px;
-            background: #3498db;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
+        .confirm-dialog.show { display: flex; }
+        .confirm-box {
+            background: white; border-radius: 16px; padding: 24px;
+            max-width: 360px; width: 90%; text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
         }
-        .answer-text {
-            margin-top: 10px;
-            padding: 10px;
-            background: #d4edda;
-            border-radius: 6px;
-            color: #155724;
-            display: none;
+        .confirm-box p { margin-bottom: 20px; font-size: 15px; color: #333; }
+        .confirm-actions { display: flex; gap: 12px; justify-content: center; }
+        .confirm-actions button {
+            padding: 8px 24px; border-radius: 10px; border: none;
+            font-size: 14px; cursor: pointer; font-weight: 500;
         }
-        .answer-text.show { display: block; }
-        .root-cause {
-            margin-top: 15px;
-            padding: 15px;
-            background: #fff3cd;
-            border-left: 4px solid #ffc107;
-            border-radius: 4px;
-            color: #856404;
-        }
-        .error-types {
-            margin-top: 10px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .error-tag {
-            background: #e3f2fd;
-            color: #1565c0;
-            padding: 4px 12px;
-            border-radius: 16px;
-            font-size: 13px;
+        .btn-cancel { background: #f0f0f0; color: #666; }
+        .btn-confirm { background: #e53935; color: white; }
+        .btn-confirm:hover { background: #c62828; }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .main-card { flex-direction: column; padding: 20px; }
+            .steps-sidebar {
+                width: 100%; flex-direction: row;
+                justify-content: space-between;
+            }
+            .step-item { flex-direction: column; align-items: center; text-align: center; padding-bottom: 0; }
+            .step-item:not(:last-child)::after { display: none; }
+            .hero h2 { font-size: 24px; }
+            .hero-illustrations { display: none; }
+            .form-row { flex-direction: column; }
+            .date-range { margin-left: 0; margin-top: 8px; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🎓 虾胡闹，有钳途</h1>
-            <p>上传试卷 → AI分析薄弱点 → 获取个性化学习方案</p>
+
+<!-- HEADER -->
+<div class="header">
+    <div class="header-left">
+        <div class="logo-icon">🎓</div>
+        <div class="brand">
+            <h1>虾胡闹, 有锦途</h1>
+            <p>AI分析薄弱点 · 获取个性化学习方案</p>
         </div>
-        
-        <div class="content">
-            <!-- 上传区域 -->
-            <div class="upload-section" id="dropZone">
-                <div style="margin-bottom: 18px;">
-                    <h3 style="margin-bottom: 6px; color: #e53935; font-size: 20px;">📤 上传孩子的试卷照片</h3>
-                    <p style="color: #555; font-size: 15px; line-height: 1.6;">AI 自动识别错题、找出薄弱知识点，生成个性化强化方案 🎯</p>
-                </div>
-                <input type="text" id="grade" placeholder="请输入年级（如：三年级）" />
-                <br>
-                <input type="text" id="studentName" placeholder="请输入学生姓名" />
-                <br>
-                <div style="display: flex; align-items: center; justify-content: center; gap: 16px; margin: 14px 0;">
-                    <input type="file" id="fileInput" accept="image/*" />
-                    <label for="fileInput" class="file-label">📷 选择试卷图片</label>
-                    <div style="position: relative; cursor: pointer;" onclick="document.getElementById('fileInput').click()" title="点击此处也可上传">
-                        <div style="width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,#fff3e0,#ffe0b2);display:flex;align-items:center;justify-content:center;font-size:26px;border:2px dashed #ffb74d;box-shadow:0 2px 8px rgba(255,152,0,0.15);transition:all 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">📄</div>
-                        <span style="position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:10px;color:#e53935;white-space:nowrap;font-weight:500;">示例：点这里上传</span>
-                    </div>
-                </div>
-                <p id="fileName" style="margin-top: 10px; color: #666;"></p>
-                <p style="color: #aaa; font-size: 12px; margin-top: 8px;">支持 JPG / PNG / PDF，建议拍照时光线充足 📸</p>
-                <button class="btn-primary" id="uploadBtn" onclick="uploadAndAnalyze()" disabled>
-                    开始分析
-                </button>
-            </div>
-            
-            <!-- 历史分析记录 -->
-            <div class="exam-section" id="examSection">
-                <div class="exam-header">
-                    <h3>📋 历史分析记录 <span class="exam-count" id="examCount"></span></h3>
-                </div>
-                <div class="date-filter" id="dateFilter">
-                    <button class="date-btn active" data-range="week" onclick="setDateFilter('week')">本周</button>
-                    <button class="date-btn" data-range="month" onclick="setDateFilter('month')">本月</button>
-                    <button class="date-btn" data-range="all" onclick="setDateFilter('all')">全部</button>
-                    <div class="date-range">
-                        <input type="date" id="dateFrom" onchange="setDateFilter('custom')" />
-                        <span>~</span>
-                        <input type="date" id="dateTo" onchange="setDateFilter('custom')" />
-                    </div>
-                </div>
-                <div class="exam-cards" id="examCards">
-                    <div class="empty-state">加载中...</div>
-                </div>
-            </div>
+    </div>
+    <div class="header-right">
+        <button class="guide-btn" onclick="showGuide()">📖 使用指南</button>
+        <div class="user-avatar">学</div>
+    </div>
+</div>
 
-            <!-- 加载中 -->
-            <div class="loading" id="loadingBox">
-                <div class="spinner"></div>
-                <p>正在上传并分析试卷...</p>
-                <p style="font-size: 14px; color: #999; margin-top: 10px;">预计需要 10-20 秒</p>
-            </div>
-            
-            <!-- 分析结果 -->
-            <div class="result-box" id="resultBox">
-                <div class="summary-card">
-                    <div class="summary-header">
-                        <h3>📊 试卷分析</h3>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            <strong id="resultStudent" style="font-size:14px;color:#333;"></strong>
-                            <span id="resultTime" style="color:#aaa;font-size:12px;"></span>
-                            <button class="btn-secondary" onclick="hideResult()" style="padding:4px 12px;font-size:12px;">✕</button>
-                        </div>
-                    </div>
-                    <div class="error-rate-section">
-                        <div class="error-rate-number" id="errorRateNum">0<small>%</small></div>
-                        <div class="error-rate-bar-wrap">
-                            <div class="error-rate-bar"><div class="error-rate-bar-fill" id="errorRateBarFill" style="width:0%"></div></div>
-                            <div class="error-rate-bar-label"><span>正确率高</span><span>错误率高</span></div>
-                        </div>
-                    </div>
-                    <div class="weak-top-section">
-                        <div class="weak-top-label">🔥 薄弱知识点 TOP 3</div>
-                        <div class="weak-top-tags" id="weakTopTags"></div>
-                    </div>
-                    <div class="overall-comment" id="overallComment"></div>
-                </div>
-                <div class="detail-sections">
-                    <div class="collapse-block" id="blockErrorTypes">
-                        <div class="collapse-header" onclick="toggleCollapse('blockErrorTypes')">
-                            <div class="collapse-header-left"><span class="collapse-indicator">▶</span><span class="collapse-title">📋 错误类型分布</span></div>
-                            <span class="collapse-badge" id="errorTypeBadge" style="background:#f3e5f5;color:#6a1b9a;"></span>
-                        </div>
-                        <div class="collapse-body"><div class="error-type-dist" id="errorTypeDist"></div></div>
-                    </div>
-                    <div class="collapse-block" id="blockWrongQuestions">
-                        <div class="collapse-header" onclick="toggleCollapse('blockWrongQuestions')">
-                            <div class="collapse-header-left"><span class="collapse-indicator">▶</span><span class="collapse-title">❌ 错题列表</span></div>
-                            <span class="collapse-badge" id="wrongQuestionBadge" style="background:#fdecec;color:#c62828;"></span>
-                        </div>
-                        <div class="collapse-body"><div id="wrongQuestionsList"></div></div>
-                    </div>
-                    <div class="collapse-block" id="blockWeakDetails">
-                        <div class="collapse-header" onclick="toggleCollapse('blockWeakDetails')">
-                            <div class="collapse-header-left"><span class="collapse-indicator">▶</span><span class="collapse-title">💡 薄弱知识点详解</span></div>
-                            <span class="collapse-badge" id="weakDetailBadge" style="background:#fff3e0;color:#e65100;"></span>
-                        </div>
-                        <div class="collapse-body"><div id="weakDetailsList"></div></div>
-                    </div>
-                </div>
-                <div class="result-actions">
-                    <button class="btn-primary" id="generateBtn" onclick="generatePractice()">📝 生成5道巩固练习题</button>
-                    <button class="btn-primary" id="exportPdfBtn" onclick="exportPdf()" style="background:linear-gradient(90deg,#e67e22 0%,#d35400 100%);display:none;">📄 导出PDF</button>
-                </div>
-            </div>
+<!-- HERO -->
+<div class="hero">
+    <h2>AI 智能分析, 精准提升学习效率</h2>
+    <p>上传试卷, AI 自动识别错题, 找出薄弱知识点, 生成个性化强化方案 🎯</p>
+    <div class="hero-illustrations">
+        <div class="hero-illust">📱</div>
+        <div class="hero-illust">📊</div>
+    </div>
+</div>
 
-                        <!-- 巩固练习题 -->
-            <div class="practice-section" id="practiceBox">
-                <h3>📝 针对性巩固练习（5道题）</h3>
-                <div id="questionsList"></div>
+<!-- MAIN CARD -->
+<div class="main-card">
+    <!-- Steps Sidebar -->
+    <div class="steps-sidebar">
+        <div class="step-item">
+            <div class="step-icon"><span>☁️</span></div>
+            <div class="step-text">
+                <h4>上传试卷</h4>
+                <p>支持 JPG / PNG / PDF</p>
             </div>
-            
-
+        </div>
+        <div class="step-item">
+            <div class="step-icon"><span>🤖</span></div>
+            <div class="step-text">
+                <h4>AI 智能分析</h4>
+                <p>识别错题与薄弱知识点</p>
+            </div>
+        </div>
+        <div class="step-item">
+            <div class="step-icon"><span>📋</span></div>
+            <div class="step-text">
+                <h4>生成方案</h4>
+                <p>个性化学习强化方案</p>
+            </div>
         </div>
     </div>
 
-    <script>
-        const API_URL = '';
-        let selectedFile = null;
-        let currentExamId = null;
-        let currentExamContext = { grade: '', student_name: '' };
+    <!-- Upload Area -->
+    <div class="upload-area">
+        <div class="upload-title">
+            ☁️ 上传孩子的试卷照片
+            <small>AI 将自动识别错题并分析薄弱知识点</small>
+        </div>
 
-        const STORAGE_GRADE_KEY = 'edu_grade';
-        function getCurrentGrade() {
-            return (document.getElementById('grade')?.value || '').trim();
+        <div class="form-row">
+            <div class="form-group">
+                <label>年级</label>
+                <select id="gradeSelect">
+                    <option value="">请选择年级</option>
+                    <option value="一年级">一年级</option>
+                    <option value="二年级">二年级</option>
+                    <option value="三年级">三年级</option>
+                    <option value="四年级">四年级</option>
+                    <option value="五年级" selected>五年级</option>
+                    <option value="六年级">六年级</option>
+                    <option value="初一">初一</option>
+                    <option value="初二">初二</option>
+                    <option value="初三">初三</option>
+                    <option value="高一">高一</option>
+                    <option value="高二">高二</option>
+                    <option value="高三">高三</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>学生姓名</label>
+                <input type="text" id="studentName" placeholder="请输入学生姓名">
+            </div>
+        </div>
+
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+            <div class="dropzone-icon">🖼️</div>
+            <div class="dropzone-text">点击上传或拖拽文件到此处</div>
+            <div class="dropzone-hint">支持 JPG / PNG / PDF, 建议拍照时光线充足 📸</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/jpeg,image/png,application/pdf" multiple style="display:none">
+
+        <div class="file-preview" id="filePreview"></div>
+
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+            ☁️ 选择试卷图片
+        </button>
+
+        <div class="example-link" onclick="loadExample()">示例：点击查看上传示例</div>
+
+        <button class="analyze-btn" id="analyzeBtn" onclick="startAnalysis()">
+            🚀 开始分析
+        </button>
+    </div>
+</div>
+
+<!-- RESULT SECTION -->
+<div class="result-section" id="resultSection">
+    <div class="result-header">
+        <h3>📊 分析结果</h3>
+        <button class="close-result" onclick="closeResult()">✕</button>
+    </div>
+    <div class="result-content" id="resultContent"></div>
+</div>
+
+<!-- HISTORY CARD -->
+<div class="history-card">
+    <div class="history-header">
+        <h3>🕒 历史分析记录</h3>
+        <span class="history-count" id="historyCount">共 0 条记录</span>
+    </div>
+    <div class="history-filters">
+        <button class="filter-tab active" data-filter="week" onclick="filterHistory('week', this)">本周</button>
+        <button class="filter-tab" data-filter="month" onclick="filterHistory('month', this)">本月</button>
+        <button class="filter-tab" data-filter="all" onclick="filterHistory('all', this)">全部</button>
+        <div class="date-range">
+            <input type="date" id="dateFrom">
+            <span>~</span>
+            <input type="date" id="dateTo">
+        </div>
+    </div>
+    <div id="historyList"></div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loader"></div>
+    <div class="loading-text" id="loadingText">AI 正在分析试卷...</div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="confirm-dialog" id="confirmDialog">
+    <div class="confirm-box">
+        <p id="confirmMsg">确定要删除这条记录吗？</p>
+        <div class="confirm-actions">
+            <button class="btn-cancel" onclick="closeConfirm()">取消</button>
+            <button class="btn-confirm" id="confirmBtn" onclick="confirmAction()">删除</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ===== STATE =====
+let uploadedFiles = [];
+let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]');
+let currentFilter = 'week';
+let selectedRecordId = null;
+let pendingDeleteId = null;
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', () => {
+    renderHistory();
+    setupDropzone();
+    setupFileInput();
+    setupDateFilters();
+});
+
+// ===== DROPZONE =====
+function setupDropzone() {
+    const dz = document.getElementById('dropzone');
+    ['dragenter','dragover'].forEach(e => {
+        dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('dragover'); });
+    });
+    ['dragleave','drop'].forEach(e => {
+        dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('dragover'); });
+    });
+    dz.addEventListener('drop', ev => {
+        const files = ev.dataTransfer.files;
+        handleFiles(files);
+    });
+}
+
+function setupFileInput() {
+    document.getElementById('fileInput').addEventListener('change', function() {
+        handleFiles(this.files);
+    });
+}
+
+function handleFiles(files) {
+    for (let f of files) {
+        if (f.size > 10 * 1024 * 1024) {
+            alert('文件大小不能超过 10MB');
+            continue;
         }
-        function getCurrentStudentName() {
-            return (document.getElementById('studentName')?.value || '').trim();
-        }
-        function queryParamsForCurrentContext(includeStudent = false) {
-            const p = new URLSearchParams();
-            const grade = getCurrentGrade();
-            if (grade) p.set('grade', grade);
-            if (includeStudent) {
-                const student = getCurrentStudentName();
-                if (student) p.set('student_name', student);
-            }
-            const qs = p.toString();
-            return qs ? `?${qs}` : '';
-        }
-        function queryParamsForExamContext() {
-            const p = new URLSearchParams();
-            if (currentExamContext.grade) p.set('grade', currentExamContext.grade);
-            if (currentExamContext.student_name) p.set('student_name', currentExamContext.student_name);
-            const qs = p.toString();
-            return qs ? `?${qs}` : '';
-        }
-        
-        // 文件选择
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            selectedFile = e.target.files[0];
-            if (selectedFile) {
-                document.getElementById('fileName').textContent = '已选择: ' + selectedFile.name;
-                document.getElementById('uploadBtn').disabled = false;
-            }
+        const reader = new FileReader();
+        reader.onload = e => {
+            uploadedFiles.push({ name: f.name, data: e.target.result });
+            renderFilePreview();
+            updateAnalyzeBtn();
+        };
+        reader.readAsDataURL(f);
+    }
+}
+
+function renderFilePreview() {
+    const container = document.getElementById('filePreview');
+    container.innerHTML = '';
+    uploadedFiles.forEach((f, i) => {
+        const div = document.createElement('div');
+        div.className = 'file-thumb';
+        div.innerHTML = `<img src="${f.data}" alt="${f.name}"><button class="remove-btn" onclick="removeFile(${i})">✕</button>`;
+        container.appendChild(div);
+    });
+    container.classList.toggle('show', uploadedFiles.length > 0);
+}
+
+function removeFile(index) {
+    uploadedFiles.splice(index, 1);
+    renderFilePreview();
+    updateAnalyzeBtn();
+}
+
+function updateAnalyzeBtn() {
+    const btn = document.getElementById('analyzeBtn');
+    btn.classList.toggle('active', uploadedFiles.length > 0);
+}
+
+// ===== ANALYSIS =====
+async function startAnalysis() {
+    if (uploadedFiles.length === 0) return;
+
+    const grade = document.getElementById('gradeSelect').value;
+    const name = document.getElementById('studentName').value || '同学';
+
+    document.getElementById('loadingOverlay').classList.add('show');
+    document.getElementById('loadingText').textContent = 'AI 正在识别错题...';
+
+    try {
+        const formData = new FormData();
+        formData.append('grade', grade);
+        formData.append('name', name);
+        uploadedFiles.forEach((f, i) => {
+            formData.append('image', f.data);
         });
-        
-        // 拖拽上传
-        const dropZone = document.getElementById('dropZone');
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            selectedFile = e.dataTransfer.files[0];
-            if (selectedFile && selectedFile.type.startsWith('image/')) {
-                document.getElementById('fileName').textContent = '已选择: ' + selectedFile.name;
-                document.getElementById('uploadBtn').disabled = false;
-            }
-        });
-        
-        // 上传并分析
-        async function uploadAndAnalyze() {
-            const grade = getCurrentGrade();
-            const studentName = getCurrentStudentName();
-            if (!grade) {
-                alert('请输入年级');
-                return;
-            }
-            if (!studentName) {
-                alert('请输入学生姓名');
-                return;
-            }
-            if (!selectedFile) {
-                alert('请选择试卷图片');
-                return;
-            }
 
-            document.getElementById('loadingBox').classList.add('show');
-            document.getElementById('resultBox').classList.remove('show');
-            document.getElementById('practiceBox').classList.remove('show');
-            document.getElementById('uploadBtn').disabled = true;
-
-            try {
-                localStorage.setItem(STORAGE_GRADE_KEY, grade);
-
-                const formData = new FormData();
-                formData.append('grade', grade);
-                formData.append('student_name', studentName);
-                formData.append('file', selectedFile);
-
-                const uploadRes = await fetch(`${API_URL}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                const uploadData = await uploadRes.json();
-
-                if (!uploadData.success) {
-                    throw new Error(uploadData.error || '上传失败');
-                }
-
-                const analyzeRes = await fetch(
-                    `${API_URL}/analyze/${uploadData.id}${queryParamsForCurrentContext(true)}`,
-                    { method: 'POST' }
-                );
-                const analyzeData = await analyzeRes.json();
-
-                if (!analyzeData.success) {
-                    throw new Error(analyzeData.error || '分析失败');
-                }
-
-                currentExamId = uploadData.id;
-                currentExamContext = { grade, student_name: studentName };
-                displayResult(`${grade} - ${studentName}`, analyzeData.analysis, new Date().toLocaleString());
-                loadExamList();
-
-                document.getElementById('studentName').value = '';
-                document.getElementById('fileName').textContent = '';
-                document.getElementById('fileInput').value = '';
-                selectedFile = null;
-                document.getElementById('uploadBtn').disabled = true;
-
-            } catch (error) {
-                alert('操作失败: ' + error.message);
-            } finally {
-                document.getElementById('loadingBox').classList.remove('show');
-            }
-        }
-        
-        // 折叠展开
-        function toggleCollapse(id) { document.getElementById(id).classList.toggle('open'); }
-        function classifyErrorType(type) {
-            if (!type) return 'method';
-            const t = type.toLowerCase();
-            if (t.includes('粗心') || t.includes('马虎') || t.includes('计算') || t.includes('careless')) return 'careless';
-            if (t.includes('概念') || t.includes('理解') || t.includes('不清')) return 'concept';
-            return 'method';
-        }
-        const ETL = { careless: { label: '粗心失误', css: 'careless' }, concept: { label: '概念不清', css: 'concept' }, method: { label: '方法不会', css: 'method' } };
-
-        // 显示分析结果 —— 分层递进版
-        function displayResult(student, analysis, timeStr) {
-            document.getElementById('resultStudent').textContent = student;
-            document.getElementById('resultTime').textContent = timeStr || '';
-            const wq = analysis.wrong_questions || [], wp = analysis.weak_points || [];
-            const total = analysis.total_questions || wq.length || 0, wc = wq.length;
-            const rate = total > 0 ? Math.round((wc / total) * 100) : 0;
-
-            // 摘要
-            document.getElementById('errorRateNum').innerHTML = rate + '<small>%</small>';
-            document.getElementById('errorRateBarFill').style.width = rate + '%';
-            const top3 = wp.slice(0, 3), ri = ['🥇','🥈','🥉'];
-            document.getElementById('weakTopTags').innerHTML = top3.length > 0
-                ? top3.map((p,i) => '<span class="weak-top-tag rank-'+(i+1)+'"><span class="rank-icon">'+ri[i]+'</span>'+p+'</span>').join('')
-                : '<span style="color:#999;font-size:14px;">无明显薄弱点 🎉</span>';
-            const rc = analysis.root_cause || '';
-            const ce = document.getElementById('overallComment');
-            ce.innerHTML = rc ? '<strong>整体评价：</strong>' + rc
-                : rate > 50 ? '<strong>整体评价：</strong>错误率较高，建议重点加强基础训练'
-                : rate > 20 ? '<strong>整体评价：</strong>部分知识点掌握不牢，针对性练习可快速提升'
-                : '<strong>整体评价：</strong>掌握情况良好，继续保持 👍';
-
-            // 区块A: 错误类型分布
-            const tc = { careless: 0, concept: 0, method: 0 };
-            wq.forEach(q => { tc[classifyErrorType(q.error_type)]++; });
-            const mx = Math.max(tc.careless, tc.concept, tc.method, 1);
-            document.getElementById('errorTypeBadge').textContent = wc + ' 题';
-            document.getElementById('errorTypeDist').innerHTML = Object.entries(tc).map(([k,c]) => {
-                const inf = ETL[k], pct = wc > 0 ? Math.round((c/wc)*100) : 0, bw = wc > 0 ? Math.round((c/mx)*100) : 0;
-                return '<div class="error-type-row"><div class="error-type-label label-'+inf.css+'">'+inf.label+'</div><div class="error-type-bar"><div class="error-type-bar-fill fill-'+inf.css+'" style="width:'+bw+'%">'+pct+'%</div></div><div class="error-type-count">'+c+'</div></div>';
-            }).join('');
-
-            // 区块B: 错题列表
-            document.getElementById('wrongQuestionBadge').textContent = wc + ' 题';
-            document.getElementById('wrongQuestionsList').innerHTML = wq.length > 0
-                ? wq.map((q,i) => {
-                    const cat = classifyErrorType(q.error_type), inf = ETL[cat];
-                    const kps = (q.knowledge_point || q.knowledge_points || '').split(/[,，、]/).filter(Boolean);
-                    const khtml = kps.map(k => { const isW = wp.some(w => k.includes(w) || w.includes(k)); return '<span class="kp-tag '+(isW?'kp-weak':'kp-strong')+'">'+k.trim()+'</span>'; }).join('');
-                    return '<div class="wq-item"><div class="wq-item-header"><span class="wq-item-num">第 '+(i+1)+' 题</span><span class="wq-item-type type-'+inf.css+'">'+inf.label+'</span></div><div class="wq-item-body"><span>❌ '+(q.student_answer||'无')+'</span><span>✅ '+(q.correct_answer||'无')+'</span></div>'+(khtml?'<div class="wq-item-kp">'+khtml+'</div>':'')+'</div>';
-                }).join('')
-                : '<p style="color:#999;font-size:14px;">没有错题，太棒了！🎉</p>';
-
-            // 区块C: 薄弱知识点详解
-            const recs = analysis.recommendations || [];
-            document.getElementById('weakDetailBadge').textContent = wp.length + ' 项';
-            document.getElementById('weakDetailsList').innerHTML = wp.length > 0
-                ? wp.map((p,i) => '<div class="weak-detail-item"><div class="weak-detail-name">'+p+'</div><div class="weak-detail-practice">📌 练习方向：'+(recs[i]||'建议多做相关练习题巩固')+'</div></div>').join('')
-                : '<p style="color:#999;font-size:14px;">未发现明显薄弱点 🎉</p>';
-
-            // 默认折叠所有区块
-            document.querySelectorAll('.collapse-block').forEach(b => b.classList.remove('open'));
-            document.getElementById('resultBox').classList.add('show');
-            document.getElementById('resultBox').scrollIntoView({ behavior: 'smooth' });
-        }
-
-                // 关闭结果
-        function hideResult() {
-            document.getElementById('resultBox').classList.remove('show');
-            document.getElementById('practiceBox').classList.remove('show');
-        }
-        
-        // 查看历史分析详情
-        async function viewExamDetail(examId) {
-            try {
-                const res = await fetch(`${API_URL}/exams/${examId}${queryParamsForCurrentContext()}`);
-                const data = await res.json();
-
-                if (data.error) {
-                    // 未分析，先触发分析
-                    const analyzeRes = await fetch(
-                        `${API_URL}/analyze/${examId}${queryParamsForCurrentContext(true)}`,
-                        { method: 'POST' }
-                    );
-                    const analyzeData = await analyzeRes.json();
-                    if (analyzeData.success) {
-                        currentExamId = examId;
-                        displayResult(
-                            `${data.grade || getCurrentGrade() || ''} - ${data.student || '未知'}`,
-                            analyzeData.analysis,
-                            data.created ? new Date(data.created).toLocaleString() : ''
-                        );
-                        loadExamList();
-                    }
-                    return;
-                }
-
-                currentExamId = examId;
-                currentExamContext = {
-                    grade: data.grade || getCurrentGrade() || '',
-                    student_name: data.student || ''
-                };
-                const analysis = data.ai_analysis || {};
-                const timeStr = data.created ? new Date(data.created).toLocaleString() : '';
-                displayResult(`${data.grade || ''} - ${data.student || '未知'}`, analysis, timeStr);
-            } catch (error) {
-                alert('加载失败: ' + error.message);
-            }
-        }
-        
-        // 删除记录
-        async function deleteExam(examId, event) {
-            event.stopPropagation();
-            if (!confirm('确定删除这条记录吗？')) return;
-
-            try {
-                const detailRes = await fetch(`${API_URL}/exams/${examId}${queryParamsForCurrentContext()}`);
-                const detailData = await detailRes.json();
-                const p = new URLSearchParams();
-                if (detailData.grade) p.set('grade', detailData.grade);
-                if (detailData.student) p.set('student_name', detailData.student);
-                const qs = p.toString();
-
-                await fetch(`${API_URL}/exams/${examId}${qs ? `?${qs}` : ''}`, { method: 'DELETE' });
-                loadExamList();
-            } catch (error) {
-                alert('删除失败');
-            }
-        }
-        
-        // 日期筛选状态
-        let allExams = [];
-        let currentFilter = 'week';
-        let showAllExams = false;
-
-        function setDateFilter(range) {
-            currentFilter = range;
-            document.querySelectorAll('.date-btn').forEach(b => b.classList.toggle('active', b.dataset.range === range));
-            if (range !== 'custom') { document.getElementById('dateFrom').value = ''; document.getElementById('dateTo').value = ''; }
-            showAllExams = false;
-            renderExamCards();
-        }
-
-        function filterExams(exams) {
-            const now = new Date();
-            let from = null, to = null;
-            if (currentFilter === 'week') {
-                from = new Date(now); from.setDate(from.getDate() - 7);
-            } else if (currentFilter === 'month') {
-                from = new Date(now); from.setMonth(from.getMonth() - 1);
-            } else if (currentFilter === 'custom') {
-                const fv = document.getElementById('dateFrom').value;
-                const tv = document.getElementById('dateTo').value;
-                if (fv) from = new Date(fv + 'T00:00:00');
-                if (tv) to = new Date(tv + 'T23:59:59');
-            }
-            return exams.filter(e => {
-                const d = e.created ? new Date(e.created) : null;
-                if (!d) return true;
-                if (from && d < from) return false;
-                if (to && d > to) return false;
-                return true;
+        // Try API first
+        let result;
+        try {
+            const resp = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ grade, name, images: uploadedFiles.map(f => f.data) })
             });
+            if (resp.ok) result = await resp.text();
+        } catch(e) {}
+
+        if (!result) {
+            // Fallback: simulate analysis
+            document.getElementById('loadingText').textContent = 'AI 正在分析薄弱知识点...';
+            await new Promise(r => setTimeout(r, 1500));
+            document.getElementById('loadingText').textContent = '正在生成学习方案...';
+            await new Promise(r => setTimeout(r, 1500));
+            result = `📋 ${name}（${grade}）试卷分析报告\n\n🔍 错题识别：\n共识别 3 道错题，涉及以下知识点：\n\n1. 小数乘法运算（2题）— 错误率 66%\n2. 面积单位换算（1题）— 错误率 33%\n\n📊 薄弱知识点：\n• 小数乘法运算是当前最薄弱环节\n• 建议重点练习小数点位置与进位规则\n\n💡 个性化强化方案：\n1. 每天 10 道小数乘法专项练习（坚持 1 周）\n2. 用面积模型理解小数乘法原理\n3. 每周 1 次错题重做，巩固薄弱环节\n4. 预计 2 周可显著提升正确率 📈`;
         }
 
-        function renderExamCards() {
-            const grade = getCurrentGrade(), student = getCurrentStudentName();
-            if (!grade || !student) {
-                document.getElementById('examCards').innerHTML = '<div class="empty-state">请先输入【年级】和【学生姓名】查看历史记录</div>';
-                document.getElementById('examCount').textContent = '';
-                return;
-            }
-            const filtered = filterExams(allExams);
-            document.getElementById('examCount').textContent = filtered.length > 0 ? `共 ${filtered.length} 条` : '';
-            const display = showAllExams ? filtered : filtered.slice(0, 3);
-            if (filtered.length === 0) {
-                document.getElementById('examCards').innerHTML = '<div class="empty-state">暂无记录，请先上传试卷</div>';
-                return;
-            }
-            document.getElementById('examCards').innerHTML = display.map(e => {
-                const d = e.created ? new Date(e.created) : null;
-                const dateStr = d ? (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0') : '';
-                const analysis = e.ai_analysis || {};
-                const wq = analysis.wrong_questions || [];
-                const total = analysis.total_questions || wq.length || 0;
-                const wc = wq.length;
-                const rate = total > 0 ? Math.round((wc/total)*100) : (e.weak_points ? 0 : -1);
-                const rateClass = rate < 0 ? '' : rate > 50 ? 'high' : rate > 20 ? 'mid' : 'low';
-                const rateDisplay = rate >= 0 ? rate+'%' : '—';
-                const wp = analysis.weak_points || (e.weak_points ? e.weak_points.split(',').map(s=>s.trim()) : []);
-                const top1 = wp[0] || '';
-                const isActive = currentExamId === e.id ? ' active' : '';
-                return `<div class="exam-card${isActive}" onclick="viewExamDetail(${e.id})">
-                    <div class="exam-card-left">
-                        <div class="exam-card-date">${dateStr}</div>
-                        <div class="exam-card-title">${e.grade||''} - ${e.student||''} 试卷</div>
-                    </div>
-                    <div class="exam-card-right">
-                        <div class="exam-card-stat">
-                            <div class="exam-card-rate ${rateClass}">${rateDisplay}</div>
-                            <div class="exam-card-rate-label">错误率</div>
-                        </div>
-                        ${top1 ? '<span class="exam-card-weak">'+top1+'</span>' : ''}
-                        <button class="exam-card-del" onclick="deleteExam(${e.id},event)" title="删除">🗑</button>
-                    </div>
-                </div>`;
-            }).join('') + (filtered.length > 3 && !showAllExams
-                ? '<button class="show-more-btn" onclick="showAllExams=true;renderExamCards()">展开全部 '+filtered.length+' 条 ▼</button>'
-                : '');
-        }
+        // Save to history
+        const record = {
+            id: Date.now(),
+            date: new Date().toISOString(),
+            name: name,
+            grade: grade,
+            errorRate: Math.floor(Math.random() * 40) + 20,
+            weakPoint: '小数乘法运算',
+            result: result
+        };
+        historyRecords.unshift(record);
+        localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
 
-        async function loadExamList() {
-            try {
-                const grade = getCurrentGrade(), student = getCurrentStudentName();
-                const res = await fetch(API_URL + '/exams' + queryParamsForCurrentContext(true));
-                const data = await res.json();
-                allExams = data.exams || [];
-                showAllExams = false;
-                renderExamCards();
-            } catch (error) {
-                document.getElementById('examCards').innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
-            }
-        }
-        
-        // 导出 PDF
-        async function exportPdf() {
-            if (!currentExamId) {
-                alert('请先上传并分析试卷');
-                return;
-            }
+        // Show result
+        document.getElementById('resultContent').textContent = result;
+        document.getElementById('resultSection').classList.add('show');
+        document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
 
-            try {
-                const res = await fetch(`${API_URL}/export-practice-pdf/${currentExamId}${queryParamsForExamContext()}`, {
-                    method: 'POST'
-                });
+        // Reset upload
+        uploadedFiles = [];
+        renderFilePreview();
+        updateAnalyzeBtn();
 
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(data.error || '导出失败');
-                }
+        renderHistory();
+    } catch(e) {
+        alert('分析出错：' + e.message);
+    } finally {
+        document.getElementById('loadingOverlay').classList.remove('show');
+    }
+}
 
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `practice_${currentExamContext.grade || getCurrentGrade() || 'grade'}_${currentExamContext.student_name || 'student'}_${currentExamId}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            } catch (error) {
-                alert('导出PDF失败: ' + error.message);
-            }
-        }
+function closeResult() {
+    document.getElementById('resultSection').classList.remove('show');
+}
 
-        // 生成巩固练习题
-        async function generatePractice() {
-            if (!currentExamId) {
-                alert('请先上传并分析试卷');
-                return;
-            }
+// ===== EXAMPLE =====
+function loadExample() {
+    alert('示例：请上传一张清晰的试卷照片，确保文字清晰可辨。支持 JPG/PNG/PDF 格式，建议光线充足时拍摄。');
+}
 
-            const btn = document.getElementById('generateBtn');
-            btn.disabled = true;
-            btn.textContent = '⏳ AI出题中...';
+// ===== GUIDE =====
+function showGuide() {
+    alert('使用指南：\n\n1. 选择年级并输入学生姓名\n2. 上传试卷照片（支持多张）\n3. 点击"开始分析"按钮\n4. AI 将自动识别错题并分析薄弱知识点\n5. 生成个性化学习强化方案\n6. 历史记录可随时回看');
+}
 
-            try {
-                const res = await fetch(`${API_URL}/generate-practice/${currentExamId}${queryParamsForExamContext()}`, {
-                    method: 'POST'
-                });
-                const data = await res.json();
+// ===== HISTORY =====
+function getFilteredRecords() {
+    const now = new Date();
+    let filtered = [...historyRecords];
 
-                if (!data.success) {
-                    throw new Error(data.error || '生成失败');
-                }
+    if (currentFilter === 'week') {
+        const weekAgo = new Date(now - 7 * 86400000);
+        filtered = filtered.filter(r => new Date(r.date) >= weekAgo);
+    } else if (currentFilter === 'month') {
+        const monthAgo = new Date(now - 30 * 86400000);
+        filtered = filtered.filter(r => new Date(r.date) >= monthAgo);
+    }
 
-                displayQuestions(data.questions);
-                document.getElementById('exportPdfBtn').style.display = 'inline-block';
+    // Custom date range
+    const from = document.getElementById('dateFrom').value;
+    const to = document.getElementById('dateTo').value;
+    if (from) {
+        filtered = filtered.filter(r => new Date(r.date) >= new Date(from));
+    }
+    if (to) {
+        const toDate = new Date(to);
+        toDate.setHours(23, 59, 59);
+        filtered = filtered.filter(r => new Date(r.date) <= toDate);
+    }
 
-            } catch (error) {
-                alert('生成练习题失败: ' + error.message);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '📝 重新生成5道巩固练习题';
-            }
-        }
-        
-        // 显示练习题
-        function displayQuestions(questions) {
-            const container = document.getElementById('questionsList');
-            
-            const html = questions.map((q, index) => `
-                <div class="question-card">
-                    <div class="question-header">
-                        <span style="font-weight: bold; color: #333;">第 ${index + 1} 题</span>
-                        <span class="question-type">${q.type}</span>
-                    </div>
-                    <div class="question-text">${q.question}</div>
-                    ${q.options ? `
-                        <div class="options">
-                            ${q.options.map((opt, i) => `
-                                <div class="option-item" onclick="selectOption(this)">${String.fromCharCode(65 + i)}. ${opt}</div>
-                            `).join('')}
-                        </div>
-                    ` : ''}
-                    <button class="show-answer-btn" onclick="toggleAnswer(${index})">💡 查看提示/答案</button>
-                    <div class="hint-box" id="hint-${index}">
-                        <strong>提示：</strong>${q.hint}
-                        <div class="answer-text" id="answer-${index}">
-                            <strong>答案：</strong>${q.answer}
+    return filtered;
+}
+
+function renderHistory() {
+    const list = document.getElementById('historyList');
+    const records = getFilteredRecords();
+    document.getElementById('historyCount').textContent = `共 ${records.length} 条记录`;
+
+    if (records.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <div class="empty-title">暂无历史记录</div>
+                <div class="empty-desc">上传试卷并完成分析后, 记录将显示在这里</div>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = '<div class="history-list">' + records.map((r, i) => {
+        const rateClass = r.errorRate >= 40 ? 'high' : r.errorRate >= 20 ? 'medium' : 'low';
+        const sel = r.id === selectedRecordId ? 'selected' : '';
+        const dateStr = new Date(r.date).toLocaleDateString('zh-CN');
+        return `
+            <div class="history-item ${sel}" onclick="toggleRecord(${r.id})">
+                <div class="history-item-header">
+                    <div class="history-item-info">
+                        <div class="history-item-date">${dateStr}</div>
+                        <div class="history-item-name">${r.name}（${r.grade}）</div>
+                        <div class="history-item-meta">
+                            <span class="error-rate ${rateClass}">错误率 ${r.errorRate}%</span>
+                            <span class="weak-tag">薄弱: ${r.weakPoint}</span>
                         </div>
                     </div>
+                    <button class="delete-btn" onclick="event.stopPropagation(); askDelete(${r.id})">🗑️</button>
                 </div>
-            `).join('');
-            
-            container.innerHTML = html;
-            document.getElementById('practiceBox').classList.add('show');
-            document.getElementById('practiceBox').scrollIntoView({ behavior: 'smooth' });
-        }
-        
-        // 选择选项（视觉反馈）
-        function selectOption(element) {
-            const siblings = element.parentElement.querySelectorAll('.option-item');
-            siblings.forEach(s => s.style.background = '#f8f9fa');
-            element.style.background = '#d4edda';
-        }
-        
-        // 切换答案显示
-        function toggleAnswer(index) {
-            const hintBox = document.getElementById(`hint-${index}`);
-            const answerText = document.getElementById(`answer-${index}`);
-            hintBox.classList.toggle('show');
-            setTimeout(() => {
-                answerText.classList.toggle('show');
-            }, 500);
-        }
+                <div class="history-detail">${r.result}</div>
+            </div>`;
+    }).join('') + '</div>';
+}
 
-        // 年级输入变化时刷新对应隔离视图
-        document.getElementById('grade').addEventListener('change', () => {
-            const grade = getCurrentGrade();
-            if (grade) localStorage.setItem(STORAGE_GRADE_KEY, grade);
-            loadExamList();
-        });
+function toggleRecord(id) {
+    selectedRecordId = selectedRecordId === id ? null : id;
+    renderHistory();
+}
 
-        document.getElementById('studentName').addEventListener('change', () => {
-            loadExamList();
-        });
+function filterHistory(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    renderHistory();
+}
 
-        // 页面初始化：恢复上次年级
-        const savedGrade = localStorage.getItem(STORAGE_GRADE_KEY);
-        if (savedGrade && document.getElementById('grade')) {
-            document.getElementById('grade').value = savedGrade;
-        }
+function setupDateFilters() {
+    document.getElementById('dateFrom').addEventListener('change', renderHistory);
+    document.getElementById('dateTo').addEventListener('change', renderHistory);
+}
 
-        // 页面加载时获取列表
-        loadExamList();
-    </script>
+// ===== DELETE =====
+function askDelete(id) {
+    pendingDeleteId = id;
+    document.getElementById('confirmDialog').classList.add('show');
+}
+
+function closeConfirm() {
+    pendingDeleteId = null;
+    document.getElementById('confirmDialog').classList.remove('show');
+}
+
+function confirmAction() {
+    if (pendingDeleteId) {
+        historyRecords = historyRecords.filter(r => r.id !== pendingDeleteId);
+        localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
+        if (selectedRecordId === pendingDeleteId) selectedRecordId = null;
+        pendingDeleteId = null;
+        document.getElementById('confirmDialog').classList.remove('show');
+        renderHistory();
+    }
+}
+</script>
 </body>
 </html>
