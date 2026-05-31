@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +14,9 @@ import httpx
 import base64
 from datetime import datetime
 from urllib.parse import quote
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 数据库配置 - Railway 使用 PostgreSQL
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./exam.db")
@@ -24,12 +28,63 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expi
 Base = declarative_base()
 
 # DeepSeek API 配置
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-9f2b01275a904d40badccff22ae2db09")
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
 
 # 百度 OCR 配置
-BAIDU_OCR_API_KEY = os.getenv("BAIDU_OCR_API_KEY", "DIEUO1gvv10PryVLdMqVnTsJ")
-BAIDU_OCR_SECRET_KEY = os.getenv("BAIDU_OCR_SECRET_KEY", "vMvvJqBwdvBNOP25yWq9mDBuKYQvA96U")
+BAIDU_OCR_API_KEY = os.getenv("BAIDU_OCR_API_KEY", "")
+BAIDU_OCR_SECRET_KEY = os.getenv("BAIDU_OCR_SECRET_KEY", "")
+
+# 五年级单元复习卷：仅保存公开目录范围和人工整理知识点，不保存教材原文
+CURRICULUM_UNITS = [
+    {
+        "id": "math-first-decimals",
+        "subject": "math",
+        "semester": "first",
+        "title": "小数的认识与运算",
+        "knowledge_points": ["小数数位与大小比较", "小数加减法", "小数乘除法", "估算与验算"],
+    },
+    {
+        "id": "math-first-geometry",
+        "subject": "math",
+        "semester": "first",
+        "title": "平面图形面积",
+        "knowledge_points": ["三角形面积", "平行四边形面积", "梯形面积", "组合图形面积"],
+    },
+    {
+        "id": "math-second-equations",
+        "subject": "math",
+        "semester": "second",
+        "title": "简易方程",
+        "knowledge_points": ["等式与方程", "一步方程", "两步方程", "列方程解决问题"],
+    },
+    {
+        "id": "english-first-family",
+        "subject": "english",
+        "semester": "first",
+        "title": "Module: Me, my family and friends",
+        "knowledge_points": ["自我介绍与人物描述", "日常活动表达", "一般现在时", "特殊疑问句"],
+    },
+    {
+        "id": "english-first-places",
+        "subject": "english",
+        "semester": "first",
+        "title": "Module: Places and activities",
+        "knowledge_points": ["校园与公共场所词汇", "There be 句型", "方位介词", "问路与指路"],
+    },
+    {
+        "id": "english-second-nature",
+        "subject": "english",
+        "semester": "second",
+        "title": "Module: The natural world",
+        "knowledge_points": ["天气表达", "季节与活动", "比较级基础", "计划表达"],
+    },
+]
+
+SUBJECT_LABELS = {"math": "数学", "english": "英语"}
+SEMESTER_LABELS = {"first": "第一学期", "second": "第二学期"}
+DIFFICULTY_LABELS = {"basic": "基础", "advanced": "提高", "challenge": "挑战"}
 
 # 数据模型
 class Exam(Base):
@@ -224,12 +279,14 @@ def _extract_ocr_text(data: dict) -> str:
 
 async def call_deepseek(prompt: str, temperature: float = 0.3) -> str:
     """调用 DeepSeek API"""
+    if not DEEPSEEK_API_KEY:
+        raise RuntimeError("缺少 DEEPSEEK_API_KEY")
     headers = {
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "deepseek-chat",
+        "model": DEEPSEEK_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temperature,
         "max_tokens": 2000
@@ -238,6 +295,111 @@ async def call_deepseek(prompt: str, temperature: float = 0.3) -> str:
         resp = await client.post(DEEPSEEK_API_URL, json=payload, headers=headers)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
+
+
+class UnitWorksheetRequest(BaseModel):
+    subject: str
+    semester: str
+    unit_ids: list[str] = Field(min_length=1)
+    knowledge_points: list[str] = Field(min_length=1)
+    difficulty: str
+    question_count: int = Field(ge=3, le=20)
+    title: str = Field(min_length=1, max_length=80)
+    include_explanations: bool = True
+
+
+def _strip_json_fence(value: str) -> str:
+    value = value.strip()
+    if value.startswith("```"):
+        lines = value.splitlines()
+        value = "\n".join(lines[1:-1])
+    return value.strip()
+
+
+def _validate_unit_request(body: UnitWorksheetRequest) -> list:
+    if body.subject not in SUBJECT_LABELS:
+        raise ValueError("学科参数不正确")
+    if body.semester not in SEMESTER_LABELS:
+        raise ValueError("学期参数不正确")
+    if body.difficulty not in DIFFICULTY_LABELS:
+        raise ValueError("难度参数不正确")
+
+    selected_units = [u for u in CURRICULUM_UNITS if u["id"] in body.unit_ids]
+    if len(selected_units) != len(body.unit_ids):
+        raise ValueError("包含未知单元")
+    if any(u["subject"] != body.subject or u["semester"] != body.semester for u in selected_units):
+        raise ValueError("单元与当前学科或学期不匹配")
+
+    allowed_points = {p for unit in selected_units for p in unit["knowledge_points"]}
+    if any(p not in allowed_points for p in body.knowledge_points):
+        raise ValueError("知识点与所选单元不匹配")
+    return selected_units
+
+
+async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
+    """按上海五年级教材目录范围和知识点生成原创复习题。"""
+    prompt = f"""你是一位熟悉上海小学五年级教学节奏的命题老师。
+只依据下面给出的单元名称和知识点生成原创模拟题，不引用或复刻教材原文。
+
+学科：{SUBJECT_LABELS[body.subject]}
+学期：{SEMESTER_LABELS[body.semester]}
+单元：{"、".join(u["title"] for u in selected_units)}
+知识点：{"、".join(body.knowledge_points)}
+难度：{DIFFICULTY_LABELS[body.difficulty]}
+题量：{body.question_count}
+
+要求：
+1. 数学可包含填空、选择、计算、应用题；英语可包含词汇、单项选择、句型转换、阅读理解。
+2. 选择题必须有4个互不重复的选项；非选择题 options 返回空数组。
+3. 每道题必须有明确答案和简短解析。
+4. unit_id 必须从这些值中选择：{", ".join(body.unit_ids)}
+5. 只返回 JSON 对象，不要输出 Markdown。
+
+返回格式：
+{{
+  "questions": [
+    {{
+      "id": "q1",
+      "unit_id": "{body.unit_ids[0]}",
+      "type": "选择题",
+      "question": "题目内容",
+      "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],
+      "answer": "A",
+      "explanation": "解析",
+      "knowledge_points": ["知识点"]
+    }}
+  ]
+}}"""
+    last_error = None
+    for attempt in range(2):
+        retry_note = (
+            "\n上一次输出未通过校验。请务必严格返回指定题量和字段。"
+            if attempt
+            else ""
+        )
+        try:
+            result = json.loads(_strip_json_fence(await call_deepseek(prompt + retry_note, temperature=0.5)))
+            questions = result.get("questions", [])
+            if len(questions) != body.question_count:
+                raise ValueError("生成题目数量与设置不一致")
+
+            for index, question in enumerate(questions, start=1):
+                question.setdefault("id", f"q{index}")
+                question.setdefault("options", [])
+                question.setdefault("knowledge_points", [])
+                if question.get("unit_id") not in body.unit_ids:
+                    raise ValueError(f"第 {index} 题单元不匹配")
+                if not str(question.get("answer", "")).strip():
+                    raise ValueError(f"第 {index} 题缺少答案")
+                if not str(question.get("explanation", "")).strip():
+                    raise ValueError(f"第 {index} 题缺少解析")
+                options = question.get("options") or []
+                if options and len(options) != 4:
+                    raise ValueError(f"第 {index} 题选择题选项必须为 4 个")
+            return questions
+        except (ValueError, json.JSONDecodeError) as e:
+            last_error = e
+    raise ValueError(f"生成内容未通过校验：{last_error}，请重试")
 
 # ===== AI 分析（DeepSeek） =====
 
@@ -704,6 +866,100 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
 
     return pdf.output()
 
+
+def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, include_answers: bool) -> bytes:
+    """生成按单元筛选的题目卷或答案解析卷。"""
+    from fpdf import FPDF
+
+    def safe_multicell(pdf_obj, text_value, h=7, align="J"):
+        text_value = str(text_value or "").strip()
+        if not text_value:
+            return
+        pdf_obj.set_x(pdf_obj.l_margin)
+        width = pdf_obj.w - pdf_obj.l_margin - pdf_obj.r_margin
+        pdf_obj.multi_cell(width, h, text_value, align=align)
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    font_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
+    )
+    pdf.add_font("zh", "", font_path)
+    pdf.add_font("zh", "B", font_path)
+    pdf.set_font("zh", "B", 17)
+    safe_multicell(pdf, body.title, h=10, align="C")
+    pdf.set_font("zh", "", 10)
+    subtitle = (
+        f"{SUBJECT_LABELS[body.subject]} · {SEMESTER_LABELS[body.semester]} · "
+        f"{DIFFICULTY_LABELS[body.difficulty]} · {'答案解析卷' if include_answers else '题目卷'}"
+    )
+    safe_multicell(pdf, subtitle, align="C")
+    pdf.ln(4)
+
+    for index, question in enumerate(questions, start=1):
+        pdf.set_font("zh", "B", 11)
+        safe_multicell(pdf, f"{index}. [{question.get('type', '')}]")
+        pdf.set_font("zh", "", 11)
+        safe_multicell(pdf, question.get("question", ""))
+        for option in question.get("options") or []:
+            safe_multicell(pdf, option)
+        if not include_answers and not question.get("options"):
+            safe_multicell(pdf, "答：____________________________________________")
+        if include_answers:
+            pdf.set_text_color(20, 100, 55)
+            safe_multicell(pdf, f"答案：{question.get('answer', '')}")
+            if body.include_explanations:
+                pdf.set_text_color(70, 78, 90)
+                safe_multicell(pdf, f"解析：{question.get('explanation', '')}")
+            pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
+    return bytes(pdf.output())
+
+
+@app.get("/curriculum-units")
+async def curriculum_units():
+    """返回可用于单元复习卷的公开目录范围与人工整理知识点。"""
+    return {"units": CURRICULUM_UNITS}
+
+
+@app.post("/generate-unit-worksheet")
+async def generate_unit_worksheet(body: UnitWorksheetRequest):
+    """按单元、知识点、难度和题量生成题目卷与答案解析卷。"""
+    try:
+        selected_units = _validate_unit_request(body)
+        questions = await ai_generate_unit_worksheet(body, selected_units)
+        question_pdf = generate_unit_worksheet_pdf(body, questions, include_answers=False)
+        answer_pdf = generate_unit_worksheet_pdf(body, questions, include_answers=True)
+        prefix = (
+            f"五年级{SUBJECT_LABELS[body.subject]}-"
+            f"{SEMESTER_LABELS[body.semester]}-{DIFFICULTY_LABELS[body.difficulty]}"
+        )
+        return {
+            "success": True,
+            "questions": [
+                {
+                    "number": index,
+                    "type": question.get("type", ""),
+                    "question": question.get("question", ""),
+                    "knowledge_points": question.get("knowledge_points", []),
+                }
+                for index, question in enumerate(questions, start=1)
+            ],
+            "question_pdf": {
+                "filename": f"{prefix}-题目卷.pdf",
+                "data_url": f"data:application/pdf;base64,{base64.b64encode(question_pdf).decode('ascii')}",
+            },
+            "answer_pdf": {
+                "filename": f"{prefix}-答案解析卷.pdf",
+                "data_url": f"data:application/pdf;base64,{base64.b64encode(answer_pdf).decode('ascii')}",
+            },
+        }
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": f"生成失败：{str(e)[:180]}"}, status_code=500)
+
 @app.post("/export-practice-pdf/{exam_id}")
 async def export_practice_pdf(exam_id: int, grade: str = None, student_name: str = None):
     """导出巩固练习题为 PDF"""
@@ -755,7 +1011,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.5.0",
+        "version": "0.6.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
@@ -763,6 +1019,8 @@ async def api_info():
             "analyze": "POST /analyze/{id}?grade=...&student_name=... - DeepSeek AI分析",
             "generate_practice": "POST /generate-practice/{id}?grade=...&student_name=... - DeepSeek AI生成5道巩固题",
             "export_pdf": "POST /export-practice-pdf/{id}?grade=...&student_name=... - 导出PDF",
+            "curriculum_units": "GET /curriculum-units - 单元复习卷筛选数据",
+            "generate_unit_worksheet": "POST /generate-unit-worksheet - 生成单元题目卷与答案解析卷",
             "list": "GET /exams?grade=...&student_name=...",
             "detail": "GET /exams/{id}?grade=...&student_name=...",
             "delete": "DELETE /exams/{id}?grade=...&student_name=..."

@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     container_name: edu-api
     volumes:
       - ./uploads:/uploads
