@@ -6,6 +6,10 @@ services:
       context: .
       dockerfile: api/Dockerfile
     container_name: edu-api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: sqlite:////data/exam.db
     volumes:
       - ./uploads:/uploads
       - ./data:/data
