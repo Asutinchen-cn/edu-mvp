@@ -99,10 +99,7 @@
         }
         .hero h2 {
             font-size: 32px; font-weight: 700;
-            background: linear-gradient(90deg, #3A8DFF, #1a1a6e);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #d93025;
             margin-bottom: 12px;
         }
         .hero p {
@@ -718,6 +715,43 @@
         }
         .q-action-btn:hover { border-color: #3A8DFF; color: #3A8DFF; }
 
+        /* ===== UNIT WORKSHEET ===== */
+        .worksheet-card {
+            max-width: 900px; margin: 20px auto 40px; background: white;
+            border-radius: 20px; box-shadow: 0 10px 40px rgba(77,139,255,0.08);
+            padding: 26px 30px;
+        }
+        .worksheet-header { margin-bottom: 18px; }
+        .worksheet-header h3 { font-size: 18px; color: #1a1a4e; margin-bottom: 5px; }
+        .worksheet-header p { color: #777; font-size: 13px; }
+        .worksheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .worksheet-field { display: flex; flex-direction: column; gap: 6px; }
+        .worksheet-field.full { grid-column: 1 / -1; }
+        .worksheet-field label { font-size: 13px; color: #555; font-weight: 600; }
+        .worksheet-field select, .worksheet-field input[type="text"], .worksheet-field input[type="number"] {
+            border: 1.5px solid #dde4f0; border-radius: 10px; padding: 10px 12px;
+            background: #f8f9ff; font-size: 14px; color: #333;
+        }
+        .worksheet-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+        .worksheet-check {
+            display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+            border: 1px solid #e4e8f1; border-radius: 8px; background: #fafbff;
+            color: #555; font-size: 13px;
+        }
+        .worksheet-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+        .worksheet-result {
+            display: none; margin-top: 18px; padding-top: 18px; border-top: 1px solid #eef0f5;
+        }
+        .worksheet-result.show { display: block; }
+        .worksheet-downloads { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+        .worksheet-download {
+            display: inline-flex; padding: 9px 16px; border-radius: 18px; color: white;
+            background: #4D8BFF; font-size: 13px; font-weight: 600; text-decoration: none;
+        }
+        .worksheet-download.answer { background: #4DCB9D; }
+        .worksheet-preview { display: flex; flex-direction: column; gap: 8px; }
+        .worksheet-preview-item { padding: 10px 12px; background: #fafbff; border-radius: 8px; font-size: 13px; }
+
         /* ===== CONFIRM DIALOG ===== */
         .confirm-dialog {
             display: none;
@@ -755,6 +789,8 @@
             .hero-illustrations { display: none; }
             .form-row { flex-direction: column; }
             .date-range { margin-left: 0; margin-top: 8px; }
+            .worksheet-grid { grid-template-columns: 1fr; }
+            .worksheet-field.full { grid-column: auto; }
         }
     </style>
 </head>
@@ -880,6 +916,61 @@
     </div>
 </div>
 
+<!-- UNIT WORKSHEET -->
+<div class="worksheet-card">
+    <div class="worksheet-header">
+        <h3>📚 按教材单元生成复习卷</h3>
+        <p>面向上海五年级数学与英语，按单元、知识点和难度生成原创题目卷与答案解析卷。</p>
+    </div>
+    <div class="worksheet-grid">
+        <div class="worksheet-field">
+            <label>学科</label>
+            <select id="worksheetSubject" onchange="renderWorksheetUnits()">
+                <option value="math">数学</option>
+                <option value="english">英语</option>
+            </select>
+        </div>
+        <div class="worksheet-field">
+            <label>学期</label>
+            <select id="worksheetSemester" onchange="renderWorksheetUnits()">
+                <option value="first">第一学期</option>
+                <option value="second">第二学期</option>
+            </select>
+        </div>
+        <div class="worksheet-field full">
+            <label>单元</label>
+            <div class="worksheet-checks" id="worksheetUnits"></div>
+        </div>
+        <div class="worksheet-field full">
+            <label>知识点</label>
+            <div class="worksheet-checks" id="worksheetKnowledge"></div>
+        </div>
+        <div class="worksheet-field">
+            <label>难度</label>
+            <select id="worksheetDifficulty">
+                <option value="basic">基础</option>
+                <option value="advanced">提高</option>
+                <option value="challenge">挑战</option>
+            </select>
+        </div>
+        <div class="worksheet-field">
+            <label>题量</label>
+            <input id="worksheetCount" type="number" min="3" max="20" value="8">
+        </div>
+        <div class="worksheet-field full">
+            <label>卷面标题</label>
+            <input id="worksheetTitle" type="text" value="上海五年级单元复习卷">
+        </div>
+    </div>
+    <div class="worksheet-actions">
+        <button class="generate-btn" id="worksheetGenerateBtn" onclick="generateUnitWorksheet()">✨ 生成题目卷和答案卷</button>
+    </div>
+    <div class="worksheet-result" id="worksheetResult">
+        <div class="worksheet-downloads" id="worksheetDownloads"></div>
+        <div class="worksheet-preview" id="worksheetPreview"></div>
+    </div>
+</div>
+
 <!-- HISTORY CARD -->
 <div class="history-card">
     <div class="history-header">
@@ -923,6 +1014,7 @@ let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]'
 let currentFilter = 'week';
 let selectedRecordId = null;
 let pendingDeleteId = null;
+let worksheetUnits = [];
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -930,7 +1022,82 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDropzone();
     setupFileInput();
     setupDateFilters();
+    loadWorksheetUnits();
 });
+
+async function loadWorksheetUnits() {
+    try {
+        const resp = await fetch('/curriculum-units');
+        const data = await resp.json();
+        worksheetUnits = data.units || [];
+        renderWorksheetUnits();
+    } catch (e) {
+        document.getElementById('worksheetUnits').textContent = '暂时无法加载单元数据';
+    }
+}
+
+function renderWorksheetUnits() {
+    const subject = document.getElementById('worksheetSubject').value;
+    const semester = document.getElementById('worksheetSemester').value;
+    const units = worksheetUnits.filter(u => u.subject === subject && u.semester === semester);
+    document.getElementById('worksheetUnits').innerHTML = units.map((u, i) => `
+        <label class="worksheet-check">
+            <input type="checkbox" name="worksheetUnit" value="${u.id}" ${i === 0 ? 'checked' : ''} onchange="renderWorksheetKnowledge()">
+            ${u.title}
+        </label>`).join('') || '当前学期暂无单元';
+    renderWorksheetKnowledge();
+}
+
+function renderWorksheetKnowledge() {
+    const selectedIds = [...document.querySelectorAll('input[name="worksheetUnit"]:checked')].map(el => el.value);
+    const points = worksheetUnits.filter(u => selectedIds.includes(u.id)).flatMap(u => u.knowledge_points);
+    document.getElementById('worksheetKnowledge').innerHTML = [...new Set(points)].map(point => `
+        <label class="worksheet-check">
+            <input type="checkbox" name="worksheetKnowledge" value="${point}" checked>
+            ${point}
+        </label>`).join('') || '请先选择单元';
+}
+
+async function generateUnitWorksheet() {
+    const unitIds = [...document.querySelectorAll('input[name="worksheetUnit"]:checked')].map(el => el.value);
+    const knowledgePoints = [...document.querySelectorAll('input[name="worksheetKnowledge"]:checked')].map(el => el.value);
+    if (!unitIds.length || !knowledgePoints.length) {
+        alert('请至少选择一个单元和一个知识点');
+        return;
+    }
+    const btn = document.getElementById('worksheetGenerateBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 正在生成...';
+    try {
+        const resp = await fetch('/generate-unit-worksheet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: document.getElementById('worksheetSubject').value,
+                semester: document.getElementById('worksheetSemester').value,
+                unit_ids: unitIds,
+                knowledge_points: knowledgePoints,
+                difficulty: document.getElementById('worksheetDifficulty').value,
+                question_count: Number(document.getElementById('worksheetCount').value),
+                title: document.getElementById('worksheetTitle').value,
+                include_explanations: true
+            })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || '生成失败');
+        document.getElementById('worksheetDownloads').innerHTML = `
+            <a class="worksheet-download" download="${data.question_pdf.filename}" href="${data.question_pdf.data_url}">📄 下载题目卷</a>
+            <a class="worksheet-download answer" download="${data.answer_pdf.filename}" href="${data.answer_pdf.data_url}">✅ 下载答案解析卷</a>`;
+        document.getElementById('worksheetPreview').innerHTML = data.questions.map(q => `
+            <div class="worksheet-preview-item"><strong>${q.number}. [${q.type}]</strong> ${q.question}</div>`).join('');
+        document.getElementById('worksheetResult').classList.add('show');
+    } catch (e) {
+        alert('生成复习卷失败：' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '✨ 生成题目卷和答案卷';
+    }
+}
 
 // ===== DROPZONE =====
 function setupDropzone() {
