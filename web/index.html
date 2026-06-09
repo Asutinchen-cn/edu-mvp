@@ -299,6 +299,14 @@
         .file-thumb img {
             width: 100%; height: 100%; object-fit: cover;
         }
+        .file-pdf {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            background: #f1f5ff;
+            color: #4D8BFF;
+            font-weight: 700;
+            font-size: 13px;
+        }
         .file-thumb .remove-btn {
             position: absolute; top: 2px; right: 2px;
             width: 20px; height: 20px;
@@ -870,6 +878,13 @@
                 </select>
             </div>
             <div class="form-group">
+                <label>学科</label>
+                <select id="analysisSubject">
+                    <option value="math">数学</option>
+                    <option value="english">英语</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label>学生姓名</label>
                 <input type="text" id="studentName" placeholder="请输入学生姓名">
             </div>
@@ -1142,7 +1157,7 @@ function handleFiles(files) {
         }
         const reader = new FileReader();
         reader.onload = e => {
-            uploadedFiles.push({ name: f.name, data: e.target.result });
+            uploadedFiles.push({ name: f.name, data: e.target.result, file: f, type: f.type });
             renderFilePreview();
             updateAnalyzeBtn();
         };
@@ -1156,7 +1171,10 @@ function renderFilePreview() {
     uploadedFiles.forEach((f, i) => {
         const div = document.createElement('div');
         div.className = 'file-thumb';
-        div.innerHTML = `<img src="${f.data}" alt="${f.name}"><button class="remove-btn" onclick="removeFile(${i})">✕</button>`;
+        const preview = f.type === 'application/pdf'
+            ? '<div class="file-pdf">PDF</div>'
+            : `<img src="${f.data}" alt="${f.name}">`;
+        div.innerHTML = `${preview}<button class="remove-btn" onclick="removeFile(${i})">✕</button>`;
         container.appendChild(div);
     });
     container.classList.toggle('show', uploadedFiles.length > 0);
@@ -1178,37 +1196,37 @@ async function startAnalysis() {
     if (uploadedFiles.length === 0) return;
 
     const grade = document.getElementById('gradeSelect').value;
+    const subject = document.getElementById('analysisSubject').value;
     const name = document.getElementById('studentName').value || '同学';
+    if (!grade) {
+        alert('请先选择年级');
+        return;
+    }
 
     document.getElementById('loadingOverlay').classList.add('show');
-    document.getElementById('loadingText').textContent = 'AI 正在识别错题...';
+    document.getElementById('loadingText').textContent = 'AI 正在识别试卷...';
 
     try {
-        let analysisData;
-        try {
-            const resp = await fetch('/analyze', {
-                method: 'POST',
-                body: (() => {
-                    const fd = new FormData();
-                    fd.append('grade', grade);
-                    fd.append('student_name', name);
-                    // We need actual files, but we have base64 — try JSON endpoint
-                    return fd;
-                })()
-            });
-            if (resp.ok) {
-                const json = await resp.json();
-                analysisData = parseApiResponse(json, name, grade);
-            }
-        } catch(e) {}
+        const apiAnalyses = [];
+        for (let i = 0; i < uploadedFiles.length; i++) {
+            const current = uploadedFiles[i];
+            document.getElementById('loadingText').textContent = `正在识别第 ${i + 1}/${uploadedFiles.length} 份试卷...`;
+            const fd = new FormData();
+            fd.append('grade', grade);
+            fd.append('student_name', name);
+            fd.append('subject', subject);
+            fd.append('file', current.file, current.name);
 
-        if (!analysisData) {
-            document.getElementById('loadingText').textContent = 'AI 正在分析薄弱知识点...';
-            await new Promise(r => setTimeout(r, 1500));
-            document.getElementById('loadingText').textContent = '正在生成学习方案...';
-            await new Promise(r => setTimeout(r, 1500));
-            analysisData = generateMockData(name, grade);
+            const uploadJson = await requestJson('/upload', { method: 'POST', body: fd });
+            document.getElementById('loadingText').textContent = `正在分析第 ${i + 1}/${uploadedFiles.length} 份试卷...`;
+            const params = new URLSearchParams({ grade: grade, student_name: name });
+            const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, { method: 'POST' });
+            apiAnalyses.push(analysisJson.analysis || analysisJson);
         }
+
+        document.getElementById('loadingText').textContent = '正在整理学习方案...';
+        const analysisData = parseApiResponse(mergeApiAnalyses(apiAnalyses, subject), name, grade, subject);
+        if (!analysisData) throw new Error('分析结果格式异常，请重新上传清晰试卷后再试');
 
         // Save to history
         const record = {
@@ -1216,6 +1234,7 @@ async function startAnalysis() {
             date: new Date().toISOString(),
             name: name,
             grade: grade,
+            subject: subject,
             errorRate: analysisData.errorRate,
             weakPoint: analysisData.weakPoints[0] || '',
             result: JSON.stringify(analysisData),
@@ -1242,55 +1261,85 @@ async function startAnalysis() {
     }
 }
 
-function generateMockData(name, grade) {
-    return {
-        studentName: name,
-        grade: grade,
-        errorRate: 38,
-        weakPoints: ['小数乘法运算', '面积单位换算', '分数化简'],
-        evaluation: '计算能力偏弱，建议加强基础运算训练，尤其是小数乘法与进位规则。',
-        errorTypes: [
-            { name: '粗心大意', count: 2, percent: 33, color: '#FFB74D' },
-            { name: '概念不清', count: 1, percent: 17, color: '#FF7043' },
-            { name: '方法不会', count: 3, count: 3, percent: 50, color: '#E53935' }
-        ],
-        wrongQuestions: [
-            { num: 1, reason: '小数点位置错误，未掌握小数乘法对齐规则', correctAnswer: '3.75', tag: '小数乘法' },
-            { num: 2, reason: '面积单位换算时，1m²=100dm² 记成 1000', correctAnswer: '850dm²', tag: '面积换算' },
-            { num: 3, reason: '分数化简未约分到最简', correctAnswer: '2/3', tag: '分数化简' },
-            { num: 4, reason: '进位加法遗漏进位', correctAnswer: '1.56', tag: '小数乘法' },
-            { num: 5, reason: '将平方米记成平方分米', correctAnswer: '3.5m²', tag: '面积换算' },
-            { num: 6, reason: '未找到分子分母的最大公约数', correctAnswer: '5/8', tag: '分数化简' }
-        ],
-        weakDetails: [
-            { name: '小数乘法运算', practice: '每天 10 道小数乘法专项练习，重点练小数点定位与进位规则', resource: '《五年级数学下册》第3单元练习' },
-            { name: '面积单位换算', practice: '用面积模型理解 m²/dm²/cm² 的换算关系，自制换算卡片', resource: '面积单位换算动画课（可汗学院）' },
-            { name: '分数化简', practice: '练习找最大公约数（GCD），用短除法化简分数', resource: '《分数运算专项训练》第2章' }
-        ]
-    };
+async function requestJson(url, options) {
+    const resp = await fetch(url, options);
+    const text = await resp.text();
+    let json;
+    try {
+        json = text ? JSON.parse(text) : {};
+    } catch (e) {
+        throw new Error(`服务器返回异常（${resp.status}），请稍后重试`);
+    }
+    if (!resp.ok || json.success === false) {
+        throw new Error(json.error || json.detail || `请求失败（${resp.status}）`);
+    }
+    return json;
 }
 
-function parseApiResponse(json, name, grade) {
+function mergeApiAnalyses(analyses, subject) {
+    const merged = {
+        subject: subject,
+        wrong_questions: [],
+        error_types: [],
+        weak_points: [],
+        recommendations: [],
+        root_cause: ''
+    };
+    const addUnique = (target, values) => {
+        (values || []).forEach(v => {
+            if (v && !target.includes(v)) target.push(v);
+        });
+    };
+    analyses.forEach(item => {
+        const analysis = item.analysis || item || {};
+        merged.wrong_questions.push(...(analysis.wrong_questions || []));
+        addUnique(merged.error_types, analysis.error_types || []);
+        addUnique(merged.weak_points, analysis.weak_points || []);
+        addUnique(merged.recommendations, analysis.recommendations || []);
+        if (analysis.root_cause) {
+            merged.root_cause += (merged.root_cause ? '\n' : '') + analysis.root_cause;
+        }
+    });
+    return merged;
+}
+
+function parseApiResponse(json, name, grade, subject) {
     // Try to parse API response into structured data
     try {
-        const wp = json.weak_points || [];
-        const wq = json.wrong_questions || [];
-        const et = json.error_types || [];
-        const rec = json.recommendations || [];
-        const errorRate = wq.length > 0 ? Math.floor((wq.length / (wq.length + 3)) * 100) : 30;
+        const analysis = json.analysis || json || {};
+        const wp = Array.isArray(analysis.weak_points) ? analysis.weak_points : [];
+        const wq = Array.isArray(analysis.wrong_questions) ? analysis.wrong_questions : [];
+        const et = Array.isArray(analysis.error_types) ? analysis.error_types : [];
+        const rec = Array.isArray(analysis.recommendations) ? analysis.recommendations : [];
+        const subjectLabel = subject === 'english' ? '英语' : '数学';
+        const errorRate = wq.length > 0 ? Math.min(90, Math.floor((wq.length / (wq.length + 3)) * 100)) : 0;
+        const displayErrorTypes = et.length ? et : ['待进一步确认'];
+        const displayWeakPoints = wp.length ? wp.slice(0, 3) : ['未识别到明确薄弱点'];
         return {
             studentName: name,
             grade: grade,
+            subject: subject,
+            subjectLabel: subjectLabel,
             errorRate: errorRate,
-            weakPoints: wp.length ? wp.slice(0,3) : ['未识别'],
-            evaluation: json.root_cause || '请查看下方详细分析',
-            errorTypes: et.map((e, i) => ({
-                name: e, count: Math.ceil(wq.length / et.length), percent: Math.floor(100/et.length), color: ['#FFB74D','#FF7043','#E53935'][i%3]
+            weakPoints: displayWeakPoints,
+            evaluation: analysis.root_cause || '未能从图片中识别到明确错题，请确认图片清晰且包含批改痕迹。',
+            errorTypes: displayErrorTypes.map((e, i) => ({
+                name: e,
+                count: wq.length ? Math.max(1, Math.ceil(wq.length / displayErrorTypes.length)) : 0,
+                percent: Math.floor(100 / displayErrorTypes.length),
+                color: ['#FFB74D','#FF7043','#E53935'][i%3]
             })),
             wrongQuestions: wq.map((q, i) => ({
-                num: i+1, reason: q.error_type + ': ' + q.question, correctAnswer: q.correct_answer || '见解析', tag: q.error_type
+                num: i + 1,
+                reason: `${q.error_type || '错因'}: ${q.question || '题目摘要未识别'}`,
+                correctAnswer: q.correct_answer || '见解析',
+                tag: q.error_type || '待确认'
             })),
-            weakDetails: wp.map(w => ({ name: w, practice: rec.length ? rec.shift() : '针对性练习', resource: '教材相关章节' }))
+            weakDetails: displayWeakPoints.map((w, i) => ({
+                name: w,
+                practice: rec[i] || `结合错题订正，做 5-8 道${subjectLabel}同类练习`,
+                resource: `${subjectLabel}教材相关单元`
+            }))
         };
     } catch(e) {
         return null;
@@ -1411,23 +1460,25 @@ async function generatePractice() {
         const resp = await fetch('/generate-practice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ weak_points: currentAnalysisData.weakPoints })
+            body: JSON.stringify({ weak_points: currentAnalysisData.weakPoints, subject: currentAnalysisData.subject })
         });
         if (resp.ok) {
-            questions = await resp.json();
+            const data = await resp.json();
+            questions = Array.isArray(data) ? data : data.questions;
         }
     } catch(e) {}
 
     if (!questions || !questions.length) {
-        // Mock practice questions
         await new Promise(r => setTimeout(r, 1500));
-        questions = [
-            { id: 1, type: '选择题', question: '计算 3.6 × 0.25 的结果是多少？', options: ['0.9', '0.8', '0.7', '0.6'], answer: 'A', hint: '先算 36×25=900，再确定小数位数（2+2=4位），所以 0.0900=0.9' },
-            { id: 2, type: '选择题', question: '下列哪个面积换算正确？', options: ['1m²=100dm²', '1m²=1000dm²', '1dm²=100m²', '1m²=10dm²'], answer: 'A', hint: '1m=10dm，所以 1m²=10×10=100dm²' },
-            { id: 3, type: '填空题', question: '将分数 12/18 化为最简分数：____', options: null, answer: '2/3', hint: '12和18的最大公约数是6，12÷6=2，18÷6=3' },
-            { id: 4, type: '填空题', question: '计算 2.4 × 1.5 = ____', options: null, answer: '3.6', hint: '24×15=360，小数位数1+1=2位，所以 3.60=3.6' },
-            { id: 5, type: '选择题', question: '一个房间长5m、宽3m，面积是多少平方分米？', options: ['150dm²', '15dm²', '1500dm²', '1.5dm²'], answer: 'C', hint: '5m×3m=15m²，15×100=1500dm²' }
-        ];
+        const subjectLabel = currentAnalysisData.subject === 'english' ? '英语' : '数学';
+        questions = [{
+            id: 1,
+            type: '提示',
+            question: `${subjectLabel}巩固题生成服务暂时不可用，请先根据上方薄弱点进行订正练习。`,
+            options: null,
+            answer: '请稍后重试',
+            hint: `本次识别到的薄弱点：${currentAnalysisData.weakPoints.join('、')}`
+        }];
     }
 
     renderPracticeQuestions(questions);

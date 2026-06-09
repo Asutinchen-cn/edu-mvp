@@ -338,6 +338,7 @@ class Exam(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     grade = Column(String(50), index=True, nullable=False, default="未分类")
+    subject = Column(String(20), index=True, nullable=False, default="math")
     student_name = Column(String(100), index=True)
     image_path = Column(Text)
     ocr_text = Column(Text)
@@ -349,13 +350,13 @@ class Exam(Base):
 # 创建表
 Base.metadata.create_all(bind=engine)
 
-# 兼容旧库：若已有 exams 表但无 grade 字段，启动时自动补列
+# 兼容旧库：若已有 exams 表但无新增字段，启动时自动补列
 try:
     inspector = inspect(engine)
     if inspector.has_table("exams"):
         cols = {c["name"] for c in inspector.get_columns("exams")}
-        if "grade" not in cols:
-            with engine.begin() as conn:
+        with engine.begin() as conn:
+            if "grade" not in cols:
                 if "postgresql" in DATABASE_URL:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS grade VARCHAR(50)"))
                     conn.execute(text("UPDATE exams SET grade = '未分类' WHERE grade IS NULL"))
@@ -366,6 +367,15 @@ try:
                     conn.execute(text("UPDATE exams SET grade = '未分类' WHERE grade IS NULL"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_grade ON exams (grade)"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_student_name ON exams (student_name)"))
+            if "subject" not in cols:
+                if "postgresql" in DATABASE_URL:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS subject VARCHAR(20)"))
+                    conn.execute(text("UPDATE exams SET subject = 'math' WHERE subject IS NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_subject ON exams (subject)"))
+                else:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN subject VARCHAR(20)"))
+                    conn.execute(text("UPDATE exams SET subject = 'math' WHERE subject IS NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_subject ON exams (subject)"))
 except Exception as _e:
     print(f"DB migration warning: {_e}")
 
@@ -934,15 +944,32 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 
 # ===== AI 分析（DeepSeek） =====
 
-async def ai_analyze(ocr_text: str) -> dict:
+async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
     """使用 DeepSeek 进行错题分析"""
-    prompt = f"""你是一位资深教育分析专家。请根据以下试卷内容，进行详细的错题分析。
+    subject_label = SUBJECT_LABELS.get(subject, "未知学科")
+    subject_rules = (
+        "这是英语试卷。请只分析英语相关问题，例如词汇理解、句型语法、阅读信息提取、拼写、时态、介词、物主代词、表达完整性。不要输出数学知识点。"
+        if subject == "english"
+        else "这是数学试卷。请只分析数学相关问题，例如概念理解、计算方法、审题、单位换算、方程关系、图形与统计。不要输出英语语法或词汇问题。"
+    )
+    prompt = f"""你是一位资深{grade}{subject_label}教师。请根据以下试卷 OCR 内容，进行错题诊断。
+
+学科：{subject_label}
+年级：{grade}
+分析边界：{subject_rules}
 
 试卷OCR识别内容：
 {ocr_text}
 
+要求：
+1. 只根据 OCR 中能看见的题目、作答、批改痕迹进行分析，不要编造不存在的错题。
+2. 如果 OCR 信息不足，请在 root_cause 说明“识别内容不足”，weak_points 给出可确认的少量方向。
+3. weak_points 必须符合当前学科；英语卷不得出现“小数、面积、分数”等数学知识点。
+4. recommendations 要能直接指导家长或学生复习。
+
 请按以下JSON格式返回分析结果（不要包含其他文字，只返回JSON）：
 {{
+    "subject": "{subject}",
     "wrong_questions": [
         {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案"}},
         {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案"}}
@@ -958,12 +985,9 @@ async def ai_analyze(ocr_text: str) -> dict:
 }}"""
 
     try:
-        result = await call_deepseek(prompt)
-        result = result.strip()
-        if result.startswith("```"):
-            lines = result.split("\n")
-            result = "\n".join(lines[1:-1])
-        analysis = json.loads(result)
+        result = await call_deepseek(prompt, max_tokens=3000, json_mode=True)
+        analysis = json.loads(_strip_json_fence(result))
+        analysis.setdefault("subject", subject)
         analysis.setdefault("wrong_questions", [])
         analysis.setdefault("error_types", [])
         analysis.setdefault("weak_points", [])
@@ -973,6 +997,7 @@ async def ai_analyze(ocr_text: str) -> dict:
     except Exception as e:
         print(f"DeepSeek API error: {e}")
         return {
+            "subject": subject,
             "wrong_questions": [],
             "error_types": ["分析服务暂时不可用"],
             "weak_points": ["请稍后重试"],
@@ -1040,6 +1065,7 @@ async def ai_generate_questions(weak_points: list) -> list:
 async def upload_exam(
     student_name: str = Form(...),
     grade: str = Form(...),
+    subject: str = Form("math"),
     file: UploadFile = File(...)
 ):
     """上传试卷图片（按 年级 + 学生名 隔离）"""
@@ -1048,15 +1074,25 @@ async def upload_exam(
 
         student_name = (student_name or "").strip()
         grade = (grade or "").strip()
+        subject = (subject or "math").strip()
         if not student_name:
             db.close()
             return JSONResponse({"success": False, "error": "student_name 不能为空"}, status_code=400)
         if not grade:
             db.close()
             return JSONResponse({"success": False, "error": "grade 不能为空"}, status_code=400)
+        if subject not in SUBJECT_LABELS:
+            db.close()
+            return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
+        if file.content_type not in {"image/jpeg", "image/png", "application/pdf"}:
+            db.close()
+            return JSONResponse({"success": False, "error": "仅支持 JPG、PNG 或 PDF 文件"}, status_code=400)
 
         # 读取文件内容
         content = await file.read()
+        if len(content) > 10 * 1024 * 1024:
+            db.close()
+            return JSONResponse({"success": False, "error": "文件大小不能超过 10MB"}, status_code=400)
 
         # 百度 OCR 识别
         ocr_result = await baidu_ocr(content)
@@ -1064,6 +1100,7 @@ async def upload_exam(
         # 创建记录
         exam = Exam(
             grade=grade,
+            subject=subject,
             student_name=student_name,
             image_path=file.filename,
             ocr_text=ocr_result
@@ -1078,6 +1115,7 @@ async def upload_exam(
             "id": exam.id,
             "message": "上传成功",
             "grade": grade,
+            "subject": subject,
             "student": student_name,
             "ocr_preview": ocr_result[:200] + "..." if len(ocr_result) > 200 else ocr_result,
             "next_step": f"POST /analyze/{exam.id}?grade={grade}&student_name={student_name} 进行AI分析"
@@ -1105,7 +1143,7 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
             return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
 
         # 调用 DeepSeek AI 分析
-        analysis = await ai_analyze(exam.ocr_text)
+        analysis = await ai_analyze(exam.ocr_text or "", exam.subject or "math", exam.grade or grade or "")
 
         # 更新记录
         exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
@@ -1118,6 +1156,7 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
             "success": True,
             "exam_id": exam_id,
             "grade": exam.grade,
+            "subject": exam.subject,
             "student": exam.student_name,
             "analysis": analysis,
             "summary": {
@@ -1152,6 +1191,7 @@ async def list_exams(grade: str = None, student_name: str = None, limit: int = 1
         "exams": [{
             "id": e.id,
             "grade": e.grade,
+            "subject": e.subject,
             "student": e.student_name,
             "image": e.image_path,
             "ocr_preview": e.ocr_text[:50] + "..." if e.ocr_text else None,
@@ -1178,6 +1218,7 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
     return JSONResponse({
         "id": exam.id,
         "grade": exam.grade,
+        "subject": exam.subject,
         "student": exam.student_name,
         "image": exam.image_path,
         "ocr_text": exam.ocr_text,
