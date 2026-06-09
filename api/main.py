@@ -903,7 +903,8 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
   ]
 }}"""
     last_error = None
-    for attempt in range(2):
+    max_attempts = 1 if body.question_count > model_question_count else 2
+    for attempt in range(max_attempts):
         retry_note = (
             "\n上一次输出未通过校验。请务必严格返回指定题量和字段。"
             if attempt
