@@ -751,6 +751,7 @@
         .worksheet-download.answer { background: #4DCB9D; }
         .worksheet-preview { display: flex; flex-direction: column; gap: 8px; }
         .worksheet-preview-item { padding: 10px 12px; background: #fafbff; border-radius: 8px; font-size: 13px; }
+        .worksheet-meta { margin-top: 6px; color: #697386; line-height: 1.5; }
 
         /* ===== CONFIRM DIALOG ===== */
         .confirm-dialog {
@@ -1089,7 +1090,11 @@ async function generateUnitWorksheet() {
             <a class="worksheet-download" download="${data.question_pdf.filename}" href="${data.question_pdf.data_url}">📄 下载题目卷</a>
             <a class="worksheet-download answer" download="${data.answer_pdf.filename}" href="${data.answer_pdf.data_url}">✅ 下载答案解析卷</a>`;
         document.getElementById('worksheetPreview').innerHTML = data.questions.map(q => `
-            <div class="worksheet-preview-item"><strong>${q.number}. [${q.type}]</strong> ${q.question}</div>`).join('');
+            <div class="worksheet-preview-item">
+                <strong>${q.number}. [${q.type}]</strong> ${q.question}
+                ${q.exam_focus ? `<div class="worksheet-meta">考点：${q.exam_focus}</div>` : ''}
+                ${q.teaching_intent ? `<div class="worksheet-meta">命题意图：${q.teaching_intent}</div>` : ''}
+            </div>`).join('');
         document.getElementById('worksheetResult').classList.add('show');
     } catch (e) {
         alert('生成复习卷失败：' + e.message);

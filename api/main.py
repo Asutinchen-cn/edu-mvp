@@ -574,6 +574,123 @@ def _strip_json_fence(value: str) -> str:
     return value.strip()
 
 
+def _unique_values(values: list[str]) -> list[str]:
+    seen = set()
+    unique = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def _unit_exam_profile(body: UnitWorksheetRequest, selected_units: list) -> dict:
+    unit_titles = [u["title"] for u in selected_units]
+    selected_points = _unique_values(body.knowledge_points)
+    if body.subject == "math":
+        common_mistakes = []
+        for point in selected_points:
+            if any(key in point for key in ["小数", "近似", "循环"]):
+                common_mistakes.append("小数点位置、位数处理或近似数保留错误")
+            elif any(key in point for key in ["方程", "等量"]):
+                common_mistakes.append("等量关系找错，解方程后没有代入检验")
+            elif any(key in point for key in ["面积", "体积", "容积", "表面积", "几何"]):
+                common_mistakes.append("公式套用、单位换算或图形条件识别错误")
+            elif any(key in point for key in ["平均", "统计"]):
+                common_mistakes.append("把平均数当成最大值或总数，忽视数据个数")
+            elif any(key in point for key in ["正数", "负数", "数轴"]):
+                common_mistakes.append("正负号意义混淆，数轴方向判断错误")
+            else:
+                common_mistakes.append(f"{point} 的概念理解与迁移应用不稳定")
+        return {
+            "unit_titles": unit_titles,
+            "exam_focus": [f"理解并运用“{point}”解决单元常规题和情境题" for point in selected_points],
+            "skill_targets": ["概念辨析", "基本计算", "方法选择", "易错校验", "情境建模"],
+            "common_mistakes": _unique_values(common_mistakes)[:6],
+            "answer_requirements": ["写清关键步骤", "指出易错原因", "给出可复习的考点提示"],
+        }
+
+    common_mistakes = []
+    for point in selected_points:
+        lower_point = point.lower()
+        if any(key in lower_point for key in ["date", "holiday", "festival", "birthday"]):
+            common_mistakes.append("日期、节日活动和文化习俗搭配不准确")
+        elif any(key in lower_point for key in ["must", "rule", "sign", "museum"]):
+            common_mistakes.append("must / mustn't 与公共场所规则混用")
+        elif any(key in lower_point for key in ["whose", "possessive"]):
+            common_mistakes.append("物主代词和名词所有格使用错误")
+        elif any(key in lower_point for key in ["story", "sequence", "retelling"]):
+            common_mistakes.append("故事顺序、人物动作和复述逻辑不清")
+        elif any(key in lower_point for key in ["weather", "temperature"]):
+            common_mistakes.append("天气表达和活动计划的语境不匹配")
+        elif any(key in lower_point for key in ["countable", "uncountable", "food"]):
+            common_mistakes.append("可数/不可数名词和数量表达混淆")
+        else:
+            common_mistakes.append(f"{point} 缺少语境化理解和完整句表达")
+    return {
+        "unit_titles": unit_titles,
+        "exam_focus": [f"在真实语境中理解并使用 {point}" for point in selected_points],
+        "skill_targets": ["词汇语境", "核心句型", "语法功能", "阅读信息提取", "短句表达"],
+        "common_mistakes": _unique_values(common_mistakes)[:6],
+        "answer_requirements": ["说明考查语言功能", "解释干扰选项", "给出可模仿的正确表达"],
+    }
+
+
+def _question_plan(body: UnitWorksheetRequest) -> list[dict]:
+    if body.subject == "math":
+        if body.difficulty == "basic":
+            cycle = [
+                ("概念辨析", "判断学生是否真正理解核心概念"),
+                ("基础计算", "检查单步算法和书写准确性"),
+                ("常规应用", "把单一考点放入直接情境"),
+            ]
+        elif body.difficulty == "advanced":
+            cycle = [
+                ("基础计算", "检查熟练度"),
+                ("方法辨析", "比较不同方法并识别易错步骤"),
+                ("应用建模", "根据题意建立数量关系"),
+                ("易错校验", "暴露小数点、单位或等量关系错误"),
+            ]
+        else:
+            cycle = [
+                ("综合应用", "整合两个以上考点解决问题"),
+                ("方法解释", "说明为什么这样列式或判断"),
+                ("易错辨析", "识别看似合理的错误做法"),
+                ("迁移建模", "换情境后仍能使用本单元方法"),
+            ]
+    else:
+        if body.difficulty == "basic":
+            cycle = [
+                ("词汇语境", "在句子中识别和使用本单元词汇"),
+                ("核心句型", "检查目标句型的基本使用"),
+                ("短文信息", "从短文中定位明确信息"),
+            ]
+        elif body.difficulty == "advanced":
+            cycle = [
+                ("词汇语境", "辨析词汇在真实语境中的用法"),
+                ("句型语法", "检查本单元核心句型和语法功能"),
+                ("阅读理解", "提取信息并作简单推断"),
+                ("表达任务", "用 2-4 句完成主题表达"),
+            ]
+        else:
+            cycle = [
+                ("阅读推断", "整合短文信息完成判断"),
+                ("语境改写", "在新语境中转换或补全句子"),
+                ("表达任务", "有条理地输出主题短文"),
+                ("易错辨析", "识别语法或搭配干扰项"),
+            ]
+
+    return [
+        {
+            "number": index,
+            "planned_type": cycle[(index - 1) % len(cycle)][0],
+            "teaching_intent": cycle[(index - 1) % len(cycle)][1],
+            "knowledge_point": body.knowledge_points[(index - 1) % len(body.knowledge_points)],
+        }
+        for index in range(1, body.question_count + 1)
+    ]
+
+
 def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -> list:
     if len(questions) != body.question_count:
         raise ValueError("生成题目数量与设置不一致")
@@ -586,6 +703,9 @@ def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -
         question.setdefault("type", "选择题")
         question.setdefault("options", [])
         question.setdefault("knowledge_points", [])
+        question.setdefault("exam_focus", "")
+        question.setdefault("common_mistake", "")
+        question.setdefault("teaching_intent", "")
         if question.get("unit_id") not in body.unit_ids:
             question["unit_id"] = body.unit_ids[(index - 1) % len(body.unit_ids)]
         if not str(question.get("question", "")).strip():
@@ -601,45 +721,56 @@ def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -
     return normalized
 
 
-def _fallback_unit_worksheet(body: UnitWorksheetRequest) -> list:
+def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | None = None) -> list:
+    selected_units = selected_units or [u for u in CURRICULUM_UNITS if u["id"] in body.unit_ids]
+    profile = _unit_exam_profile(body, selected_units)
+    plan = _question_plan(body)
     questions = []
     for index in range(1, body.question_count + 1):
-        point = body.knowledge_points[(index - 1) % len(body.knowledge_points)]
+        planned = plan[index - 1]
+        point = planned["knowledge_point"]
         unit_id = body.unit_ids[(index - 1) % len(body.unit_ids)]
+        common_mistake = profile["common_mistakes"][(index - 1) % len(profile["common_mistakes"])]
         if body.subject == "english":
-            if index % 3 == 1:
+            if planned["planned_type"] in ["词汇语境", "易错辨析"]:
                 question = {
                     "id": f"q{index}",
                     "unit_id": unit_id,
-                    "type": "单项选择",
-                    "question": f"Choose the best answer for the topic '{point}'.\\nMy classmates and I are talking about our lesson. Which sentence is correct?",
+                    "type": planned["planned_type"],
+                    "question": f"Choose the best answer in context.\\nThe class is reviewing '{point}'. Which sentence is correct and natural?",
                     "options": [
-                        "A. We should listen carefully in class.",
-                        "B. We listens carefully in class.",
-                        "C. We listening carefully in class.",
-                        "D. We listened carefully tomorrow.",
+                        "A. We should read the signs carefully.",
+                        "B. We should reads the signs carefully.",
+                        "C. We reading the signs carefully.",
+                        "D. We read the signs carefully yesterday tomorrow.",
                     ],
                     "answer": "A",
-                    "explanation": "主语 We 后用动词原形，句意也符合课堂表达。",
+                    "explanation": "本题考查语境中的正确句型。should 后接动词原形，A 的语法和语境都正确。",
                     "knowledge_points": [point],
+                    "exam_focus": f"在语境中使用 {point}",
+                    "common_mistake": common_mistake,
+                    "teaching_intent": planned["teaching_intent"],
                 }
-            elif index % 3 == 2:
+            elif planned["planned_type"] in ["核心句型", "句型语法", "语境改写"]:
                 question = {
                     "id": f"q{index}",
                     "unit_id": unit_id,
-                    "type": "句型转换",
-                    "question": f"Rewrite the sentence about '{point}'.\\nThere are some signs in the museum. (改为否定句)",
+                    "type": planned["planned_type"],
+                    "question": f"Rewrite the sentence to check '{point}'.\\nThere are some signs in the museum. (改为否定句)",
                     "options": [],
                     "answer": "There aren't any signs in the museum.",
-                    "explanation": "There be 句型否定式在 be 后加 not，some 在否定句中通常改为 any。",
+                    "explanation": "本题考查句型转换。There be 句型否定式在 be 后加 not，some 在否定句中通常改为 any。",
                     "knowledge_points": [point],
+                    "exam_focus": f"用目标句型表达 {point}",
+                    "common_mistake": common_mistake,
+                    "teaching_intent": planned["teaching_intent"],
                 }
             else:
                 question = {
                     "id": f"q{index}",
                     "unit_id": unit_id,
-                    "type": "阅读理解",
-                    "question": f"Read and answer.\\nKitty visits a small museum with her parents. They read the signs and speak quietly. What should visitors do in the museum?",
+                    "type": planned["planned_type"],
+                    "question": f"Read and answer.\\nKitty visits a small museum with her parents. They read the signs and speak quietly. The guide tells them about a special holiday show. What should visitors do in the museum?",
                     "options": [
                         "A. Run in the hall.",
                         "B. Speak quietly.",
@@ -647,42 +778,54 @@ def _fallback_unit_worksheet(body: UnitWorksheetRequest) -> list:
                         "D. Touch everything.",
                     ],
                     "answer": "B",
-                    "explanation": "短文中提到 They read the signs and speak quietly，因此应选择 B。",
+                    "explanation": "本题考查阅读信息提取。短文中提到 They read the signs and speak quietly，因此应选择 B。",
                     "knowledge_points": [point],
+                    "exam_focus": f"阅读中提取 {point} 相关信息",
+                    "common_mistake": common_mistake,
+                    "teaching_intent": planned["teaching_intent"],
                 }
         else:
-            if index % 3 == 1:
+            if planned["planned_type"] in ["概念辨析", "易错校验", "易错辨析", "方法解释"]:
                 question = {
                     "id": f"q{index}",
                     "unit_id": unit_id,
-                    "type": "填空题",
-                    "question": f"围绕“{point}”完成填空：2.4 × 3 = （  ）。",
-                    "options": [],
-                    "answer": "7.2",
-                    "explanation": "24×3=72，2.4 有一位小数，所以结果是 7.2。",
-                    "knowledge_points": [point],
-                }
-            elif index % 3 == 2:
-                question = {
-                    "id": f"q{index}",
-                    "unit_id": unit_id,
-                    "type": "选择题",
-                    "question": f"下列算式中，最适合检验“{point}”掌握情况的是哪一个？",
-                    "options": ["A. 3.6 ÷ 0.6", "B. 36 + 6", "C. 36 - 6", "D. 36 × 6"],
+                    "type": planned["planned_type"],
+                    "question": f"围绕“{point}”判断：计算 2.4×3 时，可以先算 24×3，再把结果缩小到原来的十分之一。这个说法对吗？",
+                    "options": ["A. 对", "B. 错", "C. 无法判断", "D. 只在整数乘法中成立"],
                     "answer": "A",
-                    "explanation": "A 是小数除法，能直接考查相关运算方法。",
+                    "explanation": "本题考查小数乘法算理。24×3=72，2.4 比 24 缩小到十分之一，所以积也要缩小到十分之一，结果是 7.2。",
                     "knowledge_points": [point],
+                    "exam_focus": f"辨析 {point} 的核心方法",
+                    "common_mistake": common_mistake,
+                    "teaching_intent": planned["teaching_intent"],
+                }
+            elif planned["planned_type"] in ["基础计算", "方法辨析"]:
+                question = {
+                    "id": f"q{index}",
+                    "unit_id": unit_id,
+                    "type": planned["planned_type"],
+                    "question": f"计算并验算：3.6÷0.6。本题用于检查“{point}”。",
+                    "options": [],
+                    "answer": "6",
+                    "explanation": "本题考查小数除法转化。把除数和被除数同时扩大 10 倍，变成 36÷6=6，验算 0.6×6=3.6。",
+                    "knowledge_points": [point],
+                    "exam_focus": f"准确运用 {point} 进行计算",
+                    "common_mistake": common_mistake,
+                    "teaching_intent": planned["teaching_intent"],
                 }
             else:
                 question = {
                     "id": f"q{index}",
                     "unit_id": unit_id,
-                    "type": "应用题",
-                    "question": f"一盒彩笔 4.8 元，买 5 盒需要多少元？请列式计算，并说明与“{point}”的关系。",
+                    "type": planned["planned_type"],
+                    "question": f"一盒彩笔 4.8 元，买 5 盒需要多少元？请列式计算，并说明这道题和“{point}”有什么关系。",
                     "options": [],
                     "answer": "4.8×5=24（元）",
-                    "explanation": "求 5 个 4.8 是多少，用乘法计算。",
+                    "explanation": "本题考查情境建模。求 5 个 4.8 是多少，用乘法计算；列式后还要关注小数点位置。",
                     "knowledge_points": [point],
+                    "exam_focus": f"把 {point} 迁移到生活情境",
+                    "common_mistake": common_mistake,
+                    "teaching_intent": planned["teaching_intent"],
                 }
         questions.append(question)
     return questions
@@ -710,8 +853,11 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
 
 async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
     """按上海五年级教材目录范围和知识点生成原创复习题。"""
+    exam_profile = _unit_exam_profile(body, selected_units)
+    question_plan = _question_plan(body)
     prompt = f"""你是一位熟悉上海小学五年级教学节奏的命题老师。
-只依据下面给出的单元名称和知识点生成原创模拟题，不引用或复刻教材原文。
+你的任务不是随机出练习题，而是按“单元诊断型复习卷”的方式命题。
+只依据下面给出的单元名称、考点画像和题组计划生成原创题目，不引用或复刻教材原文。
 
 学科：{SUBJECT_LABELS[body.subject]}
 学期：{SEMESTER_LABELS[body.semester]}
@@ -720,12 +866,21 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 难度：{DIFFICULTY_LABELS[body.difficulty]}
 题量：{body.question_count}
 
+考点画像：
+{json.dumps(exam_profile, ensure_ascii=False)}
+
+题组计划：
+{json.dumps(question_plan, ensure_ascii=False)}
+
 要求：
-1. 数学可包含填空、选择、计算、应用题；英语可包含词汇、单项选择、句型转换、阅读理解。
-2. 选择题必须有4个互不重复的选项；非选择题 options 返回空数组。
-3. 每道题必须有明确答案和简短解析。
-4. unit_id 必须从这些值中选择：{", ".join(body.unit_ids)}
-5. 只返回 JSON 对象，不要输出 Markdown。
+1. 必须逐题遵守“题组计划”的 planned_type、teaching_intent 和 knowledge_point。
+2. 数学题要体现概念辨析、基本计算、方法辨析、易错校验、应用建模中的一种，不出奥数题，不超出五年级范围。
+3. 英语题要围绕语言功能：词汇语境、核心句型、语法功能、阅读信息提取、短句表达。不要出脱离单元主题的百科常识题。
+4. 选择题必须有4个互不重复的选项；非选择题 options 返回空数组。
+5. 每道题必须有明确答案和教师式解析：说明考点、解题步骤或语言规则、易错提醒。
+6. 每道题都必须填写 exam_focus、common_mistake、teaching_intent。
+7. unit_id 必须从这些值中选择：{", ".join(body.unit_ids)}
+8. 只返回 JSON 对象，不要输出 Markdown。
 
 返回格式：
 {{
@@ -738,7 +893,10 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
       "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],
       "answer": "A",
       "explanation": "解析",
-      "knowledge_points": ["知识点"]
+      "knowledge_points": ["知识点"],
+      "exam_focus": "本题考查的核心考点",
+      "common_mistake": "本题针对的典型错误",
+      "teaching_intent": "为什么要出这道题"
     }}
   ]
 }}"""
@@ -762,7 +920,7 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
         except Exception as e:
             last_error = e
     print(f"Unit worksheet AI fallback: {last_error}")
-    return _fallback_unit_worksheet(body)
+    return _fallback_unit_worksheet(body, selected_units)
 
 # ===== AI 分析（DeepSeek） =====
 
@@ -1274,6 +1432,12 @@ def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, inc
             safe_multicell(pdf, f"答案：{question.get('answer', '')}")
             if body.include_explanations:
                 pdf.set_text_color(70, 78, 90)
+                if question.get("exam_focus"):
+                    safe_multicell(pdf, f"考点：{question.get('exam_focus', '')}")
+                if question.get("common_mistake"):
+                    safe_multicell(pdf, f"易错提醒：{question.get('common_mistake', '')}")
+                if question.get("teaching_intent"):
+                    safe_multicell(pdf, f"命题意图：{question.get('teaching_intent', '')}")
                 safe_multicell(pdf, f"解析：{question.get('explanation', '')}")
             pdf.set_text_color(0, 0, 0)
         pdf.ln(3)
@@ -1306,6 +1470,9 @@ async def generate_unit_worksheet(body: UnitWorksheetRequest):
                     "type": question.get("type", ""),
                     "question": question.get("question", ""),
                     "knowledge_points": question.get("knowledge_points", []),
+                    "exam_focus": question.get("exam_focus", ""),
+                    "common_mistake": question.get("common_mistake", ""),
+                    "teaching_intent": question.get("teaching_intent", ""),
                 }
                 for index, question in enumerate(questions, start=1)
             ],
