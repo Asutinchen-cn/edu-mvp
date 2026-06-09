@@ -427,7 +427,12 @@ async def get_baidu_access_token() -> str:
 async def baidu_ocr(image_bytes: bytes) -> str:
     """调用百度 OCR 识别试卷（优先试卷专用接口）"""
     try:
+        if not BAIDU_OCR_API_KEY or not BAIDU_OCR_SECRET_KEY:
+            return "[OCR服务未配置] 请配置 BAIDU_OCR_API_KEY 和 BAIDU_OCR_SECRET_KEY 后再上传试卷"
+
         token = await get_baidu_access_token()
+        if not token:
+            return "[OCR服务异常] 未能获取 OCR 访问令牌，请检查百度 OCR 配置"
         img_b64 = base64.b64encode(image_bytes).decode("utf-8")
         
         # 1. 试卷分析与识别（专用接口）
@@ -947,6 +952,20 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
     """使用 DeepSeek 进行错题分析"""
     subject_label = SUBJECT_LABELS.get(subject, "未知学科")
+    ocr_text = (ocr_text or "").strip()
+    if not ocr_text or ocr_text.startswith("[OCR"):
+        return {
+            "subject": subject,
+            "wrong_questions": [],
+            "error_types": ["OCR识别未完成"],
+            "weak_points": ["未识别到明确错题"],
+            "root_cause": ocr_text or "OCR 未识别到文字内容",
+            "recommendations": [
+                "请先确认 OCR 服务已配置",
+                "重新上传文字清晰、包含批改痕迹的试卷图片",
+                f"如需分析{subject_label}试卷，请在上传区选择正确学科"
+            ]
+        }
     subject_rules = (
         "这是英语试卷。请只分析英语相关问题，例如词汇理解、句型语法、阅读信息提取、拼写、时态、介词、物主代词、表达完整性。不要输出数学知识点。"
         if subject == "english"
