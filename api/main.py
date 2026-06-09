@@ -528,6 +528,7 @@ async def call_deepseek(
     temperature: float = 0.3,
     max_tokens: int = 2000,
     json_mode: bool = False,
+    timeout_seconds: float = 60.0,
 ) -> str:
     """调用 DeepSeek API"""
     if not DEEPSEEK_API_KEY:
@@ -544,7 +545,8 @@ async def call_deepseek(
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    timeout = httpx.Timeout(timeout_seconds, connect=10.0, read=timeout_seconds, write=timeout_seconds, pool=10.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(DEEPSEEK_API_URL, json=payload, headers=headers)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
@@ -916,6 +918,7 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
                 temperature=0.3 if attempt else 0.5,
                 max_tokens=6000,
                 json_mode=True,
+                timeout_seconds=35.0,
             )
             result = json.loads(_strip_json_fence(raw))
             questions = result.get("questions", [])
