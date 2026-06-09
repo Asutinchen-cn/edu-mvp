@@ -853,8 +853,10 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
 
 async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
     """按上海五年级教材目录范围和知识点生成原创复习题。"""
+    model_question_count = min(body.question_count, 6)
+    model_body = body.copy(update={"question_count": model_question_count})
     exam_profile = _unit_exam_profile(body, selected_units)
-    question_plan = _question_plan(body)
+    question_plan = _question_plan(model_body)
     prompt = f"""你是一位熟悉上海小学五年级教学节奏的命题老师。
 你的任务不是随机出练习题，而是按“单元诊断型复习卷”的方式命题。
 只依据下面给出的单元名称、考点画像和题组计划生成原创题目，不引用或复刻教材原文。
@@ -864,7 +866,7 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 单元：{"、".join(u["title"] for u in selected_units)}
 知识点：{"、".join(body.knowledge_points)}
 难度：{DIFFICULTY_LABELS[body.difficulty]}
-题量：{body.question_count}
+题量：{model_body.question_count}
 
 考点画像：
 {json.dumps(exam_profile, ensure_ascii=False)}
@@ -916,6 +918,10 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
             )
             result = json.loads(_strip_json_fence(raw))
             questions = result.get("questions", [])
+            questions = _validate_generated_questions(model_body, questions)
+            if body.question_count > model_question_count:
+                fallback_questions = _fallback_unit_worksheet(body, selected_units)
+                questions.extend(fallback_questions[model_question_count:])
             return _validate_generated_questions(body, questions)
         except Exception as e:
             last_error = e

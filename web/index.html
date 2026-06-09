@@ -1084,7 +1084,16 @@ async function generateUnitWorksheet() {
                 include_explanations: true
             })
         });
-        const data = await resp.json();
+        const raw = await resp.text();
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (parseError) {
+            const message = resp.status === 504
+                ? '生成时间过长，请稍后重试或先减少题量'
+                : '服务器返回异常，请稍后重试';
+            throw new Error(message);
+        }
         if (!resp.ok) throw new Error(data.error || '生成失败');
         document.getElementById('worksheetDownloads').innerHTML = `
             <a class="worksheet-download" download="${data.question_pdf.filename}" href="${data.question_pdf.data_url}">📄 下载题目卷</a>
