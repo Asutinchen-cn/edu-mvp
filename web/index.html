@@ -553,6 +553,12 @@
             margin-bottom: 16px;
             flex-wrap: wrap;
         }
+        .history-subjects {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
         .filter-tab {
             padding: 6px 16px;
             border: 1px solid var(--line);
@@ -635,6 +641,20 @@
             background: #f2f4f7;
             padding: 2px 10px;
             border-radius: 10px;
+        }
+        .subject-tag {
+            font-size: 12px;
+            font-weight: 800;
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+        .subject-tag.math {
+            color: #1769e8;
+            background: #edf5ff;
+        }
+        .subject-tag.english {
+            color: #c2410c;
+            background: #fff3e8;
         }
         .history-image-link {
             display: inline-flex;
@@ -1292,6 +1312,11 @@
         <h3>🕒 错题库 / 历史分析记录</h3>
         <span class="history-count" id="historyCount">共 0 条记录</span>
     </div>
+    <div class="history-subjects">
+        <button class="filter-tab active" data-subject-filter="all" onclick="setSubjectArchive('all')">全部学科 <span id="subjectCountAll">0</span></button>
+        <button class="filter-tab" data-subject-filter="math" onclick="setSubjectArchive('math')">数学 <span id="subjectCountMath">0</span></button>
+        <button class="filter-tab" data-subject-filter="english" onclick="setSubjectArchive('english')">英语 <span id="subjectCountEnglish">0</span></button>
+    </div>
     <div class="history-filters">
         <button class="filter-tab active" data-filter="week" onclick="filterHistory('week', this)">本周</button>
         <button class="filter-tab" data-filter="month" onclick="filterHistory('month', this)">本月</button>
@@ -1328,6 +1353,7 @@
 let uploadedFiles = [];
 let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]');
 let currentFilter = 'week';
+let currentSubjectArchive = 'all';
 let selectedRecordId = null;
 let pendingDeleteId = null;
 let worksheetUnits = [];
@@ -1929,6 +1955,14 @@ function showGuide() {
 
 // ===== HISTORY =====
 function getFilteredRecords() {
+    let filtered = getDateFilteredRecords();
+    if (currentSubjectArchive !== 'all') {
+        filtered = filtered.filter(r => (r.subject || 'math') === currentSubjectArchive);
+    }
+    return filtered;
+}
+
+function getDateFilteredRecords() {
     const now = new Date();
     let filtered = [...historyRecords];
 
@@ -1953,6 +1987,18 @@ function getFilteredRecords() {
     }
 
     return filtered;
+}
+
+function updateSubjectArchiveCounts(records) {
+    const counts = records.reduce((acc, record) => {
+        const subject = record.subject === 'english' ? 'english' : 'math';
+        acc.all += 1;
+        acc[subject] += 1;
+        return acc;
+    }, { all: 0, math: 0, english: 0 });
+    document.getElementById('subjectCountAll').textContent = counts.all;
+    document.getElementById('subjectCountMath').textContent = counts.math;
+    document.getElementById('subjectCountEnglish').textContent = counts.english;
 }
 
 function escapeHtml(value) {
@@ -2004,6 +2050,14 @@ function setHistoryFilter(filter) {
     });
 }
 
+function setSubjectArchive(subject) {
+    currentSubjectArchive = subject;
+    document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(t => {
+        t.classList.toggle('active', t.dataset.subjectFilter === subject);
+    });
+    renderHistory();
+}
+
 async function syncServerWrongBank() {
     const grade = document.getElementById('gradeSelect').value;
     const studentName = (document.getElementById('studentName').value || '').trim();
@@ -2013,6 +2067,9 @@ async function syncServerWrongBank() {
     }
 
     const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '50' });
+    if (currentSubjectArchive !== 'all') {
+        params.set('subject', currentSubjectArchive);
+    }
     try {
         const data = await requestJson(`/exams?${params.toString()}`, { method: 'GET' });
         const serverRecords = (data.exams || []).map(exam => makeServerHistoryRecord(exam, grade, studentName));
@@ -2022,7 +2079,8 @@ async function syncServerWrongBank() {
         localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
         setHistoryFilter('all');
         renderHistory();
-        alert(serverRecords.length ? `已同步 ${serverRecords.length} 条服务器错题库记录` : '服务器错题库暂无这个学生的记录');
+        const subjectText = currentSubjectArchive === 'all' ? '全部学科' : (currentSubjectArchive === 'english' ? '英语' : '数学');
+        alert(serverRecords.length ? `已同步 ${subjectText} ${serverRecords.length} 条服务器错题库记录` : `服务器错题库暂无${subjectText}记录`);
     } catch (e) {
         alert('查询服务器错题库失败：' + e.message);
     }
@@ -2030,6 +2088,7 @@ async function syncServerWrongBank() {
 
 function renderHistory() {
     const list = document.getElementById('historyList');
+    updateSubjectArchiveCounts(getDateFilteredRecords());
     const records = getFilteredRecords();
     document.getElementById('historyCount').textContent = `共 ${records.length} 条记录`;
 
@@ -2048,6 +2107,8 @@ function renderHistory() {
         const sel = r.id === selectedRecordId ? 'selected' : '';
         const dateStr = new Date(r.date).toLocaleDateString('zh-CN');
         const imageUrl = safeUploadUrl(r.imageUrl);
+        const subject = r.subject === 'english' ? 'english' : 'math';
+        const subjectLabel = subject === 'english' ? '英语' : '数学';
         return `
             <div class="history-item ${sel}" onclick="toggleRecord(${JSON.stringify(r.id)})">
                 <div class="history-item-header">
@@ -2055,6 +2116,7 @@ function renderHistory() {
                         <div class="history-item-date">${escapeHtml(dateStr)}</div>
                         <div class="history-item-name">${escapeHtml(r.name)}（${escapeHtml(r.grade)}）</div>
                         <div class="history-item-meta">
+                            <span class="subject-tag ${subject}">${subjectLabel}</span>
                             <span class="error-rate ${rateClass}">错误率 ${r.errorRate}%</span>
                             <span class="weak-tag">薄弱: ${escapeHtml(r.weakPoint)}</span>
                             ${r.serverSynced ? '<span class="history-source">服务器</span>' : ''}

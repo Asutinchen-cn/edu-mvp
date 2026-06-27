@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, inspect, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, inspect, text, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -1240,26 +1240,45 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 @app.get("/exams")
-async def list_exams(grade: str = None, student_name: str = None, limit: int = 10):
-    """获取最近上传的试卷列表（必须 年级 + 学生名 同时提供）"""
+async def list_exams(grade: str = None, student_name: str = None, subject: str = None, limit: int = 10):
+    """获取最近上传的试卷列表（必须 年级 + 学生名 同时提供，可按学科筛选）"""
     grade = (grade or "").strip()
     student_name = (student_name or "").strip()
+    subject = (subject or "").strip()
 
     # 按产品需求：只有年级不展示任何历史，必须双字段同时存在
     if not grade or not student_name:
-        return JSONResponse({"exams": []})
+        return JSONResponse({"exams": [], "subject_archive": {"all": 0, "math": 0, "english": 0}})
+    if subject and subject not in SUBJECT_LABELS:
+        return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
 
     db = SessionLocal()
-    exams = (
-        db.query(Exam)
+    base_query = db.query(Exam).filter(Exam.grade == grade, Exam.student_name == student_name)
+    archive_rows = (
+        db.query(Exam.subject, func.count(Exam.id))
         .filter(Exam.grade == grade, Exam.student_name == student_name)
+        .group_by(Exam.subject)
+        .all()
+    )
+    archive = {"all": 0, "math": 0, "english": 0}
+    for row_subject, row_count in archive_rows:
+        if row_subject in archive:
+            archive[row_subject] = row_count
+            archive["all"] += row_count
+
+    if subject:
+        base_query = base_query.filter(Exam.subject == subject)
+
+    exams = (
+        base_query
         .order_by(Exam.created_at.desc())
-        .limit(limit)
+        .limit(max(1, min(limit, 100)))
         .all()
     )
     db.close()
 
     return JSONResponse({
+        "subject_archive": archive,
         "exams": [{
             "id": e.id,
             "grade": e.grade,
