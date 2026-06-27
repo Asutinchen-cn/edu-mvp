@@ -569,6 +569,16 @@
             color: white;
             border-color: var(--brand-blue);
         }
+        .sync-bank-btn {
+            border-color: rgba(23, 105, 232, 0.24);
+            color: var(--brand-blue);
+            font-weight: 800;
+        }
+        .sync-bank-btn:hover {
+            background: #edf5ff;
+            color: var(--brand-blue);
+            border-color: rgba(23, 105, 232, 0.38);
+        }
         .date-range {
             display: flex; align-items: center; gap: 6px;
             margin-left: auto;
@@ -619,6 +629,23 @@
             padding: 2px 10px;
             border-radius: 10px;
         }
+        .history-source {
+            font-size: 12px;
+            color: #667085;
+            background: #f2f4f7;
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+        .history-image-link {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            margin-top: 10px;
+            color: var(--brand-blue);
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .history-image-link:hover { text-decoration: underline; }
         .delete-btn {
             background: none; border: none;
             color: #ccc; font-size: 18px;
@@ -635,6 +662,12 @@
             border-top: 1px solid #dde4f0;
             font-size: 13px; color: #555;
             line-height: 1.8;
+        }
+        .history-detail pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: inherit;
         }
         .history-item.selected .history-detail { display: block; }
 
@@ -1256,13 +1289,14 @@
 <!-- HISTORY CARD -->
 <div class="history-card" id="history">
     <div class="history-header">
-        <h3>🕒 历史分析记录</h3>
+        <h3>🕒 错题库 / 历史分析记录</h3>
         <span class="history-count" id="historyCount">共 0 条记录</span>
     </div>
     <div class="history-filters">
         <button class="filter-tab active" data-filter="week" onclick="filterHistory('week', this)">本周</button>
         <button class="filter-tab" data-filter="month" onclick="filterHistory('month', this)">本月</button>
         <button class="filter-tab" data-filter="all" onclick="filterHistory('all', this)">全部</button>
+        <button class="filter-tab sync-bank-btn" onclick="syncServerWrongBank()">查询服务器错题库</button>
         <div class="date-range">
             <input type="date" id="dateFrom">
             <span>~</span>
@@ -1487,7 +1521,11 @@ async function startAnalysis() {
             document.getElementById('loadingText').textContent = `正在分析第 ${i + 1}/${uploadedFiles.length} 份试卷...`;
             const params = new URLSearchParams({ grade: grade, student_name: name });
             const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, { method: 'POST' });
-            apiAnalyses.push(analysisJson.analysis || analysisJson);
+            apiAnalyses.push({
+                ...(analysisJson.analysis || {}),
+                exam_id: analysisJson.exam_id || uploadJson.id,
+                image_url: analysisJson.image_url || uploadJson.image_url || null
+            });
         }
 
         document.getElementById('loadingText').textContent = '正在整理学习方案...';
@@ -1504,7 +1542,10 @@ async function startAnalysis() {
             errorRate: analysisData.errorRate,
             weakPoint: analysisData.weakPoints[0] || '',
             result: JSON.stringify(analysisData),
-            structured: true
+            structured: true,
+            serverId: analysisData.examIds[0] || null,
+            imageUrl: analysisData.imageUrls[0] || null,
+            serverSynced: Boolean(analysisData.examIds[0])
         };
         historyRecords.unshift(record);
         localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
@@ -1549,6 +1590,8 @@ function mergeApiAnalyses(analyses, subject) {
         error_types: [],
         weak_points: [],
         recommendations: [],
+        exam_ids: [],
+        image_urls: [],
         root_cause: ''
     };
     const addUnique = (target, values) => {
@@ -1558,6 +1601,8 @@ function mergeApiAnalyses(analyses, subject) {
     };
     analyses.forEach(item => {
         const analysis = item.analysis || item || {};
+        if (item.exam_id && !merged.exam_ids.includes(item.exam_id)) merged.exam_ids.push(item.exam_id);
+        if (item.image_url && !merged.image_urls.includes(item.image_url)) merged.image_urls.push(item.image_url);
         merged.wrong_questions.push(...(analysis.wrong_questions || []));
         addUnique(merged.error_types, analysis.error_types || []);
         addUnique(merged.weak_points, analysis.weak_points || []);
@@ -1577,6 +1622,8 @@ function parseApiResponse(json, name, grade, subject) {
         const wq = Array.isArray(analysis.wrong_questions) ? analysis.wrong_questions : [];
         const et = Array.isArray(analysis.error_types) ? analysis.error_types : [];
         const rec = Array.isArray(analysis.recommendations) ? analysis.recommendations : [];
+        const examIds = Array.isArray(analysis.exam_ids) ? analysis.exam_ids : [];
+        const imageUrls = Array.isArray(analysis.image_urls) ? analysis.image_urls : [];
         const subjectLabel = subject === 'english' ? '英语' : '数学';
         const errorRate = wq.length > 0 ? Math.min(90, Math.floor((wq.length / (wq.length + 3)) * 100)) : 0;
         const displayErrorTypes = et.length ? et : ['待进一步确认'];
@@ -1586,6 +1633,8 @@ function parseApiResponse(json, name, grade, subject) {
             grade: grade,
             subject: subject,
             subjectLabel: subjectLabel,
+            examIds: examIds,
+            imageUrls: imageUrls,
             errorRate: errorRate,
             weakPoints: displayWeakPoints,
             evaluation: analysis.root_cause || '未能从图片中识别到明确错题，请确认图片清晰且包含批改痕迹。',
@@ -1906,6 +1955,79 @@ function getFilteredRecords() {
     return filtered;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function safeUploadUrl(url) {
+    return typeof url === 'string' && url.startsWith('/uploads/') ? url : '';
+}
+
+function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
+    const weakPoints = Array.isArray(exam.weak_points) ? exam.weak_points : [];
+    const weakPoint = weakPoints[0] || '待分析';
+    const serverId = Number(exam.id);
+    const result = {
+        来源: '腾讯云错题库',
+        试卷编号: serverId,
+        学科: exam.subject === 'english' ? '英语' : '数学',
+        薄弱知识点: weakPoints,
+        识别预览: exam.ocr_preview || '',
+        上传文件: exam.image_url || ''
+    };
+    return {
+        id: `server-${serverId}`,
+        serverId: serverId,
+        date: exam.created || new Date().toISOString(),
+        name: exam.student || fallbackName,
+        grade: exam.grade || fallbackGrade,
+        subject: exam.subject || 'math',
+        errorRate: weakPoints.length ? Math.min(80, Math.max(20, weakPoints.length * 20)) : 0,
+        weakPoint: weakPoint,
+        result: JSON.stringify(result, null, 2),
+        structured: true,
+        imageUrl: safeUploadUrl(exam.image_url),
+        serverSynced: true
+    };
+}
+
+function setHistoryFilter(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-tab[data-filter]').forEach(t => {
+        t.classList.toggle('active', t.dataset.filter === filter);
+    });
+}
+
+async function syncServerWrongBank() {
+    const grade = document.getElementById('gradeSelect').value;
+    const studentName = (document.getElementById('studentName').value || '').trim();
+    if (!grade || !studentName) {
+        alert('请先在上传区选择年级并填写学生姓名，再查询服务器错题库');
+        return;
+    }
+
+    const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '50' });
+    try {
+        const data = await requestJson(`/exams?${params.toString()}`, { method: 'GET' });
+        const serverRecords = (data.exams || []).map(exam => makeServerHistoryRecord(exam, grade, studentName));
+        const recordMap = new Map(historyRecords.map(r => [r.serverId ? `server-${r.serverId}` : `local-${r.id}`, r]));
+        serverRecords.forEach(record => recordMap.set(`server-${record.serverId}`, record));
+        historyRecords = [...recordMap.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
+        localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
+        setHistoryFilter('all');
+        renderHistory();
+        alert(serverRecords.length ? `已同步 ${serverRecords.length} 条服务器错题库记录` : '服务器错题库暂无这个学生的记录');
+    } catch (e) {
+        alert('查询服务器错题库失败：' + e.message);
+    }
+}
+
 function renderHistory() {
     const list = document.getElementById('historyList');
     const records = getFilteredRecords();
@@ -1925,20 +2047,25 @@ function renderHistory() {
         const rateClass = r.errorRate >= 40 ? 'high' : r.errorRate >= 20 ? 'medium' : 'low';
         const sel = r.id === selectedRecordId ? 'selected' : '';
         const dateStr = new Date(r.date).toLocaleDateString('zh-CN');
+        const imageUrl = safeUploadUrl(r.imageUrl);
         return `
-            <div class="history-item ${sel}" onclick="toggleRecord(${r.id})">
+            <div class="history-item ${sel}" onclick="toggleRecord(${JSON.stringify(r.id)})">
                 <div class="history-item-header">
                     <div class="history-item-info">
-                        <div class="history-item-date">${dateStr}</div>
-                        <div class="history-item-name">${r.name}（${r.grade}）</div>
+                        <div class="history-item-date">${escapeHtml(dateStr)}</div>
+                        <div class="history-item-name">${escapeHtml(r.name)}（${escapeHtml(r.grade)}）</div>
                         <div class="history-item-meta">
                             <span class="error-rate ${rateClass}">错误率 ${r.errorRate}%</span>
-                            <span class="weak-tag">薄弱: ${r.weakPoint}</span>
+                            <span class="weak-tag">薄弱: ${escapeHtml(r.weakPoint)}</span>
+                            ${r.serverSynced ? '<span class="history-source">服务器</span>' : ''}
                         </div>
                     </div>
-                    <button class="delete-btn" onclick="event.stopPropagation(); askDelete(${r.id})">🗑️</button>
+                    <button class="delete-btn" onclick="event.stopPropagation(); askDelete(${JSON.stringify(r.id)})">🗑️</button>
                 </div>
-                <div class="history-detail">${r.result}</div>
+                <div class="history-detail">
+                    <pre>${escapeHtml(r.result)}</pre>
+                    ${imageUrl ? `<a class="history-image-link" href="${escapeHtml(imageUrl)}" target="_blank" onclick="event.stopPropagation()">查看上传原图</a>` : ''}
+                </div>
             </div>`;
     }).join('') + '</div>';
 }
@@ -1949,9 +2076,7 @@ function toggleRecord(id) {
 }
 
 function filterHistory(filter, btn) {
-    currentFilter = filter;
-    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
+    setHistoryFilter(filter);
     renderHistory();
 }
 
@@ -1963,6 +2088,10 @@ function setupDateFilters() {
 // ===== DELETE =====
 function askDelete(id) {
     pendingDeleteId = id;
+    const record = historyRecords.find(r => r.id === id);
+    document.getElementById('confirmMsg').textContent = record?.serverId
+        ? '确定要从服务器错题库删除这条记录吗？'
+        : '确定要删除这条本地记录吗？';
     document.getElementById('confirmDialog').classList.add('show');
 }
 
@@ -1971,8 +2100,18 @@ function closeConfirm() {
     document.getElementById('confirmDialog').classList.remove('show');
 }
 
-function confirmAction() {
+async function confirmAction() {
     if (pendingDeleteId) {
+        const record = historyRecords.find(r => r.id === pendingDeleteId);
+        if (record?.serverId) {
+            const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
+            try {
+                await requestJson(`/exams/${record.serverId}?${params.toString()}`, { method: 'DELETE' });
+            } catch (e) {
+                alert('删除服务器记录失败：' + e.message);
+                return;
+            }
+        }
         historyRecords = historyRecords.filter(r => r.id !== pendingDeleteId);
         localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
         if (selectedRecordId === pendingDeleteId) selectedRecordId = null;

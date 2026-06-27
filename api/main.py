@@ -12,6 +12,7 @@ import json
 import io
 import httpx
 import base64
+import uuid
 from datetime import datetime
 from urllib.parse import quote
 from dotenv import load_dotenv
@@ -35,6 +36,18 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
 # 百度 OCR 配置
 BAIDU_OCR_API_KEY = os.getenv("BAIDU_OCR_API_KEY", "")
 BAIDU_OCR_SECRET_KEY = os.getenv("BAIDU_OCR_SECRET_KEY", "")
+
+# 上传文件持久化。服务器容器会挂载 /uploads；本地开发则落到项目 uploads 目录。
+UPLOAD_DIR = os.getenv("UPLOAD_DIR") or (
+    "/uploads" if os.path.isdir("/uploads") else os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
+)
+UPLOAD_URL_PREFIX = os.getenv("UPLOAD_URL_PREFIX", "/uploads").rstrip("/")
+ALLOWED_UPLOAD_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "application/pdf": ".pdf",
+}
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # 单元复习卷：仅保存公开教材目录范围和人工整理知识点，不保存教材原文
 CURRICULUM_UNITS = [
@@ -392,6 +405,8 @@ app.add_middleware(
 static_dir = os.path.join(os.path.dirname(__file__), "..", "web")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+if os.path.exists(UPLOAD_DIR):
+    app.mount(UPLOAD_URL_PREFIX, StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # 数据库依赖
 def get_db():
@@ -400,6 +415,38 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def _save_upload_file(content: bytes, file: UploadFile) -> str:
+    ext = ALLOWED_UPLOAD_TYPES.get(file.content_type or "", "")
+    original_ext = os.path.splitext(file.filename or "")[1].lower()
+    if original_ext in {".jpg", ".jpeg", ".png", ".pdf"}:
+        ext = ".jpg" if original_ext == ".jpeg" else original_ext
+    stored_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex}{ext}"
+    stored_path = os.path.join(UPLOAD_DIR, stored_name)
+    with open(stored_path, "wb") as fh:
+        fh.write(content)
+    return f"{UPLOAD_URL_PREFIX}/{stored_name}"
+
+
+def _public_upload_url(image_path: str | None) -> str | None:
+    if not image_path:
+        return None
+    if image_path.startswith(f"{UPLOAD_URL_PREFIX}/"):
+        return image_path
+    return None
+
+
+def _local_upload_path(image_path: str | None) -> str | None:
+    public_url = _public_upload_url(image_path)
+    if not public_url:
+        return None
+    filename = os.path.basename(public_url)
+    local_path = os.path.abspath(os.path.join(UPLOAD_DIR, filename))
+    upload_root = os.path.abspath(UPLOAD_DIR)
+    if local_path.startswith(upload_root + os.sep):
+        return local_path
+    return None
 
 # ===== 百度 OCR =====
 
@@ -1105,7 +1152,7 @@ async def upload_exam(
         if subject not in SUBJECT_LABELS:
             db.close()
             return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
-        if file.content_type not in {"image/jpeg", "image/png", "application/pdf"}:
+        if file.content_type not in ALLOWED_UPLOAD_TYPES:
             db.close()
             return JSONResponse({"success": False, "error": "仅支持 JPG、PNG 或 PDF 文件"}, status_code=400)
 
@@ -1115,6 +1162,8 @@ async def upload_exam(
             db.close()
             return JSONResponse({"success": False, "error": "文件大小不能超过 10MB"}, status_code=400)
 
+        image_url = _save_upload_file(content, file)
+
         # 百度 OCR 识别
         ocr_result = await baidu_ocr(content)
 
@@ -1123,7 +1172,7 @@ async def upload_exam(
             grade=grade,
             subject=subject,
             student_name=student_name,
-            image_path=file.filename,
+            image_path=image_url,
             ocr_text=ocr_result
         )
         db.add(exam)
@@ -1138,6 +1187,7 @@ async def upload_exam(
             "grade": grade,
             "subject": subject,
             "student": student_name,
+            "image_url": image_url,
             "ocr_preview": ocr_result[:200] + "..." if len(ocr_result) > 200 else ocr_result,
             "next_step": f"POST /analyze/{exam.id}?grade={grade}&student_name={student_name} 进行AI分析"
         })
@@ -1179,6 +1229,7 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
             "grade": exam.grade,
             "subject": exam.subject,
             "student": exam.student_name,
+            "image_url": _public_upload_url(exam.image_path),
             "analysis": analysis,
             "summary": {
                 "weak_points": analysis.get("weak_points", []),
@@ -1215,6 +1266,7 @@ async def list_exams(grade: str = None, student_name: str = None, limit: int = 1
             "subject": e.subject,
             "student": e.student_name,
             "image": e.image_path,
+            "image_url": _public_upload_url(e.image_path),
             "ocr_preview": e.ocr_text[:50] + "..." if e.ocr_text else None,
             "weak_points": json.loads(e.weak_points) if e.weak_points else None,
             "created": e.created_at.isoformat() if e.created_at else None
@@ -1242,6 +1294,7 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
         "subject": exam.subject,
         "student": exam.student_name,
         "image": exam.image_path,
+        "image_url": _public_upload_url(exam.image_path),
         "ocr_text": exam.ocr_text,
         "ai_analysis": json.loads(exam.ai_analysis) if exam.ai_analysis else None,
         "weak_points": json.loads(exam.weak_points) if exam.weak_points else None,
@@ -1266,9 +1319,15 @@ async def delete_exam(exam_id: int, grade: str = None, student_name: str = None)
         db.close()
         return JSONResponse({"success": False, "error": "无权限删除该记录（学生姓名不匹配）"}, status_code=403)
 
+    stored_file = _local_upload_path(exam.image_path)
     db.delete(exam)
     db.commit()
     db.close()
+    if stored_file and os.path.exists(stored_file):
+        try:
+            os.remove(stored_file)
+        except OSError as e:
+            print(f"Upload file cleanup warning: {e}")
     return JSONResponse({"success": True, "message": "已删除"})
 
 @app.get("/")
