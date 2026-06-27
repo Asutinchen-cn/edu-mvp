@@ -36,7 +36,7 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
 BAIDU_OCR_API_KEY = os.getenv("BAIDU_OCR_API_KEY", "")
 BAIDU_OCR_SECRET_KEY = os.getenv("BAIDU_OCR_SECRET_KEY", "")
 
-# 五年级单元复习卷：仅保存公开教材目录范围和人工整理知识点，不保存教材原文
+# 单元复习卷：仅保存公开教材目录范围和人工整理知识点，不保存教材原文
 CURRICULUM_UNITS = [
     {
         "id": "math-5a-review",
@@ -331,6 +331,7 @@ CURRICULUM_UNITS = [
 SUBJECT_LABELS = {"math": "数学", "english": "英语"}
 SEMESTER_LABELS = {"first": "第一学期", "second": "第二学期"}
 DIFFICULTY_LABELS = {"basic": "基础", "advanced": "提高", "challenge": "挑战"}
+WORKSHEET_GRADE_LABEL = "六年级"
 
 # 数据模型
 class Exam(Base):
@@ -869,15 +870,16 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
 
 
 async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
-    """按上海五年级教材目录范围和知识点生成原创复习题。"""
+    """按上海小学教材目录范围和知识点生成原创复习题。"""
     model_question_count = min(body.question_count, 6)
     model_body = body.copy(update={"question_count": model_question_count})
     exam_profile = _unit_exam_profile(body, selected_units)
     question_plan = _question_plan(model_body)
-    prompt = f"""你是一位熟悉上海小学五年级教学节奏的命题老师。
+    prompt = f"""你是一位熟悉上海小学{WORKSHEET_GRADE_LABEL}教学节奏的命题老师。
 你的任务不是随机出练习题，而是按“单元诊断型复习卷”的方式命题。
 只依据下面给出的单元名称、考点画像和题组计划生成原创题目，不引用或复刻教材原文。
 
+年级：{WORKSHEET_GRADE_LABEL}
 学科：{SUBJECT_LABELS[body.subject]}
 学期：{SEMESTER_LABELS[body.semester]}
 单元：{"、".join(u["title"] for u in selected_units)}
@@ -893,7 +895,7 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 
 要求：
 1. 必须逐题遵守“题组计划”的 planned_type、teaching_intent 和 knowledge_point。
-2. 数学题要体现概念辨析、基本计算、方法辨析、易错校验、应用建模中的一种，不出奥数题，不超出五年级范围。
+2. 数学题要体现概念辨析、基本计算、方法辨析、易错校验、应用建模中的一种，不出奥数题，不超出{WORKSHEET_GRADE_LABEL}范围。
 3. 英语题要围绕语言功能：词汇语境、核心句型、语法功能、阅读信息提取、短句表达。不要出脱离单元主题的百科常识题。
 4. 选择题必须有4个互不重复的选项；非选择题 options 返回空数组。
 5. 每道题必须有明确答案和教师式解析：说明考点、解题步骤或语言规则、易错提醒。
@@ -1529,7 +1531,7 @@ async def generate_unit_worksheet(body: UnitWorksheetRequest):
         question_pdf = generate_unit_worksheet_pdf(body, questions, include_answers=False)
         answer_pdf = generate_unit_worksheet_pdf(body, questions, include_answers=True)
         prefix = (
-            f"五年级{SUBJECT_LABELS[body.subject]}-"
+            f"{WORKSHEET_GRADE_LABEL}{SUBJECT_LABELS[body.subject]}-"
             f"{SEMESTER_LABELS[body.semester]}-{DIFFICULTY_LABELS[body.difficulty]}"
         )
         return {
