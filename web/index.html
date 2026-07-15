@@ -621,14 +621,13 @@
         .history-item-meta {
             display: flex; gap: 12px; margin-top: 6px;
         }
-        .error-rate {
+        .issue-count {
             font-size: 12px; font-weight: 600;
             padding: 2px 10px;
             border-radius: 10px;
+            color: #b42318;
+            background: #fff1f0;
         }
-        .error-rate.high { background: #ffe8e8; color: #e53935; }
-        .error-rate.medium { background: #fff3e0; color: #f57c00; }
-        .error-rate.low { background: #e6faf0; color: #4DCB9D; }
         .weak-tag {
             font-size: 12px; color: var(--brand-blue);
             background: #edf5ff;
@@ -732,7 +731,8 @@
         /* ===== SUMMARY CARD ===== */
         .summary-card {
             background: linear-gradient(135deg, #f0f7ff 0%, #fff7ef 100%);
-            border-radius: 22px;
+            border: 1px solid rgba(23, 105, 232, 0.12);
+            border-radius: 12px;
             padding: 24px;
             margin-bottom: 20px;
             box-shadow: 0 12px 28px rgba(23, 105, 232, 0.09);
@@ -742,27 +742,26 @@
             margin-bottom: 16px;
             flex-wrap: wrap;
         }
-        .error-rate-display {
+        .analysis-count-display {
             text-align: center; min-width: 100px;
         }
-        .error-rate-number {
-            font-size: 36px; font-weight: 700;
-            color: #e53935;
+        .analysis-count-number {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 4px;
+            color: var(--brand-blue);
         }
-        .error-rate-number.low { color: #4DCB9D; }
-        .error-rate-number.medium { color: #f57c00; }
-        .error-rate-label {
+        .analysis-count-number strong {
+            font-size: 40px;
+            line-height: 1;
+        }
+        .analysis-count-number span {
+            font-size: 14px;
+            font-weight: 800;
+        }
+        .analysis-count-label {
             font-size: 12px; color: #999; margin-top: 2px;
-        }
-        .progress-bar-bg {
-            width: 120px; height: 8px;
-            background: #e0e7ff; border-radius: 4px;
-            margin: 6px auto 0; overflow: hidden;
-        }
-        .progress-bar-fill {
-            height: 100%; border-radius: 4px;
-            background: linear-gradient(90deg, #4DCB9D, #f57c00, #e53935);
-            transition: width 0.6s ease;
         }
         .summary-weak {
             flex: 1;
@@ -792,6 +791,110 @@
             background: white;
             border-radius: 10px;
             border-left: 4px solid var(--brand-orange);
+            line-height: 1.6;
+        }
+        .evidence-note {
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .parent-plan {
+            margin-top: 22px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(23, 105, 232, 0.14);
+        }
+        .parent-plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .parent-plan-header h4 {
+            font-size: 18px;
+            color: var(--ink);
+            margin-bottom: 4px;
+        }
+        .parent-plan-header p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .priority-label {
+            flex-shrink: 0;
+            padding: 7px 11px;
+            border: 1px solid rgba(255, 122, 26, 0.24);
+            border-radius: 8px;
+            background: #fff7ef;
+            color: #c95100;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .parent-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            border-top: 1px solid rgba(23, 105, 232, 0.1);
+            border-bottom: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .parent-action {
+            padding: 16px;
+            min-width: 0;
+        }
+        .parent-action + .parent-action {
+            border-left: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .parent-action strong {
+            display: block;
+            color: var(--brand-blue);
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        .parent-action span {
+            display: block;
+            color: #41516b;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+        .seven-day-plan {
+            margin-top: 18px;
+        }
+        .seven-day-plan h5 {
+            font-size: 14px;
+            color: var(--ink);
+            margin-bottom: 12px;
+        }
+        .plan-steps {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0;
+        }
+        .plan-step {
+            position: relative;
+            padding: 0 14px 0 20px;
+            min-width: 0;
+        }
+        .plan-step::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 5px;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--brand-orange);
+            box-shadow: 0 0 0 4px rgba(255, 122, 26, 0.12);
+        }
+        .plan-step strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+        .plan-step span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
             line-height: 1.6;
         }
 
@@ -1109,6 +1212,17 @@
                 align-items: flex-start;
                 gap: 10px;
             }
+            .summary-top, .parent-plan-header { align-items: flex-start; }
+            .analysis-count-display { text-align: left; }
+            .analysis-count-number { justify-content: flex-start; }
+            .parent-actions, .plan-steps { grid-template-columns: 1fr; }
+            .parent-action { padding: 14px 0; }
+            .parent-action + .parent-action {
+                border-left: 0;
+                border-top: 1px solid rgba(23, 105, 232, 0.1);
+            }
+            .plan-step { margin-bottom: 14px; }
+            .priority-label { white-space: normal; }
             .history-filters { align-items: flex-start; }
             .date-range { width: 100%; flex-wrap: wrap; }
         }
@@ -1128,7 +1242,7 @@
         <div class="logo-icon"><img src="logo.png" alt="虾胡闹" onerror="this.onerror=null;this.src='/static/logo.png';"></div>
         <div class="brand">
             <h1>虾胡闹，有钳途</h1>
-            <div class="sub-brand">K12 教育 · 成就每一份成长</div>
+            <div class="sub-brand">上海初中复习 · 每次订正都有下一步</div>
         </div>
     </div>
 
@@ -1147,8 +1261,8 @@
 <div class="hero">
     <div class="hero-shell">
         <div class="hero-copy">
-            <h2>AI 智能分析，<span class="accent">精准提升</span>学习效率</h2>
-            <p>上传试卷后自动识别错题，定位薄弱知识点；也可以按上海六年级教材单元生成复习卷和答案解析。</p>
+            <h2>看懂错在哪里，<span class="accent">知道下一步</span>怎么练</h2>
+            <p>上传初中试卷，获得有依据的错因诊断、家长复习摘要和 7 天行动安排；也可以按上海教材单元生成复习卷与答案解析。</p>
             <div class="hero-actions">
                 <a class="hero-link" href="#analysis">开始分析试卷</a>
                 <a class="hero-link secondary" href="#worksheet">生成单元复习卷</a>
@@ -1156,8 +1270,8 @@
         </div>
         <div class="hero-card" aria-label="虾胡闹品牌与功能概览">
             <div class="hero-logo"><img src="logo.png" alt="虾胡闹，有钳途" onerror="this.onerror=null;this.src='/static/logo.png';"></div>
-            <h3>从错题到复习卷，一页完成</h3>
-            <p>面向家庭辅导场景，把“看不懂错在哪里”和“没时间出练习题”这两件事合在一个清爽流程里。</p>
+            <h3>从一次错题，走到下一次会做</h3>
+            <p>先找到真正卡住的知识点，再安排每天能完成的小任务，让家长少催促、孩子有方向。</p>
             <div class="hero-mini-grid">
                 <div class="hero-mini"><strong>OCR</strong><span>试卷识别</span></div>
                 <div class="hero-mini"><strong>AI</strong><span>错因分析</span></div>
@@ -1205,19 +1319,10 @@
             <div class="form-group">
                 <label>年级</label>
                 <select id="gradeSelect">
-                    <option value="">请选择年级</option>
-                    <option value="一年级">一年级</option>
-                    <option value="二年级">二年级</option>
-                    <option value="三年级">三年级</option>
-                    <option value="四年级">四年级</option>
-                    <option value="五年级">五年级</option>
                     <option value="六年级" selected>六年级</option>
-                    <option value="初一">初一</option>
-                    <option value="初二">初二</option>
-                    <option value="初三">初三</option>
-                    <option value="高一">高一</option>
-                    <option value="高二">高二</option>
-                    <option value="高三">高三</option>
+                    <option value="七年级">七年级</option>
+                    <option value="八年级">八年级</option>
+                    <option value="九年级">九年级</option>
                 </select>
             </div>
             <div class="form-group">
@@ -1623,7 +1728,7 @@ async function startAnalysis() {
             name: name,
             grade: grade,
             subject: subject,
-            errorRate: analysisData.errorRate,
+            wrongCount: analysisData.wrongQuestions.length,
             weakPoint: analysisData.weakPoints[0] || '',
             result: JSON.stringify(analysisData),
             structured: true,
@@ -1709,7 +1814,6 @@ function parseApiResponse(json, name, grade, subject) {
         const examIds = Array.isArray(analysis.exam_ids) ? analysis.exam_ids : [];
         const imageUrls = Array.isArray(analysis.image_urls) ? analysis.image_urls : [];
         const subjectLabel = subject === 'english' ? '英语' : '数学';
-        const errorRate = wq.length > 0 ? Math.min(90, Math.floor((wq.length / (wq.length + 3)) * 100)) : 0;
         const displayErrorTypes = et.length ? et : ['待进一步确认'];
         const displayWeakPoints = wp.length ? wp.slice(0, 3) : ['未识别到明确薄弱点'];
         return {
@@ -1719,7 +1823,6 @@ function parseApiResponse(json, name, grade, subject) {
             subjectLabel: subjectLabel,
             examIds: examIds,
             imageUrls: imageUrls,
-            errorRate: errorRate,
             weakPoints: displayWeakPoints,
             evaluation: analysis.root_cause || '未能从图片中识别到明确错题，请确认图片清晰且包含批改痕迹。',
             errorTypes: displayErrorTypes.map((e, i) => ({
@@ -1745,27 +1848,75 @@ function parseApiResponse(json, name, grade, subject) {
     }
 }
 
+function buildParentReviewPlan(data) {
+    const weakPoints = Array.isArray(data.weakPoints) ? data.weakPoints.filter(Boolean) : [];
+    const wrongCount = Array.isArray(data.wrongQuestions) ? data.wrongQuestions.length : 0;
+    const subjectLabel = data.subjectLabel || (data.subject === 'english' ? '英语' : '数学');
+    const focus = weakPoints[0] || `${subjectLabel}基础能力`;
+    const secondFocus = weakPoints[1] || focus;
+    const firstPractice = data.weakDetails?.[0]?.practice || `围绕${focus}完成 5 道同类题`;
+
+    return {
+        focus: focus,
+        today: wrongCount
+            ? `先让孩子口述错因，再独立订正 ${Math.min(wrongCount, 2)} 道代表题；最后完成 5 道同类题。`
+            : `先核对试卷图片和批改痕迹，再围绕${focus}完成一次 15 分钟基础自测。`,
+        thisWeek: `本周只抓“${focus}”和“${secondFocus}”两个重点，每次 20 分钟，正确率稳定后再增加难度。`,
+        parentCheck: '不直接讲答案。请孩子说出“考什么、错在哪、下次怎么检查”，能讲清楚才算真正订正。',
+        days: [
+            { label: '第 1 天', task: wrongCount ? `订正 ${wrongCount} 道错题，给每题写一句错因` : '核对试卷并确认真实错题' },
+            { label: '第 2-3 天', task: firstPractice },
+            { label: '第 4-5 天', task: `回做原题，并完成“${secondFocus}”变式练习` },
+            { label: '第 6-7 天', task: '做一次 15 分钟小测，只复盘仍然出错的题' }
+        ]
+    };
+}
+
 function renderAnalysisResult(data) {
-    // Summary card
-    const rateClass = data.errorRate >= 40 ? '' : data.errorRate >= 20 ? 'medium' : 'low';
-    const rateColorClass = data.errorRate >= 40 ? '' : data.errorRate >= 20 ? 'medium' : 'low';
     const badgeClasses = ['hot', 'warm', 'cool'];
+    const plan = buildParentReviewPlan(data);
+    const wrongCount = data.wrongQuestions.length;
 
     document.getElementById('summaryCard').innerHTML = `
         <div class="summary-top">
-            <div class="error-rate-display">
-                <div class="error-rate-number ${rateColorClass}">${data.errorRate}%</div>
-                <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${data.errorRate}%"></div></div>
-                <div class="error-rate-label">总错误率</div>
+            <div class="analysis-count-display">
+                <div class="analysis-count-number"><strong>${wrongCount}</strong><span>道</span></div>
+                <div class="analysis-count-label">本次识别错题</div>
             </div>
             <div class="summary-weak">
                 <h4>🏷️ 薄弱知识点 TOP ${data.weakPoints.length}</h4>
                 <div class="weak-badges">
-                    ${data.weakPoints.map((w, i) => `<span class="weak-badge ${badgeClasses[i] || 'warm'}">${w}</span>`).join('')}
+                    ${data.weakPoints.map((w, i) => `<span class="weak-badge ${badgeClasses[i] || 'warm'}">${escapeHtml(w)}</span>`).join('')}
                 </div>
             </div>
         </div>
-        <div class="summary-eval">💡 ${data.evaluation}</div>
+        <div class="summary-eval"><strong>老师判断：</strong>${escapeHtml(data.evaluation)}</div>
+        <div class="evidence-note">本结果仅依据上传图片中可见的题目、作答和批改痕迹，不把识别到的错题数推算成整张试卷错误率。</div>
+        <section class="parent-plan" aria-label="家长复习摘要">
+            <div class="parent-plan-header">
+                <div>
+                    <h4>给家长的复习摘要</h4>
+                    <p>把诊断变成每天能完成的小任务，先求真正掌握，再追求题量。</p>
+                </div>
+                <span class="priority-label">本周优先：${escapeHtml(plan.focus)}</span>
+            </div>
+            <div class="parent-actions">
+                <div class="parent-action"><strong>今天做什么</strong><span>${escapeHtml(plan.today)}</span></div>
+                <div class="parent-action"><strong>本周怎么练</strong><span>${escapeHtml(plan.thisWeek)}</span></div>
+                <div class="parent-action"><strong>家长怎么检查</strong><span>${escapeHtml(plan.parentCheck)}</span></div>
+            </div>
+            <div class="seven-day-plan">
+                <h5>7 天复习安排</h5>
+                <div class="plan-steps">
+                    ${plan.days.map(day => `
+                        <div class="plan-step">
+                            <strong>${escapeHtml(day.label)}</strong>
+                            <span>${escapeHtml(day.task)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </section>
     `;
 
     // Detail sections
@@ -1782,7 +1933,7 @@ function renderAnalysisResult(data) {
             <div class="detail-body">
                 ${data.errorTypes.map(et => `
                     <div class="error-type-row">
-                        <div class="error-type-label">${et.name}</div>
+                        <div class="error-type-label">${escapeHtml(et.name)}</div>
                         <div class="error-type-bar-bg">
                             <div class="error-type-bar-fill" style="width:${et.percent}%;background:${et.color}"></div>
                         </div>
@@ -1806,10 +1957,10 @@ function renderAnalysisResult(data) {
                     <div class="wrong-q-item">
                         <div class="wrong-q-top">
                             <span class="wrong-q-num">第 ${q.num} 题</span>
-                            <span class="wrong-q-tag">${q.tag}</span>
+                            <span class="wrong-q-tag">${escapeHtml(q.tag)}</span>
                         </div>
-                        <div class="wrong-q-reason">原因：${q.reason}</div>
-                        <div class="wrong-q-answer">✅ 正确答案：${q.correctAnswer}</div>
+                        <div class="wrong-q-reason">原因：${escapeHtml(q.reason)}</div>
+                        <div class="wrong-q-answer">✅ 正确答案：${escapeHtml(q.correctAnswer)}</div>
                     </div>
                 `).join('')}
             </div>
@@ -1827,9 +1978,9 @@ function renderAnalysisResult(data) {
             <div class="detail-body">
                 ${data.weakDetails.map(w => `
                     <div class="weak-detail-card">
-                        <div class="weak-detail-name">🔴 ${w.name}</div>
-                        <div class="weak-detail-practice">📝 练习方向：${w.practice}</div>
-                        <div class="weak-detail-resource">📖 推荐资源：${w.resource}</div>
+                        <div class="weak-detail-name">🔴 ${escapeHtml(w.name)}</div>
+                        <div class="weak-detail-practice">📝 练习方向：${escapeHtml(w.practice)}</div>
+                        <div class="weak-detail-resource">📖 推荐资源：${escapeHtml(w.resource)}</div>
                     </div>
                 `).join('')}
             </div>
@@ -1847,6 +1998,7 @@ function closeResult() {
 
 // ===== PRACTICE QUESTIONS =====
 let currentAnalysisData = null;
+let currentPracticeQuestions = [];
 
 async function generatePractice() {
     if (!currentAnalysisData) return;
@@ -1887,30 +2039,31 @@ async function generatePractice() {
 }
 
 function renderPracticeQuestions(questions) {
+    currentPracticeQuestions = questions;
     const container = document.getElementById('practiceList');
     container.innerHTML = questions.map((q, i) => {
         const typeClass = q.type === '选择题' ? 'choice' : 'fill';
-        const optionsHtml = q.options ? `
+        const optionsHtml = Array.isArray(q.options) && q.options.length ? `
             <div class="q-options" id="q-opts-${i}">
                 ${q.options.map((opt, j) => {
                     const label = String.fromCharCode(65 + j);
-                    return `<div class="q-option" data-idx="${j}" onclick="checkAnswer(${i}, '${q.answer}', ${j}, '${label}')">${label}. ${opt}</div>`;
+                    return `<div class="q-option" data-idx="${j}" onclick="checkAnswer(${i}, ${j})">${label}. ${escapeHtml(opt)}</div>`;
                 }).join('')}
             </div>` : `
             <div class="q-actions">
                 <input type="text" id="fill-input-${i}" placeholder="请输入答案" style="padding:6px 12px;border:1px solid #dde4f0;border-radius:8px;font-size:13px;width:200px">
-                <button class="q-action-btn" onclick="checkFillAnswer(${i}, '${q.answer}')">确认</button>
+                <button class="q-action-btn" onclick="checkFillAnswer(${i})">确认</button>
             </div>`;
         return `
             <div class="q-card" id="q-card-${i}">
                 <div class="q-top">
                     <span class="q-num">第 ${i+1} 题</span>
-                    <span class="q-type ${typeClass}">${q.type}</span>
+                    <span class="q-type ${typeClass}">${escapeHtml(q.type)}</span>
                 </div>
-                <div class="q-text">${q.question}</div>
+                <div class="q-text">${escapeHtml(q.question)}</div>
                 ${optionsHtml}
-                <div class="q-answer" id="q-answer-${i}">✅ 正确答案：${q.answer}</div>
-                <div class="q-hint" id="q-hint-${i}">💡 提示：${q.hint}</div>
+                <div class="q-answer" id="q-answer-${i}">✅ 正确答案：${escapeHtml(q.answer)}</div>
+                <div class="q-hint" id="q-hint-${i}">💡 提示：${escapeHtml(q.hint)}</div>
                 <div class="q-actions">
                     <button class="q-action-btn" onclick="showHint(${i})">查看提示</button>
                     <button class="q-action-btn" onclick="showAnswer(${i})">查看答案</button>
@@ -1919,8 +2072,9 @@ function renderPracticeQuestions(questions) {
     }).join('');
 }
 
-function checkAnswer(qIdx, correct, selectedIdx, selectedLabel) {
+function checkAnswer(qIdx, selectedIdx) {
     const opts = document.querySelectorAll(`#q-opts-${qIdx} .q-option`);
+    const correct = String(currentPracticeQuestions[qIdx]?.answer || '').trim().toUpperCase();
     const correctIdx = correct.charCodeAt(0) - 65;
     opts.forEach((opt, i) => {
         opt.style.pointerEvents = 'none';
@@ -1929,9 +2083,10 @@ function checkAnswer(qIdx, correct, selectedIdx, selectedLabel) {
     });
 }
 
-function checkFillAnswer(qIdx, correct) {
+function checkFillAnswer(qIdx) {
     const input = document.getElementById(`fill-input-${qIdx}`);
     const answerDiv = document.getElementById(`q-answer-${qIdx}`);
+    const correct = String(currentPracticeQuestions[qIdx]?.answer || '').trim();
     if (input.value.trim() === correct) {
         input.style.borderColor = '#4DCB9D';
         input.style.background = '#e6faf0';
@@ -1955,10 +2110,15 @@ function exportPracticePdf() {
     if (!currentAnalysisData) return;
     const cards = document.querySelectorAll('.q-card');
     if (!cards.length) return;
+    const studentName = escapeHtml(currentAnalysisData.studentName);
+    const grade = escapeHtml(currentAnalysisData.grade);
+    const weakPoints = Array.isArray(currentAnalysisData.weakPoints)
+        ? currentAnalysisData.weakPoints.map(escapeHtml).join('、')
+        : '';
 
     // Build printable HTML
     let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>巩固练习题 - ${currentAnalysisData.studentName}(${currentAnalysisData.grade})</title>
+    <title>巩固练习题 - ${studentName}(${grade})</title>
     <style>
         body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;padding:40px;color:#333;line-height:1.8}
         h1{font-size:20px;text-align:center;margin-bottom:4px}
@@ -1972,19 +2132,19 @@ function exportPracticePdf() {
         .footer{text-align:center;font-size:11px;color:#999;margin-top:30px}
     </style></head><body>`;
     html += `<h1>🎯 巩固练习题</h1>`;
-    html += `<div class="info">学生：${currentAnalysisData.studentName} | 年级：${currentAnalysisData.grade} | 薄弱知识点：${currentAnalysisData.weakPoints.join('、')}</div>`;
+    html += `<div class="info">学生：${studentName} | 年级：${grade} | 薄弱知识点：${weakPoints}</div>`;
     html += `<div class="divider"></div>`;
 
     cards.forEach((card, i) => {
         const type = card.querySelector('.q-type')?.textContent || '';
         const text = card.querySelector('.q-text')?.textContent || '';
         html += `<div class="q">`;
-        html += `<div class="q-title">第 ${i+1} 题 [${type}]</div>`;
-        html += `<div class="q-text">${text}</div>`;
+        html += `<div class="q-title">第 ${i+1} 题 [${escapeHtml(type)}]</div>`;
+        html += `<div class="q-text">${escapeHtml(text)}</div>`;
         const options = card.querySelectorAll('.q-option');
         if (options.length) {
             options.forEach(opt => {
-                html += `<div class="q-option">${opt.textContent}</div>`;
+                html += `<div class="q-option">${escapeHtml(opt.textContent)}</div>`;
             });
         } else {
             html += `<div class="q-fill">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>`;
@@ -2092,13 +2252,25 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         name: exam.student || fallbackName,
         grade: exam.grade || fallbackGrade,
         subject: exam.subject || 'math',
-        errorRate: weakPoints.length ? Math.min(80, Math.max(20, weakPoints.length * 20)) : 0,
+        wrongCount: Number.isFinite(Number(exam.wrong_count)) ? Number(exam.wrong_count) : null,
         weakPoint: weakPoint,
         result: JSON.stringify(result, null, 2),
         structured: true,
         imageUrl: safeUploadUrl(exam.image_url),
         serverSynced: true
     };
+}
+
+function historyWrongCount(record) {
+    if (Number.isFinite(Number(record.wrongCount))) {
+        return Math.max(0, Number(record.wrongCount));
+    }
+    try {
+        const result = JSON.parse(record.result || '{}');
+        return Array.isArray(result.wrongQuestions) ? result.wrongQuestions.length : null;
+    } catch (e) {
+        return null;
+    }
 }
 
 function setHistoryFilter(filter) {
@@ -2161,12 +2333,13 @@ function renderHistory() {
     }
 
     list.innerHTML = '<div class="history-list">' + records.map((r, i) => {
-        const rateClass = r.errorRate >= 40 ? 'high' : r.errorRate >= 20 ? 'medium' : 'low';
         const sel = r.id === selectedRecordId ? 'selected' : '';
         const dateStr = new Date(r.date).toLocaleDateString('zh-CN');
         const imageUrl = safeUploadUrl(r.imageUrl);
         const subject = r.subject === 'english' ? 'english' : 'math';
         const subjectLabel = subject === 'english' ? '英语' : '数学';
+        const wrongCount = historyWrongCount(r);
+        const issueText = wrongCount === null ? '已完成分析' : `识别错题 ${wrongCount} 道`;
         return `
             <div class="history-item ${sel}" onclick="toggleRecord(${JSON.stringify(r.id)})">
                 <div class="history-item-header">
@@ -2175,7 +2348,7 @@ function renderHistory() {
                         <div class="history-item-name">${escapeHtml(r.name)}（${escapeHtml(r.grade)}）</div>
                         <div class="history-item-meta">
                             <span class="subject-tag ${subject}">${subjectLabel}</span>
-                            <span class="error-rate ${rateClass}">错误率 ${r.errorRate}%</span>
+                            <span class="issue-count">${issueText}</span>
                             <span class="weak-tag">薄弱: ${escapeHtml(r.weakPoint)}</span>
                             ${r.serverSynced ? '<span class="history-source">服务器</span>' : ''}
                         </div>
