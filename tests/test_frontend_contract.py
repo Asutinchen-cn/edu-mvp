@@ -17,6 +17,14 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("worksheetMeta = data.meta || null", HTML)
         self.assertGreaterEqual(len(re.findall(r"renderWorksheetSource\(\)", HTML)), 2)
 
+    def test_worksheet_is_grade_aware_and_does_not_silently_reuse_sixth_grade(self):
+        self.assertIn('id="worksheetGrade"', HTML)
+        self.assertIn('value="七年级" disabled', HTML)
+        self.assertIn('value="八年级" disabled', HTML)
+        self.assertIn('value="九年级" disabled', HTML)
+        self.assertIn("u.grade === grade", HTML)
+        self.assertRegex(HTML, r"grade:\s*document\.getElementById\('worksheetGrade'\)\.value")
+
     def test_analysis_grade_selector_is_focused_on_junior_middle_school(self):
         for grade in ("六年级", "七年级", "八年级", "九年级"):
             self.assertIn(f'<option value="{grade}"', HTML)

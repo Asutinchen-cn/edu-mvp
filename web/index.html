@@ -1174,7 +1174,7 @@
         .worksheet-header { margin-bottom: 18px; }
         .worksheet-header h3 { font-size: 22px; color: var(--ink); margin-bottom: 7px; font-weight: 900; }
         .worksheet-header p { color: var(--muted); font-size: 14px; line-height: 1.7; }
-        .worksheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .worksheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
         .worksheet-field { display: flex; flex-direction: column; gap: 6px; }
         .worksheet-field.full { grid-column: 1 / -1; }
         .worksheet-field label { font-size: 13px; color: var(--muted); font-weight: 800; }
@@ -1490,12 +1490,21 @@
 <div class="worksheet-card" id="worksheet">
     <div class="worksheet-header">
         <h3>📚 按教材单元生成复习卷</h3>
-        <p>面向上海六年级数学与英语，按单元、知识点和难度生成原创题目卷与答案解析卷。</p>
+        <p>按上海初中教材目录选择年级、单元和知识点，生成原创题目卷与答案解析卷。</p>
     </div>
     <div class="curriculum-source" id="worksheetSource" role="note" aria-live="polite">
         正在核对教材范围...
     </div>
     <div class="worksheet-grid">
+        <div class="worksheet-field">
+            <label>年级</label>
+            <select id="worksheetGrade" onchange="renderWorksheetUnits()">
+                <option value="六年级">六年级</option>
+                <option value="七年级" disabled>七年级（目录核对中）</option>
+                <option value="八年级" disabled>八年级（目录核对中）</option>
+                <option value="九年级" disabled>九年级（版本核对中）</option>
+            </select>
+        </div>
         <div class="worksheet-field">
             <label>学科</label>
             <select id="worksheetSubject" onchange="renderWorksheetUnits()">
@@ -1621,14 +1630,17 @@ async function loadWorksheetUnits() {
 }
 
 function renderWorksheetUnits() {
+    const grade = document.getElementById('worksheetGrade').value;
     const subject = document.getElementById('worksheetSubject').value;
     const semester = document.getElementById('worksheetSemester').value;
-    const units = worksheetUnits.filter(u => u.subject === subject && u.semester === semester);
+    const units = worksheetUnits.filter(u => u.grade === grade && u.subject === subject && u.semester === semester);
     document.getElementById('worksheetUnits').innerHTML = units.map((u, i) => `
         <label class="worksheet-check">
-            <input type="checkbox" name="worksheetUnit" value="${u.id}" ${i === 0 ? 'checked' : ''} onchange="renderWorksheetKnowledge()">
-            ${u.title}
-        </label>`).join('') || '当前学期暂无单元';
+            <input type="checkbox" name="worksheetUnit" value="${escapeHtml(u.id)}" ${i === 0 ? 'checked' : ''} onchange="renderWorksheetKnowledge()">
+            ${escapeHtml(u.title)}
+        </label>`).join('') || '当前年级与学期暂无已核对单元';
+    document.getElementById('worksheetTitle').value = `上海${grade}单元复习卷`;
+    document.getElementById('worksheetGenerateBtn').disabled = !units.length;
     renderWorksheetSource();
     renderWorksheetKnowledge();
 }
@@ -1643,19 +1655,19 @@ function safeCurriculumSourceUrl(value) {
 }
 
 function renderWorksheetSource() {
+    const grade = document.getElementById('worksheetGrade').value;
     const subject = document.getElementById('worksheetSubject').value;
     const semester = document.getElementById('worksheetSemester').value;
-    const units = worksheetUnits.filter(u => u.subject === subject && u.semester === semester);
-    const sourceNote = units[0]?.source_note || '上海六年级教材目录';
-    const sourceIndex = semester === 'first' ? 0 : 1;
-    const source = worksheetMeta?.sources?.[sourceIndex] || null;
+    const units = worksheetUnits.filter(u => u.grade === grade && u.subject === subject && u.semester === semester);
+    const sourceNote = units[0]?.source_note || `上海${grade}教材目录`;
+    const source = worksheetMeta?.sources?.find(item => item.semester === semester) || null;
     const sourceUrl = safeCurriculumSourceUrl(source?.url || '');
     const subjectLabel = subject === 'english' ? '英语' : '数学';
     const semesterLabel = semester === 'first' ? '第一学期' : '第二学期';
     document.getElementById('worksheetSource').innerHTML = `
         <div>
-            <strong>教材范围已核对：六年级${subjectLabel} ${semesterLabel}</strong>
-            <span>${escapeHtml(sourceNote)}，当前共 ${units.length} 个单元。仅使用目录和知识点标签，不存储教材正文。</span>
+            <strong>${units.length ? '教材范围已核对' : '教材范围核对中'}：${escapeHtml(grade)}${subjectLabel} ${semesterLabel}</strong>
+            <span>${escapeHtml(sourceNote)}${units.length ? `，当前共 ${units.length} 个单元。` : '，暂不开放生成。'} ${escapeHtml(worksheetMeta?.scope_note || '')}</span>
         </div>
         ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">查看上海市教委目录</a>` : ''}`;
 }
@@ -1665,8 +1677,8 @@ function renderWorksheetKnowledge() {
     const points = worksheetUnits.filter(u => selectedIds.includes(u.id)).flatMap(u => u.knowledge_points);
     document.getElementById('worksheetKnowledge').innerHTML = [...new Set(points)].map(point => `
         <label class="worksheet-check">
-            <input type="checkbox" name="worksheetKnowledge" value="${point}" checked>
-            ${point}
+            <input type="checkbox" name="worksheetKnowledge" value="${escapeHtml(point)}" checked>
+            ${escapeHtml(point)}
         </label>`).join('') || '请先选择单元';
 }
 
@@ -1685,6 +1697,7 @@ async function generateUnitWorksheet() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                grade: document.getElementById('worksheetGrade').value,
                 subject: document.getElementById('worksheetSubject').value,
                 semester: document.getElementById('worksheetSemester').value,
                 unit_ids: unitIds,
@@ -1711,15 +1724,15 @@ async function generateUnitWorksheet() {
             <a class="worksheet-download answer" download="${data.answer_pdf.filename}" href="${data.answer_pdf.data_url}">✅ 下载答案解析卷</a>`;
         document.getElementById('worksheetPreview').innerHTML = data.questions.map(q => `
             <div class="worksheet-preview-item">
-                <strong>${q.number}. [${q.type}]</strong> ${q.question}
-                ${q.exam_focus ? `<div class="worksheet-meta">考点：${q.exam_focus}</div>` : ''}
-                ${q.teaching_intent ? `<div class="worksheet-meta">命题意图：${q.teaching_intent}</div>` : ''}
+                <strong>${escapeHtml(q.number)}. [${escapeHtml(q.type)}]</strong> ${escapeHtml(q.question)}
+                ${q.exam_focus ? `<div class="worksheet-meta">考点：${escapeHtml(q.exam_focus)}</div>` : ''}
+                ${q.teaching_intent ? `<div class="worksheet-meta">命题意图：${escapeHtml(q.teaching_intent)}</div>` : ''}
             </div>`).join('');
         document.getElementById('worksheetResult').classList.add('show');
     } catch (e) {
         alert('生成复习卷失败：' + e.message);
     } finally {
-        btn.disabled = false;
+        btn.disabled = !document.querySelector('input[name="worksheetUnit"]');
         btn.textContent = '✨ 生成题目卷和答案卷';
     }
 }

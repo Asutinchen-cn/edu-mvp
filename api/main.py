@@ -348,7 +348,7 @@ CURRICULUM_UNITS = [
 SUBJECT_LABELS = {"math": "数学", "english": "英语"}
 SEMESTER_LABELS = {"first": "第一学期", "second": "第二学期"}
 DIFFICULTY_LABELS = {"basic": "基础", "advanced": "提高", "challenge": "挑战"}
-WORKSHEET_GRADE_LABEL = "六年级"
+WORKSHEET_GRADE_LABEL = CURRICULUM_META["default_grade"]
 CURRICULUM_UNITS = SIXTH_GRADE_CURRICULUM_UNITS
 
 # 数据模型
@@ -621,6 +621,7 @@ async def call_deepseek(
 
 
 class UnitWorksheetRequest(BaseModel):
+    grade: str
     subject: str
     semester: str
     unit_ids: list[str] = Field(min_length=1)
@@ -660,12 +661,14 @@ def _unit_exam_profile(body: UnitWorksheetRequest, selected_units: list) -> dict
     if body.subject == "math":
         common_mistakes = []
         for point in selected_points:
-            if any(key in point for key in ["整除", "因数", "倍数", "素数", "合数"]):
-                common_mistakes.append("混淆因数与倍数，或遗漏成对的因数")
-            elif "分数" in point:
-                common_mistakes.append("通分、约分或除以分数时没有正确处理分母")
+            if any(key in point for key in ["代数式", "一次式", "字母表示"]):
+                common_mistakes.append("代数式书写不规范，或合并同类项时混淆系数与字母")
             elif any(key in point for key in ["比", "比例", "百分"]):
                 common_mistakes.append("没有统一比较标准，或混淆比值与百分比")
+            elif any(key in point for key in ["可能性", "数据", "统计"]):
+                common_mistakes.append("把可能性判断当成确定结论，或统计图表信息读取不完整")
+            elif any(key in point for key in ["圆柱", "圆锥", "展开图"]):
+                common_mistakes.append("混淆底面周长与侧面展开图的长，或漏看展开方向")
             elif any(key in point for key in ["圆", "弧", "扇形"]):
                 common_mistakes.append("混淆半径与直径，或周长与面积单位使用错误")
             elif any(key in point for key in ["有理数", "数轴", "绝对值", "乘方"]):
@@ -689,7 +692,13 @@ def _unit_exam_profile(body: UnitWorksheetRequest, selected_units: list) -> dict
     common_mistakes = []
     for point in selected_points:
         lower_point = point.lower()
-        if any(key in lower_point for key in ["date", "holiday", "festival", "birthday"]):
+        if any(key in lower_point for key in ["sport", "safety"]):
+            common_mistakes.append("运动搭配或安全规则表达不完整")
+        elif any(key in lower_point for key in ["animal", "farm"]):
+            common_mistakes.append("动物特征描述与行为动词搭配不准确")
+        elif any(key in lower_point for key in ["difference", "different"]):
+            common_mistakes.append("比较人物差异时遗漏比较对象或完整句结构")
+        elif any(key in lower_point for key in ["date", "holiday", "festival", "birthday"]):
             common_mistakes.append("日期、节日活动和文化习俗搭配不准确")
         elif any(key in lower_point for key in ["must", "rule", "sign", "museum"]):
             common_mistakes.append("must / mustn't 与公共场所规则混用")
@@ -812,12 +821,33 @@ def _fallback_math_content(point: str) -> dict:
             "answer": "C",
             "explanation": "4 和 6 的最小公倍数是 12，3/4=9/12，1/6=2/12，所以和是 11/12。",
         }
+    if any(key in point for key in ["代数式", "一次式", "字母表示"]):
+        return {
+            "question": "当 a=3 时，代数式 2a+5 的值是多少？",
+            "options": ["A. 8", "B. 10", "C. 11", "D. 16"],
+            "answer": "C",
+            "explanation": "把 a=3 代入 2a+5，得到 2×3+5=11。代入后仍要按运算顺序计算。",
+        }
+    if any(key in point for key in ["可能性", "数据", "统计"]):
+        return {
+            "question": "袋中有 3 个红球和 1 个蓝球，任意摸出 1 个球。下列判断正确的是哪一项？",
+            "options": ["A. 一定摸到红球", "B. 摸到红球的可能性较大", "C. 一定摸到蓝球", "D. 两种颜色可能性相同"],
+            "answer": "B",
+            "explanation": "红球数量多于蓝球，所以摸到红球的可能性较大，但不是一定发生。",
+        }
     if any(key in point for key in ["比", "比例", "百分", "等可能"]):
         return {
             "question": "六（1）班 60 名学生中有 45 人参加社团，参加社团的人数占全班的百分之几？",
             "options": ["A. 25%", "B. 45%", "C. 60%", "D. 75%"],
             "answer": "D",
             "explanation": "用参加人数除以全班人数，45÷60=0.75=75%。",
+        }
+    if any(key in point for key in ["圆柱", "圆锥", "展开图"]):
+        return {
+            "question": "把圆柱的侧面沿高剪开并展开，得到一个长方形。这个长方形的一条边等于圆柱的什么？",
+            "options": ["A. 底面半径", "B. 底面直径", "C. 底面周长", "D. 底面积"],
+            "answer": "C",
+            "explanation": "圆柱侧面展开图的长等于底面圆的周长，宽等于圆柱的高。",
         }
     if any(key in point for key in ["圆", "弧", "扇形"]):
         return {
@@ -832,6 +862,13 @@ def _fallback_math_content(point: str) -> dict:
             "options": ["A. -5", "B. -3", "C. 0", "D. 2"],
             "answer": "C",
             "explanation": "四个数的绝对值依次为 5、3、0、2，其中 0 最小。",
+        }
+    if any(key in point for key in ["二元", "三元", "方程组"]):
+        return {
+            "question": "方程组 x+y=7，x-y=1 的解是什么？",
+            "options": ["A. x=3，y=4", "B. x=4，y=3", "C. x=6，y=1", "D. x=5，y=2"],
+            "answer": "B",
+            "explanation": "两式相加得 2x=8，所以 x=4；代入 x+y=7，得到 y=3。",
         }
     if any(key in point for key in ["方程", "不等式"]):
         return {
@@ -872,10 +909,22 @@ def _fallback_english_content(point: str) -> dict:
         question = "Ben likes helping sick people. He would like to be a ______."
         options = ["A. doctor", "B. pilot", "C. cook", "D. farmer"]
         answer, explanation = "A", "A doctor helps sick people, and would like to is followed by a verb or job choice in context."
-    elif any(key in lower_point for key in ["school", "open day", "transport", "takes"]):
-        question = "It ______ me twenty minutes to get to school by bus."
-        options = ["A. take", "B. takes", "C. taking", "D. tooks"]
-        answer, explanation = "B", "The subject It is third-person singular, so the verb is takes."
+    elif "school" in lower_point:
+        question = "We ______ English and maths on Monday morning."
+        options = ["A. has", "B. have", "C. having", "D. to have"]
+        answer, explanation = "B", "School subjects are described with have; the subject We takes the base form."
+    elif any(key in lower_point for key in ["sport", "safety"]):
+        question = "Which sentence gives correct sports safety advice?"
+        options = ["A. We should warm up first.", "B. We should never drink water.", "C. We must play when injured.", "D. We can ignore the rules."]
+        answer, explanation = "A", "Warming up before sports is a clear and grammatically complete safety suggestion."
+    elif any(key in lower_point for key in ["animal", "farm"]):
+        question = "Which sentence correctly describes an animal?"
+        options = ["A. Pandas eat bamboo.", "B. Pandas eats bamboo.", "C. Pandas eating bamboo.", "D. Pandas is eat bamboo."]
+        answer, explanation = "A", "The plural subject Pandas takes the base verb eat in the present simple."
+    elif any(key in lower_point for key in ["difference", "different"]):
+        question = "Lily is tall, but her sister is short. They are ______."
+        options = ["A. same", "B. different", "C. difference", "D. differently"]
+        answer, explanation = "B", "Different is the adjective needed after are to describe the two people."
     elif any(key in lower_point for key in ["rule", "must", "permission", "sign"]):
         question = "Which sentence is correct in a library?"
         options = ["A. We must keep quiet.", "B. We must to keep quiet.", "C. We must keeping quiet.", "D. We must kept quiet."]
@@ -904,6 +953,14 @@ def _fallback_english_content(point: str) -> dict:
         question = "Which action is safe in a forest?"
         options = ["A. Leave a fire burning.", "B. Throw away glass bottles.", "C. Follow fire-safety rules.", "D. Play with matches."]
         answer, explanation = "C", "Following fire-safety rules protects forests and people."
+    elif any(key in lower_point for key in ["green", "neighbourhood", "recycle", "greener"]):
+        question = "Which action helps make a neighbourhood greener?"
+        options = ["A. Reuse shopping bags.", "B. Leave all lights on.", "C. Waste clean water.", "D. Throw bottles on the road."]
+        answer, explanation = "A", "Reusing shopping bags reduces waste and is a practical green action."
+    elif any(key in lower_point for key in ["famous", "history", "changer", "saver", "storyteller", "great mind"]):
+        question = "Which question is suitable when learning about a famous person in history?"
+        options = ["A. What did the person achieve?", "B. What colour is history?", "C. How many yesterday?", "D. Where famous do?"]
+        answer, explanation = "A", "The simple past question asks about a famous person's achievement clearly and correctly."
     else:
         question = f"Choose the sentence that best matches the topic '{point}'."
         options = ["A. The sentence is clear and complete.", "B. Sentence not complete.", "C. Is missing a subject.", "D. Use words incorrect."]
@@ -912,7 +969,9 @@ def _fallback_english_content(point: str) -> dict:
 
 
 def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | None = None) -> list:
-    selected_units = selected_units or [u for u in CURRICULUM_UNITS if u["id"] in body.unit_ids]
+    selected_units = selected_units or [
+        u for u in CURRICULUM_UNITS if u["grade"] == body.grade and u["id"] in body.unit_ids
+    ]
     profile = _unit_exam_profile(body, selected_units)
     plan = _question_plan(body)
     questions = []
@@ -940,6 +999,8 @@ def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | 
 
 
 def _validate_unit_request(body: UnitWorksheetRequest) -> list:
+    if body.grade not in CURRICULUM_META["available_grades"]:
+        raise ValueError(f"{body.grade}教材目录尚未开放，请选择已核对年级")
     if body.subject not in SUBJECT_LABELS:
         raise ValueError("学科参数不正确")
     if body.semester not in SEMESTER_LABELS:
@@ -950,8 +1011,13 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
     selected_units = [u for u in CURRICULUM_UNITS if u["id"] in body.unit_ids]
     if len(selected_units) != len(body.unit_ids):
         raise ValueError("包含未知单元")
-    if any(u["subject"] != body.subject or u["semester"] != body.semester for u in selected_units):
-        raise ValueError("单元与当前学科或学期不匹配")
+    if any(
+        u["grade"] != body.grade
+        or u["subject"] != body.subject
+        or u["semester"] != body.semester
+        for u in selected_units
+    ):
+        raise ValueError("单元与当前年级、学科或学期不匹配")
 
     allowed_points = {p for unit in selected_units for p in unit["knowledge_points"]}
     if any(p not in allowed_points for p in body.knowledge_points):
@@ -960,16 +1026,16 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
 
 
 async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
-    """按上海初中六年级教材目录范围和知识点生成原创复习题。"""
+    """按已核对的上海初中教材目录范围和知识点生成原创复习题。"""
     model_question_count = min(body.question_count, 6)
     model_body = body.copy(update={"question_count": model_question_count})
     exam_profile = _unit_exam_profile(body, selected_units)
     question_plan = _question_plan(model_body)
-    prompt = f"""你是一位熟悉上海初中{WORKSHEET_GRADE_LABEL}教学节奏的命题老师。
+    prompt = f"""你是一位熟悉上海初中{body.grade}教学节奏的命题老师。
 你的任务不是随机出练习题，而是按“单元诊断型复习卷”的方式命题。
 只依据下面给出的单元名称、考点画像和题组计划生成原创题目，不引用或复刻教材原文。
 
-年级：{WORKSHEET_GRADE_LABEL}
+年级：{body.grade}
 学科：{SUBJECT_LABELS[body.subject]}
 学期：{SEMESTER_LABELS[body.semester]}
 单元：{"、".join(u["title"] for u in selected_units)}
@@ -985,7 +1051,7 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 
 要求：
 1. 必须逐题遵守“题组计划”的 planned_type、teaching_intent 和 knowledge_point。
-2. 数学题要体现概念辨析、基本计算、方法辨析、易错校验、应用建模中的一种，不出奥数题，不超出{WORKSHEET_GRADE_LABEL}范围。
+2. 数学题要体现概念辨析、基本计算、方法辨析、易错校验、应用建模中的一种，不出奥数题，不超出{body.grade}范围。
 3. 英语题要围绕语言功能：词汇语境、核心句型、语法功能、阅读信息提取、短句表达。不要出脱离单元主题的百科常识题。
 4. 选择题必须有4个互不重复的选项；非选择题 options 返回空数组。
 5. 每道题必须有明确答案和教师式解析：说明考点、解题步骤或语言规则、易错提醒。
@@ -1650,7 +1716,7 @@ def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, inc
     safe_multicell(pdf, body.title, h=10, align="C")
     pdf.set_font("zh", "", 10)
     subtitle = (
-        f"{SUBJECT_LABELS[body.subject]} · {SEMESTER_LABELS[body.semester]} · "
+        f"{body.grade} · {SUBJECT_LABELS[body.subject]} · {SEMESTER_LABELS[body.semester]} · "
         f"{DIFFICULTY_LABELS[body.difficulty]} · {'答案解析卷' if include_answers else '题目卷'}"
     )
     safe_multicell(pdf, subtitle, align="C")
@@ -1683,9 +1749,12 @@ def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, inc
 
 
 @app.get("/curriculum-units")
-async def curriculum_units():
+async def curriculum_units(grade: str = None):
     """返回可用于单元复习卷的公开目录范围与人工整理知识点。"""
-    return {"units": CURRICULUM_UNITS, "meta": CURRICULUM_META}
+    units = CURRICULUM_UNITS
+    if grade:
+        units = [unit for unit in units if unit["grade"] == grade]
+    return {"units": units, "meta": CURRICULUM_META}
 
 
 @app.post("/generate-unit-worksheet")
@@ -1697,7 +1766,7 @@ async def generate_unit_worksheet(body: UnitWorksheetRequest):
         question_pdf = generate_unit_worksheet_pdf(body, questions, include_answers=False)
         answer_pdf = generate_unit_worksheet_pdf(body, questions, include_answers=True)
         prefix = (
-            f"{WORKSHEET_GRADE_LABEL}{SUBJECT_LABELS[body.subject]}-"
+            f"{body.grade}{SUBJECT_LABELS[body.subject]}-"
             f"{SEMESTER_LABELS[body.semester]}-{DIFFICULTY_LABELS[body.difficulty]}"
         )
         return {
