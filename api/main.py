@@ -813,6 +813,41 @@ def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -
 
 
 def _fallback_math_content(point: str) -> dict:
+    if "二次函数" in point:
+        return {
+            "question": "二次函数 y=(x-2)²-3 的图像顶点坐标是什么？",
+            "options": ["A. (-2，-3)", "B. (2，-3)", "C. (-2，3)", "D. (2，3)"],
+            "answer": "B",
+            "explanation": "二次函数顶点式 y=a(x-h)²+k 的顶点是 (h，k)，所以该图像顶点为 (2，-3)。",
+        }
+    if any(key in point for key in ["比例线段", "相似三角形"]):
+        return {
+            "question": "△ABC 与 △DEF 相似，且 AB:DE=2:3。若 BC=8 cm，则对应边 EF 长多少？",
+            "options": ["A. 6 cm", "B. 10 cm", "C. 12 cm", "D. 16 cm"],
+            "answer": "C",
+            "explanation": "相似三角形对应边成比例，BC:EF=2:3，所以 EF=8×3÷2=12 cm。",
+        }
+    if any(key in point for key in ["三角比", "解直角三角形"]):
+        return {
+            "question": "在直角三角形 ABC 中，∠C=90°，AB=10，AC=6，则 sin A 的值是多少？",
+            "options": ["A. 3/5", "B. 4/5", "C. 3/4", "D. 4/3"],
+            "answer": "B",
+            "explanation": "先由勾股定理得 BC=8。对∠A而言，sin A=对边/斜边=BC/AB=8/10=4/5。",
+        }
+    if any(key in point for key in ["圆的确定", "圆心角", "弦心距", "垂径", "直线与圆", "圆与圆", "正多边形与圆"]):
+        return {
+            "question": "圆心 O 到直线 l 的距离等于圆的半径，则直线 l 与圆的位置关系是什么？",
+            "options": ["A. 相离", "B. 相切", "C. 相交", "D. 无法判断"],
+            "answer": "B",
+            "explanation": "圆心到直线的距离 d 与半径 r 相等时，直线和圆只有一个公共点，因此直线与圆相切。",
+        }
+    if any(key in point for key in ["数据整理", "统计的意义", "平均水平", "波动程度", "数据分布"]):
+        return {
+            "question": "一组数据 2，4，4，6，9 的中位数是多少？",
+            "options": ["A. 4", "B. 5", "C. 6", "D. 9"],
+            "answer": "A",
+            "explanation": "数据已经按从小到大排列，共 5 个数，中间位置的第 3 个数是 4，所以中位数为 4。",
+        }
     if any(key in point for key in ["反比例函数"]):
         return {
             "question": "已知反比例函数 y=12/x，当 x=3 时，y 的值是多少？",
@@ -1124,7 +1159,71 @@ def _fallback_math_content(point: str) -> dict:
 
 def _fallback_english_content(point: str) -> dict:
     lower_point = point.lower()
-    if any(key in lower_point for key in ["natural disaster", "warning", "disaster news", "emergency preparation"]):
+    if any(key in lower_point for key in ["ancient greek", "myth", "legend", "historical event", "historical narrative"]):
+        question = "Which sentence correctly describes an event in ancient Greek history?"
+        options = ["A. The Greeks built temples to honour their gods.", "B. The Greeks builded temples tomorrow.", "C. Ancient temples is modern offices.", "D. History happen next year."]
+        answer, explanation = "A", "A uses the simple past and gives a clear historical event in a complete sentence."
+    elif any(key in lower_point for key in ["traditional craft", "explaining a process", "preserving tradition", "describing a skill"]):
+        question = "Which sentence best explains a step in making a traditional craft?"
+        options = ["A. First, the artist cuts the paper carefully.", "B. The paper careful cutting first.", "C. First cutted artist paper.", "D. Carefully is the paper artist."]
+        answer, explanation = "A", "A uses a sequence word, a clear subject and the present simple to explain a process."
+    elif any(key in lower_point for key in ["pet care", "animal responsibility", "opinions about pets"]):
+        question = "Which action shows responsible pet care?"
+        options = ["A. Give the pet suitable food and regular exercise.", "B. Leave it alone for many days.", "C. Feed it anything on the table.", "D. Ignore signs of illness."]
+        answer, explanation = "A", "Responsible owners meet a pet's daily needs and pay attention to its health."
+    elif any(key in lower_point for key in ["computer technology", "advantages and risks", "digital habit", "discussing technology"]):
+        question = "Which sentence gives a balanced view of computer technology?"
+        options = ["A. Computers help us work, but we should also protect our personal information.", "B. Computers has no risks always.", "C. Technology useful because no rules.", "D. Personal information share everyone."]
+        answer, explanation = "A", "A explains both an advantage and a risk in a grammatically complete sentence."
+    elif any(key in lower_point for key in ["brain function", "memory and learning", "scientific reading", "brain works"]):
+        question = "According to a science article, sleep helps the brain organize new information. What is the main idea?"
+        options = ["A. Sleep supports memory and learning.", "B. The brain stops working during sleep.", "C. New information prevents sleep.", "D. Only adults need sleep."]
+        answer, explanation = "A", "The sentence connects sleep with organizing information, so its main idea is that sleep supports memory and learning."
+    elif any(key in lower_point for key in ["crime", "evidence", "suspect", "infinitive", "detective"]):
+        question = "The detective examined the footprint carefully in order to ______ the suspect."
+        options = ["A. identify", "B. identified", "C. identifying", "D. identifies"]
+        answer, explanation = "A", "In order to is followed by the base form of a verb; the evidence may help identify the suspect."
+    elif any(key in lower_point for key in ["kidnap", "sequencing event", "reported speech", "suspense story"]):
+        question = "Which sentence correctly reports Amy's words, 'I need help'?"
+        options = ["A. Amy said that she needed help.", "B. Amy said that I need help.", "C. Amy says she needed help yesterday tomorrow.", "D. Amy said need she help."]
+        answer, explanation = "A", "In reported speech, I changes to she and need normally changes to needed after said."
+    elif any(key in lower_point for key in ["environmental problem", "protecting the earth", "cause and effect", "persuasive writing"]):
+        question = "Which sentence clearly shows cause and effect about an environmental problem?"
+        options = ["A. Because plastic waste harms sea animals, we should use fewer disposable bags.", "B. Plastic because bags sea.", "C. We should waste more, so protect Earth.", "D. Sea animals plastic no effect."]
+        answer, explanation = "A", "A links a cause to its effect and gives a persuasive action to protect the Earth."
+    elif any(key in lower_point for key in ["film genre", "film review", "media preference", "discussing entertainment"]):
+        question = "Which sentence is suitable for a film review?"
+        options = ["A. The plot is exciting, and the main character is believable.", "B. Film exciting because character are.", "C. I watched tomorrow yesterday.", "D. Plot the believable an."]
+        answer, explanation = "A", "A comments on the plot and character clearly, which is appropriate in a film review."
+    elif any(key in lower_point for key in ["literary character", "story sequence", "humour in literature", "retelling a story", "mark twain"]):
+        question = "Which sentence best retells a story event in sequence?"
+        options = ["A. After Tom finished the task, he hurried home.", "B. Tom after task home hurried finished.", "C. Tomorrow Tom finished yesterday.", "D. After home is the task."]
+        answer, explanation = "A", "A uses after to show the order of two past events in a complete sentence."
+    elif any(key in lower_point for key in ["international visit", "travelling by air", "receiving a visitor", "travel etiquette"]):
+        question = "What is the most polite way to receive an international visitor?"
+        options = ["A. Welcome the visitor and offer clear help.", "B. Ignore the visitor's questions.", "C. Speak very quickly and walk away.", "D. Leave without saying anything."]
+        answer, explanation = "A", "A warm welcome and clear assistance show appropriate travel etiquette and support international communication."
+    elif any(key in lower_point for key in ["post office", "broadcast", "telephone communication", "reporting news"]):
+        question = "Which opening is most suitable for a school news broadcast?"
+        options = ["A. Good morning. Here is today's school news.", "B. News school morning is here.", "C. I news yesterday tomorrow.", "D. School because broadcast."]
+        answer, explanation = "A", "A greets the audience and introduces the news clearly, as a school broadcast should."
+    elif any(key in lower_point for key in ["water and science", "geography information", "car ownership"]):
+        question = "Which sentence presents science or geography information clearly?"
+        options = ["A. Fresh water is limited, so people should use it carefully.", "B. Water limited careful people is.", "C. Cars own because geography.", "D. Science no information need."]
+        answer, explanation = "A", "A gives a factual statement and a logical conclusion in a complete sentence."
+    elif any(key in lower_point for key in ["school uniform", "spending habit", "student opinion", "argumentative writing"]):
+        question = "Which sentence gives a student opinion with a supporting reason?"
+        options = ["A. I support school uniforms because they are practical for daily school life.", "B. Uniform because support practical.", "C. Students opinion is wear.", "D. School clothes no reason."]
+        answer, explanation = "A", "A states a clear opinion and supports it with a relevant reason."
+    elif any(key in lower_point for key in ["good friendship", "volunteer", "honesty and responsibility", "expressing values"]):
+        question = "Which action best shows positive values?"
+        options = ["A. Volunteer to help and take responsibility for your work.", "B. Break a promise when no one is watching.", "C. Blame others for every mistake.", "D. Refuse to help anyone."]
+        answer, explanation = "A", "Volunteering and taking responsibility show care for others, honesty and dependable values."
+    elif any(key in lower_point for key in ["changes in education", "reporting changes"]):
+        question = "Which sentence clearly reports a change in education?"
+        options = ["A. Students used to rely on printed books, but now they also use digital resources.", "B. Students now used yesterday digital.", "C. Education change because books is.", "D. Printed now but used to tomorrow."]
+        answer, explanation = "A", "Used to and now make the contrast between past and present education clear."
+    elif any(key in lower_point for key in ["natural disaster", "warning", "disaster news", "emergency preparation"]):
         question = "What should people do when they receive an earthquake warning?"
         options = ["A. Follow the safety instructions.", "B. Stand beside a window.", "C. Use the lift at once.", "D. Ignore the warning."]
         answer, explanation = "A", "During a natural disaster, people should follow official warnings and safety instructions."
@@ -1396,6 +1495,10 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
         for u in selected_units
     ):
         raise ValueError("单元与当前年级、学科或学期不匹配")
+    if body.grade == "九年级" and body.subject == "english":
+        editions = {u.get("edition") for u in selected_units}
+        if len(editions) != 1 or None in editions:
+            raise ValueError("九年级英语版本必须一致，不能混用教材单元")
 
     allowed_points = {p for unit in selected_units for p in unit["knowledge_points"]}
     if any(p not in allowed_points for p in body.knowledge_points):

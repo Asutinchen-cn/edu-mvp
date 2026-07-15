@@ -3,6 +3,7 @@
 GRADE_6 = "六年级"
 GRADE_7 = "七年级"
 GRADE_8 = "八年级"
+GRADE_9 = "九年级"
 GRADE = GRADE_6
 MATH_SOURCE_FIRST = "上海六年级第一学期《义务教育教科书（五·四学制）·数学》2024 年审定版目录"
 MATH_SOURCE_SECOND = "上海六年级第二学期《义务教育教科书（五·四学制）·数学》2024 年审定版目录"
@@ -16,10 +17,16 @@ MATH_8_SOURCE_FIRST = "上海八年级第一学期《义务教育教科书（五
 MATH_8_SOURCE_SECOND = "上海八年级第二学期《义务教育教科书（五·四学制）·数学》，册次依据上海市教委 2026 年春季教学用书目录列示（目录标注待审）"
 ENGLISH_8_SOURCE_FIRST = "上海八年级第一学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2025 年秋季教学用书目录确认"
 ENGLISH_8_SOURCE_SECOND = "上海八年级第二学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2026 年春季教学用书目录列示（目录标注待审）"
+MATH_9_SOURCE_FIRST = "上海九年级第一学期《数学（试用本）》，册次依据上海市教委 2025 年秋季教学用书目录确认"
+MATH_9_SOURCE_SECOND = "上海九年级第二学期《数学（试用本）》，册次依据上海市教委 2026 年春季教学用书目录确认"
+OXFORD_9_SOURCE_FIRST = "上海九年级第一学期《英语（牛津上海版）（试用本）》，版本与册次依据上海市教委 2025 年秋季教学用书目录确认"
+OXFORD_9_SOURCE_SECOND = "上海九年级第二学期《英语（牛津上海版）（试用本）》，版本与册次依据上海市教委 2026 年春季教学用书目录确认"
+NEW_CENTURY_9_SOURCE_FIRST = "上海九年级第一学期《英语（新世纪版）（试用本）》，版本与册次依据上海市教委 2025 年秋季教学用书目录确认"
+NEW_CENTURY_9_SOURCE_SECOND = "上海九年级第二学期《英语（新世纪版）（试用本）》，版本与册次依据上海市教委 2026 年春季教学用书目录确认"
 
 
-def unit(unit_id, subject, semester, title, knowledge_points, source_note, grade=GRADE):
-    return {
+def unit(unit_id, subject, semester, title, knowledge_points, source_note, grade=GRADE, edition=""):
+    result = {
         "id": unit_id,
         "grade": grade,
         "subject": subject,
@@ -28,6 +35,9 @@ def unit(unit_id, subject, semester, title, knowledge_points, source_note, grade
         "knowledge_points": knowledge_points,
         "source_note": source_note,
     }
+    if edition:
+        result["edition"] = edition
+    return result
 
 
 CURRICULUM_UNITS = [
@@ -586,20 +596,249 @@ CURRICULUM_UNITS = [
         ENGLISH_8_SOURCE_SECOND,
         grade=GRADE_8,
     ),
+    unit(
+        "math-9a-similar-triangles",
+        "math",
+        "first",
+        "第24章 相似三角形",
+        ["比例线段", "相似三角形的判定", "相似三角形的性质", "相似三角形的应用"],
+        MATH_9_SOURCE_FIRST,
+        grade=GRADE_9,
+    ),
+    unit(
+        "math-9a-trigonometric-ratios",
+        "math",
+        "first",
+        "第25章 锐角的三角比",
+        ["锐角三角比", "特殊角三角比", "解直角三角形", "解直角三角形的应用"],
+        MATH_9_SOURCE_FIRST,
+        grade=GRADE_9,
+    ),
+    unit(
+        "math-9a-quadratic-functions",
+        "math",
+        "first",
+        "第26章 二次函数",
+        ["二次函数", "二次函数的图像与性质", "二次函数解析式", "二次函数的应用"],
+        MATH_9_SOURCE_FIRST,
+        grade=GRADE_9,
+    ),
+    unit(
+        "math-9b-circles-polygons",
+        "math",
+        "second",
+        "第27章 圆与正多边形",
+        ["圆的确定", "圆心角、弧、弦、弦心距", "垂径定理", "直线与圆的位置关系", "圆与圆的位置关系", "正多边形与圆"],
+        MATH_9_SOURCE_SECOND,
+        grade=GRADE_9,
+    ),
+    unit(
+        "math-9b-statistics",
+        "math",
+        "second",
+        "第28章 统计初步",
+        ["数据整理与表示", "统计的意义", "表示一组数据平均水平的量", "表示一组数据波动程度的量", "表示一组数据分布的量"],
+        MATH_9_SOURCE_SECOND,
+        grade=GRADE_9,
+    ),
+    unit(
+        "english-9a-oxford-u1-ancient-greece",
+        "english",
+        "first",
+        "Unit 1 Ancient Greece",
+        ["ancient Greek history", "myths and legends", "describing historical events", "reading historical narratives"],
+        OXFORD_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9a-oxford-u2-traditional-skills",
+        "english",
+        "first",
+        "Unit 2 Traditional skills",
+        ["traditional crafts", "explaining a process", "preserving traditions", "describing a skill"],
+        OXFORD_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9a-oxford-u3-pets",
+        "english",
+        "first",
+        "Unit 3 Pets",
+        ["pet care", "animal responsibility", "expressing opinions about pets", "argumentative writing"],
+        OXFORD_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9a-oxford-u4-computers",
+        "english",
+        "first",
+        "Unit 4 Computers",
+        ["computer technology", "advantages and risks", "digital habits", "discussing technology"],
+        OXFORD_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9a-oxford-u5-human-brain",
+        "english",
+        "first",
+        "Unit 5 The human brain",
+        ["brain functions", "memory and learning", "scientific reading", "explaining how the brain works"],
+        OXFORD_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9a-oxford-u6-detectives",
+        "english",
+        "first",
+        "Unit 6 Detectives",
+        ["crime and evidence", "interviewing suspects", "infinitives", "writing a crime report"],
+        OXFORD_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9a-oxford-u7-kidnappers",
+        "english",
+        "first",
+        "Unit 7 Escaping from kidnappers",
+        ["kidnapping safety", "sequencing events", "reported speech", "writing a suspense story"],
+        OXFORD_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9b-oxford-u1-saving-earth",
+        "english",
+        "second",
+        "Unit 1 Saving the Earth",
+        ["environmental problems", "protecting the Earth", "cause and effect", "persuasive writing"],
+        OXFORD_9_SOURCE_SECOND,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9b-oxford-u2-future",
+        "english",
+        "second",
+        "Unit 2 Life in the future",
+        ["future living", "predictions", "future technology", "describing future plans"],
+        OXFORD_9_SOURCE_SECOND,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9b-oxford-u3-going-places",
+        "english",
+        "second",
+        "Unit 3 Going places",
+        ["travel destinations", "travel plans", "travel information", "travel writing"],
+        OXFORD_9_SOURCE_SECOND,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9b-oxford-u4-films-tv",
+        "english",
+        "second",
+        "Unit 4 All about films and TV",
+        ["film genres", "film reviews", "media preferences", "discussing entertainment"],
+        OXFORD_9_SOURCE_SECOND,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9b-oxford-u5-mark-twain",
+        "english",
+        "second",
+        "Unit 5 A story by Mark Twain",
+        ["literary characters", "story sequence", "humour in literature", "retelling a story"],
+        OXFORD_9_SOURCE_SECOND,
+        grade=GRADE_9,
+        edition="oxford-shanghai",
+    ),
+    unit(
+        "english-9a-new-century-u1-international-visits",
+        "english",
+        "first",
+        "Unit 1 International Visits",
+        ["travelling by air", "receiving a visitor", "travel etiquette", "international communication"],
+        NEW_CENTURY_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="new-century",
+    ),
+    unit(
+        "english-9a-new-century-u2-communications",
+        "english",
+        "first",
+        "Unit 2 Post and Communications",
+        ["post office services", "school broadcasting", "telephone communication", "reporting news"],
+        NEW_CENTURY_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="new-century",
+    ),
+    unit(
+        "english-9a-new-century-u3-science-technology",
+        "english",
+        "first",
+        "Unit 3 Science and Technology",
+        ["water and science", "geography information", "car ownership", "discussing technology"],
+        NEW_CENTURY_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="new-century",
+    ),
+    unit(
+        "english-9a-new-century-u4-student-life",
+        "english",
+        "first",
+        "Unit 4 Student Life",
+        ["school uniforms", "spending habits", "student opinions", "argumentative writing"],
+        NEW_CENTURY_9_SOURCE_FIRST,
+        grade=GRADE_9,
+        edition="new-century",
+    ),
+    unit(
+        "english-9b-new-century-u1-values",
+        "english",
+        "second",
+        "Unit 1 Values",
+        ["good friendship", "volunteering", "honesty and responsibility", "expressing values"],
+        NEW_CENTURY_9_SOURCE_SECOND,
+        grade=GRADE_9,
+        edition="new-century",
+    ),
+    unit(
+        "english-9b-new-century-u2-changes-life",
+        "english",
+        "second",
+        "Unit 2 Changes in Life",
+        ["changes in education", "life in the future", "comparing past and present", "reporting changes"],
+        NEW_CENTURY_9_SOURCE_SECOND,
+        grade=GRADE_9,
+        edition="new-century",
+    ),
 ]
 
 
 CURRICULUM_META = {
     "grade": GRADE,
     "default_grade": GRADE,
-    "available_grades": [GRADE_6, GRADE_7, GRADE_8],
+    "available_grades": [GRADE_6, GRADE_7, GRADE_8, GRADE_9],
     "grades": [
         {"value": "六年级", "status": "available", "note": "2024 年审定新版目录已核对"},
         {"value": "七年级", "status": "available", "note": "2025 秋季、2026 春季市教委目录已核对"},
         {"value": "八年级", "status": "available", "note": "2025 秋季目录已核对；2026 春季下册目录标注待审"},
-        {"value": "九年级", "status": "pending", "note": "需区分学校使用的英语版本"},
+        {"value": "九年级", "status": "available", "note": "数学试用本已核对；英语须按学校选择牛津上海版或新世纪版"},
     ],
-    "edition_note": "六至八年级数学和英语使用依据 2022 年版课程标准修订、分册陆续审定启用的五·四学制教材；八年级下册在 2026 年春季目录中标注待审。",
+    "english_editions": [
+        {"value": "oxford-shanghai", "label": "牛津上海版"},
+        {"value": "new-century", "label": "新世纪版"},
+    ],
+    "edition_note": "六至八年级数学和英语使用依据 2022 年版课程标准修订、分册陆续审定启用的五·四学制教材；八年级下册在 2026 年春季目录中标注待审。九年级数学为试用本，英语须按学校选择牛津上海版或新世纪版试用本。",
     "scope_note": "仅使用公开教材目录和人工整理知识点，不存储教材正文。",
     "sources": [
         {

@@ -1374,6 +1374,7 @@
         .worksheet-header p { color: var(--muted); font-size: 14px; line-height: 1.7; }
         .worksheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
         .worksheet-field { display: flex; flex-direction: column; gap: 6px; }
+        .worksheet-field[hidden] { display: none; }
         .worksheet-field.full { grid-column: 1 / -1; }
         .worksheet-field label { font-size: 13px; color: var(--muted); font-weight: 800; }
         .worksheet-field select, .worksheet-field input[type="text"], .worksheet-field input[type="number"] {
@@ -1707,7 +1708,7 @@
                 <option value="六年级">六年级</option>
                 <option value="七年级">七年级</option>
                 <option value="八年级">八年级</option>
-                <option value="九年级" disabled>九年级（版本核对中）</option>
+                <option value="九年级">九年级</option>
             </select>
         </div>
         <div class="worksheet-field">
@@ -1715,6 +1716,13 @@
             <select id="worksheetSubject" onchange="renderWorksheetUnits()">
                 <option value="math">数学</option>
                 <option value="english">英语</option>
+            </select>
+        </div>
+        <div class="worksheet-field" id="worksheetEditionField" hidden>
+            <label>英语版本</label>
+            <select id="worksheetEnglishEdition" onchange="renderWorksheetUnits()">
+                <option value="oxford-shanghai">牛津上海版</option>
+                <option value="new-century">新世纪版</option>
             </select>
         </div>
         <div class="worksheet-field">
@@ -1859,7 +1867,7 @@ function renderWorksheetUnits() {
     const grade = document.getElementById('worksheetGrade').value;
     const subject = document.getElementById('worksheetSubject').value;
     const semester = document.getElementById('worksheetSemester').value;
-    const units = worksheetUnits.filter(u => u.grade === grade && u.subject === subject && u.semester === semester);
+    const units = worksheetUnitsForSelection(grade, subject, semester);
     document.getElementById('worksheetUnits').innerHTML = units.map((u, i) => `
         <label class="worksheet-check">
             <input type="checkbox" name="worksheetUnit" value="${escapeHtml(u.id)}" ${i === 0 ? 'checked' : ''} onchange="renderWorksheetKnowledge()">
@@ -1869,6 +1877,19 @@ function renderWorksheetUnits() {
     document.getElementById('worksheetGenerateBtn').disabled = !units.length;
     renderWorksheetSource();
     renderWorksheetKnowledge();
+}
+
+function worksheetUnitsForSelection(grade, subject, semester) {
+    const editionField = document.getElementById('worksheetEditionField');
+    const needsEdition = grade === '九年级' && subject === 'english';
+    editionField.hidden = !needsEdition;
+    const edition = needsEdition ? document.getElementById('worksheetEnglishEdition').value : '';
+    return worksheetUnits.filter(u =>
+        u.grade === grade
+        && u.subject === subject
+        && u.semester === semester
+        && (!edition || u.edition === edition)
+    );
 }
 
 function safeCurriculumSourceUrl(value) {
@@ -1884,7 +1905,7 @@ function renderWorksheetSource() {
     const grade = document.getElementById('worksheetGrade').value;
     const subject = document.getElementById('worksheetSubject').value;
     const semester = document.getElementById('worksheetSemester').value;
-    const units = worksheetUnits.filter(u => u.grade === grade && u.subject === subject && u.semester === semester);
+    const units = worksheetUnitsForSelection(grade, subject, semester);
     const sourceNote = units[0]?.source_note || `上海${grade}教材目录`;
     const source = worksheetMeta?.sources?.find(item => item.semester === semester) || null;
     const sourceUrl = safeCurriculumSourceUrl(source?.url || '');

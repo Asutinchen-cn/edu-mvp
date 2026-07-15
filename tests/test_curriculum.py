@@ -13,19 +13,23 @@ from api.main import (
 
 
 class CurriculumUnitsTest(unittest.TestCase):
-    def units_for(self, subject, semester, grade="六年级"):
+    def units_for(self, subject, semester, grade="六年级", edition=None):
         return [
             unit
             for unit in CURRICULUM_UNITS
             if unit["grade"] == grade
             and unit["subject"] == subject
             and unit["semester"] == semester
+            and (edition is None or unit.get("edition") == edition)
         ]
 
     def test_curriculum_declares_available_and_pending_junior_grades(self):
         self.assertEqual(WORKSHEET_GRADE_LABEL, "六年级")
         self.assertEqual(CURRICULUM_META["default_grade"], "六年级")
-        self.assertEqual(CURRICULUM_META["available_grades"], ["六年级", "七年级", "八年级"])
+        self.assertEqual(
+            CURRICULUM_META["available_grades"],
+            ["六年级", "七年级", "八年级", "九年级"],
+        )
         self.assertEqual(
             [item["value"] for item in CURRICULUM_META["grades"]],
             ["六年级", "七年级", "八年级", "九年级"],
@@ -33,7 +37,7 @@ class CurriculumUnitsTest(unittest.TestCase):
         self.assertTrue(CURRICULUM_UNITS)
         self.assertEqual(
             {unit["grade"] for unit in CURRICULUM_UNITS},
-            {"六年级", "七年级", "八年级"},
+            {"六年级", "七年级", "八年级", "九年级"},
         )
 
     def test_math_matches_current_shanghai_sixth_grade_chapters(self):
@@ -174,6 +178,83 @@ class CurriculumUnitsTest(unittest.TestCase):
         self.assertTrue(second_semester_units)
         self.assertTrue(all("待审" in unit["source_note"] for unit in second_semester_units))
 
+    def test_math_matches_current_shanghai_ninth_grade_trial_chapters(self):
+        first_titles = [unit["title"] for unit in self.units_for("math", "first", "九年级")]
+        second_titles = [unit["title"] for unit in self.units_for("math", "second", "九年级")]
+
+        self.assertEqual(
+            first_titles,
+            ["第24章 相似三角形", "第25章 锐角的三角比", "第26章 二次函数"],
+        )
+        self.assertEqual(second_titles, ["第27章 圆与正多边形", "第28章 统计初步"])
+
+    def test_oxford_english_matches_current_shanghai_ninth_grade_units(self):
+        first_titles = [
+            unit["title"]
+            for unit in self.units_for("english", "first", "九年级", "oxford-shanghai")
+        ]
+        second_titles = [
+            unit["title"]
+            for unit in self.units_for("english", "second", "九年级", "oxford-shanghai")
+        ]
+
+        self.assertEqual(
+            first_titles,
+            [
+                "Unit 1 Ancient Greece",
+                "Unit 2 Traditional skills",
+                "Unit 3 Pets",
+                "Unit 4 Computers",
+                "Unit 5 The human brain",
+                "Unit 6 Detectives",
+                "Unit 7 Escaping from kidnappers",
+            ],
+        )
+        self.assertEqual(
+            second_titles,
+            [
+                "Unit 1 Saving the Earth",
+                "Unit 2 Life in the future",
+                "Unit 3 Going places",
+                "Unit 4 All about films and TV",
+                "Unit 5 A story by Mark Twain",
+            ],
+        )
+
+    def test_new_century_english_matches_current_shanghai_ninth_grade_units(self):
+        first_titles = [
+            unit["title"]
+            for unit in self.units_for("english", "first", "九年级", "new-century")
+        ]
+        second_titles = [
+            unit["title"]
+            for unit in self.units_for("english", "second", "九年级", "new-century")
+        ]
+
+        self.assertEqual(
+            first_titles,
+            [
+                "Unit 1 International Visits",
+                "Unit 2 Post and Communications",
+                "Unit 3 Science and Technology",
+                "Unit 4 Student Life",
+            ],
+        )
+        self.assertEqual(second_titles, ["Unit 1 Values", "Unit 2 Changes in Life"])
+
+    def test_ninth_grade_english_units_are_partitioned_by_school_edition(self):
+        english_units = [
+            unit
+            for unit in CURRICULUM_UNITS
+            if unit["grade"] == "九年级" and unit["subject"] == "english"
+        ]
+
+        self.assertEqual(
+            {unit.get("edition") for unit in english_units},
+            {"oxford-shanghai", "new-century"},
+        )
+        self.assertTrue(all("版本" in unit["source_note"] for unit in english_units))
+
 
 class GradeAwareWorksheetTest(unittest.TestCase):
     def test_math_fallback_uses_selected_current_topic(self):
@@ -196,17 +277,17 @@ class GradeAwareWorksheetTest(unittest.TestCase):
 
     def test_unavailable_grade_is_rejected_instead_of_using_other_grade_units(self):
         body = UnitWorksheetRequest(
-            grade="九年级",
+            grade="五年级",
             subject="math",
             semester="first",
             unit_ids=["math-6a-rational-numbers"],
             knowledge_points=["有理数的加法与减法"],
             difficulty="basic",
             question_count=3,
-            title="九年级数学复习",
+            title="五年级数学复习",
         )
 
-        with self.assertRaisesRegex(ValueError, "九年级教材目录尚未开放"):
+        with self.assertRaisesRegex(ValueError, "五年级教材目录尚未开放"):
             _validate_unit_request(body)
 
     def test_seventh_grade_math_fallback_is_specific_to_factoring(self):
@@ -319,6 +400,73 @@ class GradeAwareWorksheetTest(unittest.TestCase):
         for point, expected in cases.items():
             content = _fallback_math_content(point)
             self.assertIn(expected, content["question"] + content["explanation"])
+
+    def test_ninth_grade_math_fallback_is_specific_to_quadratic_functions(self):
+        body = UnitWorksheetRequest(
+            grade="九年级",
+            subject="math",
+            semester="first",
+            unit_ids=["math-9a-quadratic-functions"],
+            knowledge_points=["二次函数的图像与性质"],
+            difficulty="advanced",
+            question_count=3,
+            title="九年级数学复习",
+        )
+
+        questions = _fallback_unit_worksheet(body, _validate_unit_request(body))
+        content = " ".join(q["question"] + " " + q["explanation"] for q in questions)
+
+        self.assertIn("二次函数", content)
+        self.assertEqual(len({q["question"] for q in questions}), 3)
+
+    def test_ninth_grade_new_century_fallback_is_specific_to_broadcasting(self):
+        body = UnitWorksheetRequest(
+            grade="九年级",
+            subject="english",
+            semester="first",
+            unit_ids=["english-9a-new-century-u2-communications"],
+            knowledge_points=["school broadcasting"],
+            difficulty="advanced",
+            question_count=3,
+            title="九年级新世纪英语复习",
+        )
+
+        questions = _fallback_unit_worksheet(body, _validate_unit_request(body))
+        content = " ".join(q["question"] + " " + q["explanation"] for q in questions).lower()
+
+        self.assertTrue(any(term in content for term in ("broadcast", "report", "news")))
+        self.assertEqual(len({q["question"] for q in questions}), 3)
+
+    def test_ninth_grade_english_request_cannot_mix_school_editions(self):
+        body = UnitWorksheetRequest(
+            grade="九年级",
+            subject="english",
+            semester="first",
+            unit_ids=[
+                "english-9a-oxford-u1-ancient-greece",
+                "english-9a-new-century-u1-international-visits",
+            ],
+            knowledge_points=["ancient Greek history", "travelling by air"],
+            difficulty="advanced",
+            question_count=3,
+            title="九年级英语复习",
+        )
+
+        with self.assertRaisesRegex(ValueError, "英语版本"):
+            _validate_unit_request(body)
+
+    def test_every_ninth_grade_knowledge_point_has_a_specific_fallback(self):
+        generic_questions = []
+        for unit in CURRICULUM_UNITS:
+            if unit["grade"] != "九年级":
+                continue
+            fallback = _fallback_math_content if unit["subject"] == "math" else _fallback_english_content
+            for point in unit["knowledge_points"]:
+                question = fallback(point)["question"]
+                if question.startswith("请用一个例子说明") or "best matches the topic" in question:
+                    generic_questions.append((unit["id"], point))
+
+        self.assertEqual(generic_questions, [])
 
     def test_seventh_grade_geometry_fallback_respects_the_selected_point(self):
         cases = {

@@ -26,9 +26,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotIn('value="七年级" disabled', HTML)
         self.assertIn('<option value="八年级">八年级</option>', HTML)
         self.assertNotIn('value="八年级" disabled', HTML)
-        self.assertIn('value="九年级" disabled', HTML)
+        self.assertIn('<option value="九年级">九年级</option>', HTML)
+        self.assertNotIn('value="九年级" disabled', HTML)
         self.assertIn("u.grade === grade", HTML)
         self.assertRegex(HTML, r"grade:\s*document\.getElementById\('worksheetGrade'\)\.value")
+
+    def test_ninth_grade_english_requires_an_explicit_school_edition(self):
+        self.assertIn('id="worksheetEditionField"', HTML)
+        self.assertIn('id="worksheetEnglishEdition"', HTML)
+        self.assertIn('<option value="oxford-shanghai">牛津上海版</option>', HTML)
+        self.assertIn('<option value="new-century">新世纪版</option>', HTML)
+        self.assertIn("u.edition === edition", HTML)
+        self.assertIn("grade === '九年级' && subject === 'english'", HTML)
+        self.assertIn(".worksheet-field[hidden]", HTML)
 
     def test_analysis_grade_selector_is_focused_on_junior_middle_school(self):
         for grade in ("六年级", "七年级", "八年级", "九年级"):
