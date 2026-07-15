@@ -1011,6 +1011,29 @@
         .worksheet-preview { display: flex; flex-direction: column; gap: 8px; }
         .worksheet-preview-item { padding: 12px 14px; background: #f8fbff; border-radius: 14px; font-size: 13px; border: 1px solid #e6eef9; }
         .worksheet-meta { margin-top: 6px; color: #697386; line-height: 1.5; }
+        .curriculum-source {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin: 16px 0 20px;
+            padding: 14px 16px;
+            border-left: 4px solid var(--brand-blue);
+            border-radius: 8px;
+            background: #f1f7ff;
+            color: #41516b;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .curriculum-source strong { display: block; color: var(--ink); font-size: 14px; }
+        .curriculum-source span { display: block; margin-top: 2px; }
+        .curriculum-source a {
+            flex-shrink: 0;
+            color: var(--brand-blue);
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .curriculum-source a:hover { text-decoration: underline; }
 
         /* ===== CONFIRM DIALOG ===== */
         .confirm-dialog {
@@ -1080,6 +1103,7 @@
             }
             .worksheet-grid { grid-template-columns: 1fr; }
             .worksheet-field.full { grid-column: auto; }
+            .curriculum-source { align-items: flex-start; flex-direction: column; }
             .practice-header, .history-header {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1186,8 +1210,8 @@
                     <option value="二年级">二年级</option>
                     <option value="三年级">三年级</option>
                     <option value="四年级">四年级</option>
-                    <option value="五年级" selected>五年级</option>
-                    <option value="六年级">六年级</option>
+                    <option value="五年级">五年级</option>
+                    <option value="六年级" selected>六年级</option>
                     <option value="初一">初一</option>
                     <option value="初二">初二</option>
                     <option value="初三">初三</option>
@@ -1256,6 +1280,9 @@
     <div class="worksheet-header">
         <h3>📚 按教材单元生成复习卷</h3>
         <p>面向上海六年级数学与英语，按单元、知识点和难度生成原创题目卷与答案解析卷。</p>
+    </div>
+    <div class="curriculum-source" id="worksheetSource" role="note" aria-live="polite">
+        正在核对教材范围...
     </div>
     <div class="worksheet-grid">
         <div class="worksheet-field">
@@ -1357,6 +1384,7 @@ let currentSubjectArchive = 'all';
 let selectedRecordId = null;
 let pendingDeleteId = null;
 let worksheetUnits = [];
+let worksheetMeta = null;
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -1372,9 +1400,11 @@ async function loadWorksheetUnits() {
         const resp = await fetch('/curriculum-units');
         const data = await resp.json();
         worksheetUnits = data.units || [];
+        worksheetMeta = data.meta || null;
         renderWorksheetUnits();
     } catch (e) {
         document.getElementById('worksheetUnits').textContent = '暂时无法加载单元数据';
+        document.getElementById('worksheetSource').textContent = '教材目录加载失败，请刷新页面后重试';
     }
 }
 
@@ -1387,7 +1417,35 @@ function renderWorksheetUnits() {
             <input type="checkbox" name="worksheetUnit" value="${u.id}" ${i === 0 ? 'checked' : ''} onchange="renderWorksheetKnowledge()">
             ${u.title}
         </label>`).join('') || '当前学期暂无单元';
+    renderWorksheetSource();
     renderWorksheetKnowledge();
+}
+
+function safeCurriculumSourceUrl(value) {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && url.hostname === 'edu.sh.gov.cn' ? url.href : '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function renderWorksheetSource() {
+    const subject = document.getElementById('worksheetSubject').value;
+    const semester = document.getElementById('worksheetSemester').value;
+    const units = worksheetUnits.filter(u => u.subject === subject && u.semester === semester);
+    const sourceNote = units[0]?.source_note || '上海六年级教材目录';
+    const sourceIndex = semester === 'first' ? 0 : 1;
+    const source = worksheetMeta?.sources?.[sourceIndex] || null;
+    const sourceUrl = safeCurriculumSourceUrl(source?.url || '');
+    const subjectLabel = subject === 'english' ? '英语' : '数学';
+    const semesterLabel = semester === 'first' ? '第一学期' : '第二学期';
+    document.getElementById('worksheetSource').innerHTML = `
+        <div>
+            <strong>教材范围已核对：六年级${subjectLabel} ${semesterLabel}</strong>
+            <span>${escapeHtml(sourceNote)}，当前共 ${units.length} 个单元。仅使用目录和知识点标签，不存储教材正文。</span>
+        </div>
+        ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">查看上海市教委目录</a>` : ''}`;
 }
 
 function renderWorksheetKnowledge() {

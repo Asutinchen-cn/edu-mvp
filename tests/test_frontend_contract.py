@@ -1,0 +1,22 @@
+from pathlib import Path
+import re
+import unittest
+
+
+HTML = (Path(__file__).parents[1] / "web" / "index.html").read_text(encoding="utf-8")
+
+
+class FrontendCurriculumContractTest(unittest.TestCase):
+    def test_sixth_grade_is_the_default_analysis_grade(self):
+        self.assertRegex(HTML, r'<option value="六年级" selected>六年级</option>')
+        self.assertNotRegex(HTML, r'<option value="五年级" selected>')
+
+    def test_worksheet_displays_curriculum_source_metadata(self):
+        self.assertIn('id="worksheetSource"', HTML)
+        self.assertIn("let worksheetMeta = null", HTML)
+        self.assertIn("worksheetMeta = data.meta || null", HTML)
+        self.assertGreaterEqual(len(re.findall(r"renderWorksheetSource\(\)", HTML)), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
