@@ -16,6 +16,10 @@ import uuid
 from datetime import datetime
 from urllib.parse import quote
 from dotenv import load_dotenv
+try:
+    from .curriculum import CURRICULUM_META, CURRICULUM_UNITS as SIXTH_GRADE_CURRICULUM_UNITS
+except ImportError:
+    from curriculum import CURRICULUM_META, CURRICULUM_UNITS as SIXTH_GRADE_CURRICULUM_UNITS
 
 load_dotenv()
 
@@ -345,6 +349,7 @@ SUBJECT_LABELS = {"math": "数学", "english": "英语"}
 SEMESTER_LABELS = {"first": "第一学期", "second": "第二学期"}
 DIFFICULTY_LABELS = {"basic": "基础", "advanced": "提高", "challenge": "挑战"}
 WORKSHEET_GRADE_LABEL = "六年级"
+CURRICULUM_UNITS = SIXTH_GRADE_CURRICULUM_UNITS
 
 # 数据模型
 class Exam(Base):
@@ -655,16 +660,22 @@ def _unit_exam_profile(body: UnitWorksheetRequest, selected_units: list) -> dict
     if body.subject == "math":
         common_mistakes = []
         for point in selected_points:
-            if any(key in point for key in ["小数", "近似", "循环"]):
-                common_mistakes.append("小数点位置、位数处理或近似数保留错误")
-            elif any(key in point for key in ["方程", "等量"]):
-                common_mistakes.append("等量关系找错，解方程后没有代入检验")
-            elif any(key in point for key in ["面积", "体积", "容积", "表面积", "几何"]):
-                common_mistakes.append("公式套用、单位换算或图形条件识别错误")
-            elif any(key in point for key in ["平均", "统计"]):
-                common_mistakes.append("把平均数当成最大值或总数，忽视数据个数")
-            elif any(key in point for key in ["正数", "负数", "数轴"]):
-                common_mistakes.append("正负号意义混淆，数轴方向判断错误")
+            if any(key in point for key in ["整除", "因数", "倍数", "素数", "合数"]):
+                common_mistakes.append("混淆因数与倍数，或遗漏成对的因数")
+            elif "分数" in point:
+                common_mistakes.append("通分、约分或除以分数时没有正确处理分母")
+            elif any(key in point for key in ["比", "比例", "百分"]):
+                common_mistakes.append("没有统一比较标准，或混淆比值与百分比")
+            elif any(key in point for key in ["圆", "弧", "扇形"]):
+                common_mistakes.append("混淆半径与直径，或周长与面积单位使用错误")
+            elif any(key in point for key in ["有理数", "数轴", "绝对值", "乘方"]):
+                common_mistakes.append("符号判断或有理数运算顺序错误")
+            elif any(key in point for key in ["方程", "不等式"]):
+                common_mistakes.append("移项、去括号或不等号方向处理错误")
+            elif any(key in point for key in ["线段", "角", "余角", "补角"]):
+                common_mistakes.append("图形关系识别不清，和差倍关系列式错误")
+            elif any(key in point for key in ["长方体", "棱", "平面"]):
+                common_mistakes.append("从直观图判断空间位置关系时出现遗漏")
             else:
                 common_mistakes.append(f"{point} 的概念理解与迁移应用不稳定")
         return {
@@ -786,6 +797,120 @@ def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -
     return normalized
 
 
+def _fallback_math_content(point: str) -> dict:
+    if any(key in point for key in ["整除", "因数", "倍数", "素数", "合数"]):
+        return {
+            "question": "下列哪个数既是 36 的因数，又是 18 的倍数？",
+            "options": ["A. 9", "B. 12", "C. 18", "D. 24"],
+            "answer": "C",
+            "explanation": "36÷18=2，18 是 36 的因数；18÷18=1，18 也是 18 的倍数。",
+        }
+    if "分数" in point:
+        return {
+            "question": "计算 3/4 + 1/6，结果是多少？",
+            "options": ["A. 5/10", "B. 7/12", "C. 11/12", "D. 1"],
+            "answer": "C",
+            "explanation": "4 和 6 的最小公倍数是 12，3/4=9/12，1/6=2/12，所以和是 11/12。",
+        }
+    if any(key in point for key in ["比", "比例", "百分", "等可能"]):
+        return {
+            "question": "六（1）班 60 名学生中有 45 人参加社团，参加社团的人数占全班的百分之几？",
+            "options": ["A. 25%", "B. 45%", "C. 60%", "D. 75%"],
+            "answer": "D",
+            "explanation": "用参加人数除以全班人数，45÷60=0.75=75%。",
+        }
+    if any(key in point for key in ["圆", "弧", "扇形"]):
+        return {
+            "question": "一个圆的半径是 3 cm，它的面积是多少？",
+            "options": ["A. 3π cm²", "B. 6π cm²", "C. 9π cm²", "D. 12π cm²"],
+            "answer": "C",
+            "explanation": "圆的面积 S=πr²，代入 r=3，得到 S=9π cm²。",
+        }
+    if any(key in point for key in ["有理数", "数轴", "绝对值", "乘方"]):
+        return {
+            "question": "在 -5、-3、0、2 中，绝对值最小的数是哪个？",
+            "options": ["A. -5", "B. -3", "C. 0", "D. 2"],
+            "answer": "C",
+            "explanation": "四个数的绝对值依次为 5、3、0、2，其中 0 最小。",
+        }
+    if any(key in point for key in ["方程", "不等式"]):
+        return {
+            "question": "解方程 3x+6=21，x 的值是多少？",
+            "options": ["A. 3", "B. 5", "C. 7", "D. 9"],
+            "answer": "B",
+            "explanation": "等式两边先减 6，得 3x=15；再同时除以 3，得 x=5。",
+        }
+    if any(key in point for key in ["线段", "角", "余角", "补角"]):
+        return {
+            "question": "点 M 是线段 AB 的中点，AB=12 cm，那么 AM 的长是多少？",
+            "options": ["A. 4 cm", "B. 6 cm", "C. 12 cm", "D. 24 cm"],
+            "answer": "B",
+            "explanation": "中点把线段分成相等的两段，所以 AM=AB÷2=6 cm。",
+        }
+    if any(key in point for key in ["长方体", "棱", "平面"]):
+        return {
+            "question": "一个长方体共有多少条棱？",
+            "options": ["A. 6", "B. 8", "C. 10", "D. 12"],
+            "answer": "D",
+            "explanation": "长方体有 3 组互相平行的棱，每组 4 条，共 12 条。",
+        }
+    return {
+        "question": f"请用一个例子说明“{point}”的含义。",
+        "options": [],
+        "answer": "答案合理且能准确体现概念即可。",
+        "explanation": "本题检查是否能用自己的语言和例子说明概念，而不是只记结论。",
+    }
+
+
+def _fallback_english_content(point: str) -> dict:
+    lower_point = point.lower()
+    if any(key in lower_point for key in ["family", "friend"]):
+        question = "Alice is my uncle's daughter. Who is Alice?"
+        options = ["A. My cousin.", "B. My aunt.", "C. My mother.", "D. My grandmother."]
+        answer, explanation = "A", "An uncle's daughter is a cousin."
+    elif any(key in lower_point for key in ["job", "workplace", "would like"]):
+        question = "Ben likes helping sick people. He would like to be a ______."
+        options = ["A. doctor", "B. pilot", "C. cook", "D. farmer"]
+        answer, explanation = "A", "A doctor helps sick people, and would like to is followed by a verb or job choice in context."
+    elif any(key in lower_point for key in ["school", "open day", "transport", "takes"]):
+        question = "It ______ me twenty minutes to get to school by bus."
+        options = ["A. take", "B. takes", "C. taking", "D. tooks"]
+        answer, explanation = "B", "The subject It is third-person singular, so the verb is takes."
+    elif any(key in lower_point for key in ["rule", "must", "permission", "sign"]):
+        question = "Which sentence is correct in a library?"
+        options = ["A. We must keep quiet.", "B. We must to keep quiet.", "C. We must keeping quiet.", "D. We must kept quiet."]
+        answer, explanation = "A", "Must is followed by the base form of the verb."
+    elif any(key in lower_point for key in ["food", "picnic", "healthy", "pizza", "ingredient"]):
+        question = "We should not eat ______ fried food if we want to stay healthy."
+        options = ["A. too many", "B. too much", "C. enough many", "D. a few"]
+        answer, explanation = "B", "Food is uncountable here, so too much is the correct quantity expression."
+    elif any(key in lower_point for key in ["city", "airport", "flight", "travel"]):
+        question = "How long does it take to travel from Shanghai to Beijing by plane?"
+        options = ["A. About two hours.", "B. About 1,200 kilometres.", "C. In the north.", "D. At the airport."]
+        answer, explanation = "A", "How long asks about a length of time."
+    elif any(key in lower_point for key in ["festival", "past event", "would rather"]):
+        question = "People ______ dragon boat races during the festival last year."
+        options = ["A. watch", "B. watches", "C. watched", "D. watching"]
+        answer, explanation = "C", "Last year signals the simple past, so watched is correct."
+    elif any(key in lower_point for key in ["future", "will", "ambition"]):
+        question = "What ______ you be like in fifteen years' time?"
+        options = ["A. do", "B. did", "C. will", "D. are"]
+        answer, explanation = "C", "In fifteen years' time refers to the future, so will is correct."
+    elif any(key in lower_point for key in ["season", "weather", "wind", "adverb"]):
+        question = "The wind is blowing ______, so the flags are moving quickly."
+        options = ["A. strong", "B. strongly", "C. strength", "D. strongerly"]
+        answer, explanation = "B", "An adverb is needed to describe how the wind is blowing."
+    elif any(key in lower_point for key in ["water", "forest", "environment", "fire", "emergency"]):
+        question = "Which action is safe in a forest?"
+        options = ["A. Leave a fire burning.", "B. Throw away glass bottles.", "C. Follow fire-safety rules.", "D. Play with matches."]
+        answer, explanation = "C", "Following fire-safety rules protects forests and people."
+    else:
+        question = f"Choose the sentence that best matches the topic '{point}'."
+        options = ["A. The sentence is clear and complete.", "B. Sentence not complete.", "C. Is missing a subject.", "D. Use words incorrect."]
+        answer, explanation = "A", "A is the only complete and grammatically correct sentence."
+    return {"question": question, "options": options, "answer": answer, "explanation": explanation}
+
+
 def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | None = None) -> list:
     selected_units = selected_units or [u for u in CURRICULUM_UNITS if u["id"] in body.unit_ids]
     profile = _unit_exam_profile(body, selected_units)
@@ -796,102 +921,20 @@ def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | 
         point = planned["knowledge_point"]
         unit_id = body.unit_ids[(index - 1) % len(body.unit_ids)]
         common_mistake = profile["common_mistakes"][(index - 1) % len(profile["common_mistakes"])]
-        if body.subject == "english":
-            if planned["planned_type"] in ["词汇语境", "易错辨析"]:
-                question = {
-                    "id": f"q{index}",
-                    "unit_id": unit_id,
-                    "type": planned["planned_type"],
-                    "question": f"Choose the best answer in context.\\nThe class is reviewing '{point}'. Which sentence is correct and natural?",
-                    "options": [
-                        "A. We should read the signs carefully.",
-                        "B. We should reads the signs carefully.",
-                        "C. We reading the signs carefully.",
-                        "D. We read the signs carefully yesterday tomorrow.",
-                    ],
-                    "answer": "A",
-                    "explanation": "本题考查语境中的正确句型。should 后接动词原形，A 的语法和语境都正确。",
-                    "knowledge_points": [point],
-                    "exam_focus": f"在语境中使用 {point}",
-                    "common_mistake": common_mistake,
-                    "teaching_intent": planned["teaching_intent"],
-                }
-            elif planned["planned_type"] in ["核心句型", "句型语法", "语境改写"]:
-                question = {
-                    "id": f"q{index}",
-                    "unit_id": unit_id,
-                    "type": planned["planned_type"],
-                    "question": f"Rewrite the sentence to check '{point}'.\\nThere are some signs in the museum. (改为否定句)",
-                    "options": [],
-                    "answer": "There aren't any signs in the museum.",
-                    "explanation": "本题考查句型转换。There be 句型否定式在 be 后加 not，some 在否定句中通常改为 any。",
-                    "knowledge_points": [point],
-                    "exam_focus": f"用目标句型表达 {point}",
-                    "common_mistake": common_mistake,
-                    "teaching_intent": planned["teaching_intent"],
-                }
-            else:
-                question = {
-                    "id": f"q{index}",
-                    "unit_id": unit_id,
-                    "type": planned["planned_type"],
-                    "question": f"Read and answer.\\nKitty visits a small museum with her parents. They read the signs and speak quietly. The guide tells them about a special holiday show. What should visitors do in the museum?",
-                    "options": [
-                        "A. Run in the hall.",
-                        "B. Speak quietly.",
-                        "C. Eat beside the pictures.",
-                        "D. Touch everything.",
-                    ],
-                    "answer": "B",
-                    "explanation": "本题考查阅读信息提取。短文中提到 They read the signs and speak quietly，因此应选择 B。",
-                    "knowledge_points": [point],
-                    "exam_focus": f"阅读中提取 {point} 相关信息",
-                    "common_mistake": common_mistake,
-                    "teaching_intent": planned["teaching_intent"],
-                }
-        else:
-            if planned["planned_type"] in ["概念辨析", "易错校验", "易错辨析", "方法解释"]:
-                question = {
-                    "id": f"q{index}",
-                    "unit_id": unit_id,
-                    "type": planned["planned_type"],
-                    "question": f"围绕“{point}”判断：计算 2.4×3 时，可以先算 24×3，再把结果缩小到原来的十分之一。这个说法对吗？",
-                    "options": ["A. 对", "B. 错", "C. 无法判断", "D. 只在整数乘法中成立"],
-                    "answer": "A",
-                    "explanation": "本题考查小数乘法算理。24×3=72，2.4 比 24 缩小到十分之一，所以积也要缩小到十分之一，结果是 7.2。",
-                    "knowledge_points": [point],
-                    "exam_focus": f"辨析 {point} 的核心方法",
-                    "common_mistake": common_mistake,
-                    "teaching_intent": planned["teaching_intent"],
-                }
-            elif planned["planned_type"] in ["基础计算", "方法辨析"]:
-                question = {
-                    "id": f"q{index}",
-                    "unit_id": unit_id,
-                    "type": planned["planned_type"],
-                    "question": f"计算并验算：3.6÷0.6。本题用于检查“{point}”。",
-                    "options": [],
-                    "answer": "6",
-                    "explanation": "本题考查小数除法转化。把除数和被除数同时扩大 10 倍，变成 36÷6=6，验算 0.6×6=3.6。",
-                    "knowledge_points": [point],
-                    "exam_focus": f"准确运用 {point} 进行计算",
-                    "common_mistake": common_mistake,
-                    "teaching_intent": planned["teaching_intent"],
-                }
-            else:
-                question = {
-                    "id": f"q{index}",
-                    "unit_id": unit_id,
-                    "type": planned["planned_type"],
-                    "question": f"一盒彩笔 4.8 元，买 5 盒需要多少元？请列式计算，并说明这道题和“{point}”有什么关系。",
-                    "options": [],
-                    "answer": "4.8×5=24（元）",
-                    "explanation": "本题考查情境建模。求 5 个 4.8 是多少，用乘法计算；列式后还要关注小数点位置。",
-                    "knowledge_points": [point],
-                    "exam_focus": f"把 {point} 迁移到生活情境",
-                    "common_mistake": common_mistake,
-                    "teaching_intent": planned["teaching_intent"],
-                }
+        content = _fallback_english_content(point) if body.subject == "english" else _fallback_math_content(point)
+        question = {
+            "id": f"q{index}",
+            "unit_id": unit_id,
+            "type": planned["planned_type"],
+            "question": content["question"],
+            "options": content["options"],
+            "answer": content["answer"],
+            "explanation": content["explanation"],
+            "knowledge_points": [point],
+            "exam_focus": f"理解并运用 {point}",
+            "common_mistake": common_mistake,
+            "teaching_intent": planned["teaching_intent"],
+        }
         questions.append(question)
     return questions
 
@@ -917,12 +960,12 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
 
 
 async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
-    """按上海小学教材目录范围和知识点生成原创复习题。"""
+    """按上海初中六年级教材目录范围和知识点生成原创复习题。"""
     model_question_count = min(body.question_count, 6)
     model_body = body.copy(update={"question_count": model_question_count})
     exam_profile = _unit_exam_profile(body, selected_units)
     question_plan = _question_plan(model_body)
-    prompt = f"""你是一位熟悉上海小学{WORKSHEET_GRADE_LABEL}教学节奏的命题老师。
+    prompt = f"""你是一位熟悉上海初中{WORKSHEET_GRADE_LABEL}教学节奏的命题老师。
 你的任务不是随机出练习题，而是按“单元诊断型复习卷”的方式命题。
 只依据下面给出的单元名称、考点画像和题组计划生成原创题目，不引用或复刻教材原文。
 
@@ -1597,7 +1640,7 @@ def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, inc
 @app.get("/curriculum-units")
 async def curriculum_units():
     """返回可用于单元复习卷的公开目录范围与人工整理知识点。"""
-    return {"units": CURRICULUM_UNITS}
+    return {"units": CURRICULUM_UNITS, "meta": CURRICULUM_META}
 
 
 @app.post("/generate-unit-worksheet")
