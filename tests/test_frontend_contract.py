@@ -36,6 +36,15 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("checkAnswer(${i}, ${j})", HTML)
         self.assertNotIn("checkAnswer(${i}, '${q.answer}'", HTML)
 
+    def test_history_has_an_evidence_based_parent_dashboard(self):
+        self.assertIn('id="reviewDashboard"', HTML)
+        self.assertIn("function buildReviewDashboard(records)", HTML)
+        self.assertIn("function renderReviewDashboard(records)", HTML)
+        self.assertIn("function normalizeWrongCount(value)", HTML)
+        self.assertIn("value === null || value === undefined || value === ''", HTML)
+        self.assertIn("只反映已保存的分析记录，不代表考试成绩", HTML)
+        self.assertNotIn("进步率", HTML)
+
 
 if __name__ == "__main__":
     unittest.main()

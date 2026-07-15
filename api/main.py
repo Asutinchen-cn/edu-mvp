@@ -1282,6 +1282,40 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
+
+def _stored_json(raw_value: str | None, fallback):
+    if not raw_value:
+        return fallback
+    try:
+        return json.loads(raw_value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _analysis_history_summary(raw_analysis: str | None, raw_weak_points: str | None = None) -> dict:
+    """从已保存的 AI 分析中提取历史页可以确认的事实。"""
+    legacy_weak_points = _stored_json(raw_weak_points, [])
+    if not isinstance(legacy_weak_points, list):
+        legacy_weak_points = []
+    analysis = _stored_json(raw_analysis, None)
+    if not isinstance(analysis, dict):
+        return {
+            "wrong_count": None,
+            "weak_points": [str(item).strip() for item in legacy_weak_points if str(item).strip()],
+        }
+
+    wrong_questions = analysis.get("wrong_questions")
+    weak_points = analysis.get("weak_points")
+    if not isinstance(weak_points, list):
+        weak_points = legacy_weak_points
+    return {
+        "wrong_count": len(wrong_questions) if isinstance(wrong_questions, list) else None,
+        "weak_points": [str(item).strip() for item in weak_points if str(item).strip()]
+        if isinstance(weak_points, list)
+        else [],
+    }
+
+
 @app.get("/exams")
 async def list_exams(grade: str = None, student_name: str = None, subject: str = None, limit: int = 10):
     """获取最近上传的试卷列表（必须 年级 + 学生名 同时提供，可按学科筛选）"""
@@ -1318,21 +1352,26 @@ async def list_exams(grade: str = None, student_name: str = None, subject: str =
         .limit(max(1, min(limit, 100)))
         .all()
     )
+    exam_items = []
+    for exam in exams:
+        summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
+        exam_items.append({
+            "id": exam.id,
+            "grade": exam.grade,
+            "subject": exam.subject,
+            "student": exam.student_name,
+            "image": exam.image_path,
+            "image_url": _public_upload_url(exam.image_path),
+            "ocr_preview": exam.ocr_text[:50] + "..." if exam.ocr_text else None,
+            "wrong_count": summary["wrong_count"],
+            "weak_points": summary["weak_points"],
+            "created": exam.created_at.isoformat() if exam.created_at else None,
+        })
     db.close()
 
     return JSONResponse({
         "subject_archive": archive,
-        "exams": [{
-            "id": e.id,
-            "grade": e.grade,
-            "subject": e.subject,
-            "student": e.student_name,
-            "image": e.image_path,
-            "image_url": _public_upload_url(e.image_path),
-            "ocr_preview": e.ocr_text[:50] + "..." if e.ocr_text else None,
-            "weak_points": json.loads(e.weak_points) if e.weak_points else None,
-            "created": e.created_at.isoformat() if e.created_at else None
-        } for e in exams]
+        "exams": exam_items,
     })
 
 @app.get("/exams/{exam_id}")
@@ -1340,17 +1379,20 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
     """获取单个试卷详情（支持按 年级 + 学生名 校验）"""
     db = SessionLocal()
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
-    db.close()
 
     if not exam:
+        db.close()
         return JSONResponse({"error": "试卷不存在"}, status_code=404)
 
     if grade and (exam.grade or "").strip() != grade.strip():
+        db.close()
         return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
     if student_name and (exam.student_name or "").strip() != student_name.strip():
+        db.close()
         return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
 
-    return JSONResponse({
+    summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
+    response = {
         "id": exam.id,
         "grade": exam.grade,
         "subject": exam.subject,
@@ -1358,11 +1400,14 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
         "image": exam.image_path,
         "image_url": _public_upload_url(exam.image_path),
         "ocr_text": exam.ocr_text,
-        "ai_analysis": json.loads(exam.ai_analysis) if exam.ai_analysis else None,
-        "weak_points": json.loads(exam.weak_points) if exam.weak_points else None,
-        "recommendations": json.loads(exam.recommendations) if exam.recommendations else None,
+        "ai_analysis": _stored_json(exam.ai_analysis, None),
+        "wrong_count": summary["wrong_count"],
+        "weak_points": summary["weak_points"],
+        "recommendations": _stored_json(exam.recommendations, None),
         "created": exam.created_at.isoformat() if exam.created_at else None
-    })
+    }
+    db.close()
+    return JSONResponse(response)
 
 @app.delete("/exams/{exam_id}")
 async def delete_exam(exam_id: int, grade: str = None, student_name: str = None):

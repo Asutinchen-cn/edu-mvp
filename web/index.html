@@ -599,6 +599,99 @@
         }
         .date-range input[type="date"]:focus { border-color: var(--brand-blue); }
         .date-range span { color: #999; font-size: 12px; }
+        .review-dashboard {
+            margin: 2px 0 18px;
+            padding: 18px 0;
+            border-top: 1px solid rgba(23, 105, 232, 0.12);
+            border-bottom: 1px solid rgba(23, 105, 232, 0.12);
+        }
+        .review-dashboard-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 16px;
+        }
+        .review-dashboard-head h4 {
+            color: var(--ink);
+            font-size: 17px;
+            margin-bottom: 4px;
+        }
+        .review-dashboard-head p,
+        .review-evidence {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .review-scope {
+            flex-shrink: 0;
+            color: var(--brand-blue);
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .review-dashboard-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+            align-items: stretch;
+        }
+        .review-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .review-metric {
+            min-width: 0;
+            padding: 4px 18px;
+        }
+        .review-metric:first-child { padding-left: 0; }
+        .review-metric + .review-metric {
+            border-left: 1px solid rgba(23, 105, 232, 0.12);
+        }
+        .review-metric-label {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            margin-bottom: 7px;
+        }
+        .review-metric-value {
+            display: block;
+            color: var(--ink);
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+        .review-metric-note {
+            display: block;
+            color: #7b879b;
+            font-size: 11px;
+            line-height: 1.5;
+            margin-top: 5px;
+        }
+        .review-next {
+            min-width: 0;
+            padding: 4px 0 4px 22px;
+            border-left: 1px solid rgba(23, 105, 232, 0.12);
+        }
+        .review-next-label {
+            display: block;
+            color: var(--brand-orange);
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 7px;
+        }
+        .review-next strong {
+            display: block;
+            color: var(--ink);
+            font-size: 17px;
+            line-height: 1.5;
+            margin-bottom: 5px;
+        }
+        .review-next p {
+            color: #41516b;
+            font-size: 12px;
+            line-height: 1.7;
+        }
+        .review-evidence { margin-top: 14px; }
 
         /* History items */
         .history-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1225,6 +1318,19 @@
             .priority-label { white-space: normal; }
             .history-filters { align-items: flex-start; }
             .date-range { width: 100%; flex-wrap: wrap; }
+            .review-dashboard-head { flex-direction: column; gap: 6px; }
+            .review-dashboard-body { grid-template-columns: 1fr; }
+            .review-metrics { grid-template-columns: 1fr; }
+            .review-metric { padding: 12px 0; }
+            .review-metric + .review-metric {
+                border-left: 0;
+                border-top: 1px solid rgba(23, 105, 232, 0.1);
+            }
+            .review-next {
+                padding: 16px 0 0;
+                border-left: 0;
+                border-top: 1px solid rgba(23, 105, 232, 0.12);
+            }
         }
         @media (min-width: 769px) and (max-width: 1080px) {
             .header-nav { display: none; }
@@ -1444,6 +1550,7 @@
         <h3>🕒 错题库 / 历史分析记录</h3>
         <span class="history-count" id="historyCount">共 0 条记录</span>
     </div>
+    <section class="review-dashboard" id="reviewDashboard" aria-live="polite"></section>
     <div class="history-subjects">
         <button class="filter-tab active" data-subject-filter="all" onclick="setSubjectArchive('all')">全部学科 <span id="subjectCountAll">0</span></button>
         <button class="filter-tab" data-subject-filter="math" onclick="setSubjectArchive('math')">数学 <span id="subjectCountMath">0</span></button>
@@ -1730,6 +1837,7 @@ async function startAnalysis() {
             subject: subject,
             wrongCount: analysisData.wrongQuestions.length,
             weakPoint: analysisData.weakPoints[0] || '',
+            weakPoints: analysisData.weakPoints,
             result: JSON.stringify(analysisData),
             structured: true,
             serverId: analysisData.examIds[0] || null,
@@ -2252,8 +2360,9 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         name: exam.student || fallbackName,
         grade: exam.grade || fallbackGrade,
         subject: exam.subject || 'math',
-        wrongCount: Number.isFinite(Number(exam.wrong_count)) ? Number(exam.wrong_count) : null,
+        wrongCount: normalizeWrongCount(exam.wrong_count),
         weakPoint: weakPoint,
+        weakPoints: weakPoints,
         result: JSON.stringify(result, null, 2),
         structured: true,
         imageUrl: safeUploadUrl(exam.image_url),
@@ -2261,16 +2370,139 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
     };
 }
 
+function normalizeWrongCount(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const count = Number(value);
+    return Number.isFinite(count) && count >= 0 ? Math.floor(count) : null;
+}
+
 function historyWrongCount(record) {
-    if (Number.isFinite(Number(record.wrongCount))) {
-        return Math.max(0, Number(record.wrongCount));
-    }
+    const storedCount = normalizeWrongCount(record.wrongCount);
+    if (storedCount !== null) return storedCount;
     try {
         const result = JSON.parse(record.result || '{}');
         return Array.isArray(result.wrongQuestions) ? result.wrongQuestions.length : null;
     } catch (e) {
         return null;
     }
+}
+
+function recordWeakPoints(record) {
+    const direct = Array.isArray(record.weakPoints) ? record.weakPoints : [];
+    let values = direct;
+    if (!values.length) {
+        try {
+            const result = JSON.parse(record.result || '{}');
+            values = Array.isArray(result.weakPoints)
+                ? result.weakPoints
+                : (Array.isArray(result['薄弱知识点']) ? result['薄弱知识点'] : []);
+        } catch (e) {
+            values = [];
+        }
+    }
+    if (!values.length && record.weakPoint) values = [record.weakPoint];
+    const ignored = new Set(['待分析', '请稍后重试', '未识别到明确薄弱点']);
+    return [...new Set(values.map(value => String(value || '').trim()).filter(value => value && !ignored.has(value)))];
+}
+
+function buildReviewDashboard(records) {
+    const safeRecords = Array.isArray(records) ? records : [];
+    const knownCounts = safeRecords.map(historyWrongCount).filter(count => count !== null);
+    const confirmedWrongCount = knownCounts.reduce((sum, count) => sum + count, 0);
+    const subjectCounts = safeRecords.reduce((counts, record) => {
+        const subject = record.subject === 'english' ? 'english' : 'math';
+        counts[subject] += 1;
+        return counts;
+    }, { math: 0, english: 0 });
+
+    const weakFrequency = new Map();
+    safeRecords.forEach(record => {
+        recordWeakPoints(record).forEach(point => {
+            weakFrequency.set(point, (weakFrequency.get(point) || 0) + 1);
+        });
+    });
+    const rankedWeakPoints = [...weakFrequency.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'));
+    const topWeakPoint = rankedWeakPoints[0] || null;
+    const repeatedWeakPoint = topWeakPoint?.count >= 2 ? topWeakPoint : null;
+    const latestRecord = [...safeRecords]
+        .filter(record => !Number.isNaN(new Date(record.date).getTime()))
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+    const latestFocus = latestRecord ? recordWeakPoints(latestRecord)[0] : '';
+
+    const subjectSummary = [
+        subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
+        subjectCounts.english ? `英语 ${subjectCounts.english} 份` : ''
+    ].filter(Boolean).join(' · ') || '尚无学科记录';
+    const countNote = knownCounts.length
+        ? `${knownCounts.length === safeRecords.length ? '统计' : '仅统计'} ${knownCounts.length} 份有错题明细的记录`
+        : '旧记录暂无错题数明细';
+
+    let nextTitle = '上传最近一份试卷';
+    let nextAction = '建立第一条可追踪的错题记录，再安排针对性复习。';
+    if (repeatedWeakPoint) {
+        nextTitle = `优先复练“${repeatedWeakPoint.name}”`;
+        nextAction = `这个薄弱点已在 ${repeatedWeakPoint.count} 份记录中出现。先回做代表错题，再做 5 道同类题。`;
+    } else if (latestFocus) {
+        nextTitle = `巩固“${latestFocus}”`;
+        nextAction = '目前还没有反复薄弱点。建议完成一次同类练习，下次上传时再对比。';
+    }
+
+    return {
+        analysisCount: safeRecords.length,
+        subjectSummary: subjectSummary,
+        confirmedWrongCount: knownCounts.length ? String(confirmedWrongCount) : '待同步',
+        countNote: countNote,
+        repeatedWeakPoint: repeatedWeakPoint?.name || '暂无重复',
+        repeatedNote: repeatedWeakPoint
+            ? `在 ${repeatedWeakPoint.count} 份记录中出现`
+            : (topWeakPoint ? '目前每个薄弱点只出现 1 次' : '需要更多分析记录'),
+        nextTitle: nextTitle,
+        nextAction: nextAction
+    };
+}
+
+function renderReviewDashboard(records) {
+    const dashboard = document.getElementById('reviewDashboard');
+    const summary = buildReviewDashboard(records);
+    const scopeLabel = currentSubjectArchive === 'all'
+        ? '当前筛选：全部学科'
+        : `当前筛选：${currentSubjectArchive === 'english' ? '英语' : '数学'}`;
+    dashboard.innerHTML = `
+        <div class="review-dashboard-head">
+            <div>
+                <h4>家长复习看板</h4>
+                <p>只看真实记录，快速找到近期反复卡住的地方。</p>
+            </div>
+            <span class="review-scope">${escapeHtml(scopeLabel)}</span>
+        </div>
+        <div class="review-dashboard-body">
+            <div class="review-metrics">
+                <div class="review-metric">
+                    <span class="review-metric-label">已分析试卷</span>
+                    <strong class="review-metric-value">${summary.analysisCount} 份</strong>
+                    <span class="review-metric-note">${escapeHtml(summary.subjectSummary)}</span>
+                </div>
+                <div class="review-metric">
+                    <span class="review-metric-label">已记录错题</span>
+                    <strong class="review-metric-value">${escapeHtml(summary.confirmedWrongCount)}${summary.confirmedWrongCount === '待同步' ? '' : ' 道'}</strong>
+                    <span class="review-metric-note">${escapeHtml(summary.countNote)}</span>
+                </div>
+                <div class="review-metric">
+                    <span class="review-metric-label">反复薄弱点</span>
+                    <strong class="review-metric-value">${escapeHtml(summary.repeatedWeakPoint)}</strong>
+                    <span class="review-metric-note">${escapeHtml(summary.repeatedNote)}</span>
+                </div>
+            </div>
+            <div class="review-next">
+                <span class="review-next-label">下一步建议</span>
+                <strong>${escapeHtml(summary.nextTitle)}</strong>
+                <p>${escapeHtml(summary.nextAction)}</p>
+            </div>
+        </div>
+        <p class="review-evidence">这些数字只反映已保存的分析记录，不代表考试成绩；“反复薄弱点”仅按同名知识点统计。</p>
+    `;
 }
 
 function setHistoryFilter(filter) {
@@ -2304,7 +2536,22 @@ async function syncServerWrongBank() {
         const data = await requestJson(`/exams?${params.toString()}`, { method: 'GET' });
         const serverRecords = (data.exams || []).map(exam => makeServerHistoryRecord(exam, grade, studentName));
         const recordMap = new Map(historyRecords.map(r => [r.serverId ? `server-${r.serverId}` : `local-${r.id}`, r]));
-        serverRecords.forEach(record => recordMap.set(`server-${record.serverId}`, record));
+        serverRecords.forEach(record => {
+            const key = `server-${record.serverId}`;
+            const existing = recordMap.get(key);
+            if (!existing) {
+                recordMap.set(key, record);
+                return;
+            }
+            recordMap.set(key, {
+                ...record,
+                ...existing,
+                wrongCount: record.wrongCount ?? existing.wrongCount,
+                weakPoint: record.weakPoint !== '待分析' ? record.weakPoint : existing.weakPoint,
+                weakPoints: record.weakPoints.length ? record.weakPoints : existing.weakPoints,
+                serverSynced: true
+            });
+        });
         historyRecords = [...recordMap.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
         localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
         setHistoryFilter('all');
@@ -2321,6 +2568,7 @@ function renderHistory() {
     updateSubjectArchiveCounts(getDateFilteredRecords());
     const records = getFilteredRecords();
     document.getElementById('historyCount').textContent = `共 ${records.length} 条记录`;
+    renderReviewDashboard(records);
 
     if (records.length === 0) {
         list.innerHTML = `
