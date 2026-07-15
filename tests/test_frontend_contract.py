@@ -53,6 +53,27 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("只反映已保存的分析记录，不代表考试成绩", HTML)
         self.assertNotIn("进步率", HTML)
 
+    def test_history_records_render_readable_diagnosis_and_actions(self):
+        self.assertIn("function renderHistoryDiagnosis(record)", HTML)
+        self.assertIn("async function loadHistoryDetail(id)", HTML)
+        self.assertIn("function prepareHistoryPractice(id)", HTML)
+        self.assertIn("错题诊断", HTML)
+        self.assertIn("生成巩固练习", HTML)
+        self.assertNotIn("<pre>${escapeHtml(r.result)}</pre>", HTML)
+
+    def test_practice_generation_uses_the_saved_exam_endpoint(self):
+        self.assertIn("const examId = currentAnalysisData.examIds?.[0]", HTML)
+        self.assertRegex(
+            HTML,
+            r"requestJson\(`/generate-practice/\$\{examId\}\?\$\{params\.toString\(\)\}`",
+        )
+        self.assertNotIn("fetch('/generate-practice'", HTML)
+
+    def test_history_string_ids_are_safe_inside_inline_actions(self):
+        self.assertIn("escapeHtml(JSON.stringify(r.id))", HTML)
+        self.assertIn("escapeHtml(JSON.stringify(record.id))", HTML)
+        self.assertNotIn('onclick="toggleRecord(${JSON.stringify(r.id)})"', HTML)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from api.main import _analysis_history_summary
+from api.main import _analysis_history_detail, _analysis_history_summary
 
 
 class AnalysisHistorySummaryTest(unittest.TestCase):
@@ -32,6 +32,38 @@ class AnalysisHistorySummaryTest(unittest.TestCase):
             _analysis_history_summary("not-json"),
             {"wrong_count": None, "weak_points": []},
         )
+
+
+class AnalysisHistoryDetailTest(unittest.TestCase):
+    def test_returns_parent_readable_saved_analysis(self):
+        detail = _analysis_history_detail(json.dumps({
+            "wrong_questions": [{
+                "question": "解方程 2x + 3 = 9",
+                "error_type": "移项符号错误",
+                "student_answer": "x = 6",
+                "correct_answer": "x = 3",
+            }],
+            "error_types": ["移项符号错误"],
+            "weak_points": ["一元一次方程"],
+            "root_cause": "没有理解移项要改变符号。",
+            "recommendations": ["先口述等式两边同时运算的理由。"],
+        }, ensure_ascii=False))
+
+        self.assertEqual(detail["wrong_questions"][0]["student_answer"], "x = 6")
+        self.assertEqual(detail["weak_points"], ["一元一次方程"])
+        self.assertEqual(detail["root_cause"], "没有理解移项要改变符号。")
+        self.assertEqual(detail["recommendations"], ["先口述等式两边同时运算的理由。"])
+
+    def test_falls_back_to_legacy_weak_points_and_recommendations(self):
+        detail = _analysis_history_detail(
+            None,
+            json.dumps(["一般过去时"], ensure_ascii=False),
+            json.dumps(["回到原句辨认时间标志。"], ensure_ascii=False),
+        )
+
+        self.assertEqual(detail["wrong_questions"], [])
+        self.assertEqual(detail["weak_points"], ["一般过去时"])
+        self.assertEqual(detail["recommendations"], ["回到原句辨认时间标志。"])
 
 
 if __name__ == "__main__":

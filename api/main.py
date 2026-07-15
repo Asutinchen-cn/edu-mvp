@@ -1382,6 +1382,46 @@ def _analysis_history_summary(raw_analysis: str | None, raw_weak_points: str | N
     }
 
 
+def _analysis_history_detail(
+    raw_analysis: str | None,
+    raw_weak_points: str | None = None,
+    raw_recommendations: str | None = None,
+) -> dict:
+    """把新旧分析记录整理成历史页稳定使用的结构。"""
+    analysis = _stored_json(raw_analysis, {})
+    if not isinstance(analysis, dict):
+        analysis = {}
+
+    def clean_list(value):
+        return [str(item).strip() for item in value if str(item).strip()] if isinstance(value, list) else []
+
+    wrong_questions = []
+    for item in analysis.get("wrong_questions", []):
+        if not isinstance(item, dict):
+            continue
+        wrong_questions.append({
+            "question": str(item.get("question") or "").strip(),
+            "error_type": str(item.get("error_type") or "").strip(),
+            "student_answer": str(item.get("student_answer") or "").strip(),
+            "correct_answer": str(item.get("correct_answer") or "").strip(),
+        })
+
+    weak_points = clean_list(analysis.get("weak_points"))
+    if not weak_points:
+        weak_points = clean_list(_stored_json(raw_weak_points, []))
+    recommendations = clean_list(analysis.get("recommendations"))
+    if not recommendations:
+        recommendations = clean_list(_stored_json(raw_recommendations, []))
+
+    return {
+        "wrong_questions": wrong_questions,
+        "error_types": clean_list(analysis.get("error_types")),
+        "weak_points": weak_points,
+        "root_cause": str(analysis.get("root_cause") or "").strip(),
+        "recommendations": recommendations,
+    }
+
+
 @app.get("/exams")
 async def list_exams(grade: str = None, student_name: str = None, subject: str = None, limit: int = 10):
     """获取最近上传的试卷列表（必须 年级 + 学生名 同时提供，可按学科筛选）"""
@@ -1458,6 +1498,7 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
         return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
 
     summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
+    analysis = _analysis_history_detail(exam.ai_analysis, exam.weak_points, exam.recommendations)
     response = {
         "id": exam.id,
         "grade": exam.grade,
@@ -1467,6 +1508,7 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
         "image_url": _public_upload_url(exam.image_path),
         "ocr_text": exam.ocr_text,
         "ai_analysis": _stored_json(exam.ai_analysis, None),
+        "analysis": analysis,
         "wrong_count": summary["wrong_count"],
         "weak_points": summary["weak_points"],
         "recommendations": _stored_json(exam.recommendations, None),
