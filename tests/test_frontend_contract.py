@@ -7,6 +7,9 @@ HTML = (Path(__file__).parents[1] / "web" / "index.html").read_text(encoding="ut
 
 
 class FrontendCurriculumContractTest(unittest.TestCase):
+    def test_brand_logo_is_used_as_the_site_icon(self):
+        self.assertIn('<link rel="icon" href="logo.png" type="image/png">', HTML)
+
     def test_sixth_grade_is_the_default_analysis_grade(self):
         self.assertRegex(HTML, r'<option value="六年级" selected>六年级</option>')
         self.assertNotRegex(HTML, r'<option value="五年级" selected>')
@@ -19,7 +22,8 @@ class FrontendCurriculumContractTest(unittest.TestCase):
 
     def test_worksheet_is_grade_aware_and_does_not_silently_reuse_sixth_grade(self):
         self.assertIn('id="worksheetGrade"', HTML)
-        self.assertIn('value="七年级" disabled', HTML)
+        self.assertIn('<option value="七年级">七年级</option>', HTML)
+        self.assertNotIn('value="七年级" disabled', HTML)
         self.assertIn('value="八年级" disabled', HTML)
         self.assertIn('value="九年级" disabled', HTML)
         self.assertIn("u.grade === grade", HTML)

@@ -1,16 +1,22 @@
 """上海初中单元复习卷的公开目录范围与人工整理知识点。"""
 
-GRADE = "六年级"
+GRADE_6 = "六年级"
+GRADE_7 = "七年级"
+GRADE = GRADE_6
 MATH_SOURCE_FIRST = "上海六年级第一学期《义务教育教科书（五·四学制）·数学》2024 年审定版目录"
 MATH_SOURCE_SECOND = "上海六年级第二学期《义务教育教科书（五·四学制）·数学》2024 年审定版目录"
 ENGLISH_SOURCE_FIRST = "上海六年级第一学期《义务教育教科书（五·四学制）·英语》2024 年审定版目录"
 ENGLISH_SOURCE_SECOND = "上海六年级第二学期《义务教育教科书（五·四学制）·英语》2024 年审定版目录"
+MATH_7_SOURCE_FIRST = "上海七年级第一学期《义务教育教科书（五·四学制）·数学》，册次依据上海市教委 2025 年秋季教学用书目录确认"
+MATH_7_SOURCE_SECOND = "上海七年级第二学期《义务教育教科书（五·四学制）·数学》，册次依据上海市教委 2026 年春季教学用书目录确认"
+ENGLISH_7_SOURCE_FIRST = "上海七年级第一学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2025 年秋季教学用书目录确认"
+ENGLISH_7_SOURCE_SECOND = "上海七年级第二学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2026 年春季教学用书目录确认"
 
 
-def unit(unit_id, subject, semester, title, knowledge_points, source_note):
+def unit(unit_id, subject, semester, title, knowledge_points, source_note, grade=GRADE):
     return {
         "id": unit_id,
-        "grade": GRADE,
+        "grade": grade,
         "subject": subject,
         "semester": semester,
         "title": title,
@@ -188,20 +194,227 @@ CURRICULUM_UNITS = [
         ["world changers", "life savers", "great storytellers", "great minds", "famous people in history"],
         ENGLISH_SOURCE_SECOND,
     ),
+    unit(
+        "math-7a-polynomial-addition",
+        "math",
+        "first",
+        "第10章 整式的加减",
+        ["整式", "合并同类项", "整式的加减"],
+        MATH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7a-polynomial-multiplication",
+        "math",
+        "first",
+        "第11章 整式的乘除",
+        ["整式的乘法", "乘法公式", "整式的除法"],
+        MATH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7a-factoring",
+        "math",
+        "first",
+        "第12章 因式分解",
+        ["因式分解", "提公因式法", "公式法", "十字相乘法"],
+        MATH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7a-rational-expressions",
+        "math",
+        "first",
+        "第13章 分式",
+        ["分式", "分式的基本性质", "分式的运算", "分式方程"],
+        MATH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7a-transformations",
+        "math",
+        "first",
+        "第14章 图形的运动",
+        ["平移", "旋转", "轴对称", "中心对称"],
+        MATH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7b-linear-inequalities",
+        "math",
+        "second",
+        "第15章 一元一次不等式",
+        ["不等式及其性质", "一元一次不等式", "一元一次不等式组"],
+        MATH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7b-lines",
+        "math",
+        "second",
+        "第16章 相交线与平行线",
+        ["相交线", "平行线", "命题与证明"],
+        MATH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7b-triangles",
+        "math",
+        "second",
+        "第17章 三角形",
+        ["三角形的有关概念", "三角形的内角和", "全等三角形及其性质", "三角形全等的判定"],
+        MATH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "math-7b-isosceles-triangles",
+        "math",
+        "second",
+        "第18章 等腰三角形",
+        ["等腰三角形的性质", "等腰三角形的判定", "等边三角形", "线段垂直平分线"],
+        MATH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u1-friendship",
+        "english",
+        "first",
+        "Unit 1 Friendship",
+        ["making friends", "qualities of a good friend", "friendship stories", "friendship communication"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u2-school-life",
+        "english",
+        "first",
+        "Unit 2 School life",
+        ["school routines", "school activities", "school clubs", "describing school life"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u3-seasons",
+        "english",
+        "first",
+        "Unit 3 The seasons",
+        ["seasonal weather", "seasonal activities", "changes in nature", "describing a season"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u4-earth",
+        "english",
+        "first",
+        "Unit 4 The Earth",
+        ["the natural world", "environmental problems", "protecting the Earth", "green actions"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u5-space",
+        "english",
+        "first",
+        "Unit 5 Off to space",
+        ["the solar system", "space travel", "life in space", "a space mission"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u6-asia",
+        "english",
+        "first",
+        "Unit 6 Travelling around Asia",
+        ["Asian destinations", "travel experiences", "travel plans", "introducing a place"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u7-after-school",
+        "english",
+        "first",
+        "Unit 7 Fun after school",
+        ["after-school activities", "clubs and interests", "making invitations", "planning an activity"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7a-u8-collecting",
+        "english",
+        "first",
+        "Unit 8 Collecting as a hobby",
+        ["collections", "hobbies and interests", "reasons for collecting", "introducing a collection"],
+        ENGLISH_7_SOURCE_FIRST,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7b-u1-music",
+        "english",
+        "second",
+        "Unit 1 Music",
+        ["music and musicians", "music preferences", "the power of music", "introducing music"],
+        ENGLISH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7b-u2-communication",
+        "english",
+        "second",
+        "Unit 2 Language and communication",
+        ["ways of communication", "communication skills", "group communication", "introducing oneself"],
+        ENGLISH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7b-u3-helping-hand",
+        "english",
+        "second",
+        "Unit 3 A helping hand",
+        ["everyday heroes", "helping others", "emergencies", "showing thankfulness"],
+        ENGLISH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7b-u4-honesty",
+        "english",
+        "second",
+        "Unit 4 Honesty",
+        ["honest choices", "stories about honesty", "keeping promises", "actions and consequences"],
+        ENGLISH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7b-u5-wild-animals",
+        "english",
+        "second",
+        "Unit 5 Wild animals",
+        ["wild animal species", "wildlife safety", "reading about wild animals", "wildlife conservation"],
+        ENGLISH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
+    unit(
+        "english-7b-u6-trees",
+        "english",
+        "second",
+        "Unit 6 Trees",
+        ["forests", "the value of trees", "protecting trees", "trees around us"],
+        ENGLISH_7_SOURCE_SECOND,
+        grade=GRADE_7,
+    ),
 ]
 
 
 CURRICULUM_META = {
     "grade": GRADE,
     "default_grade": GRADE,
-    "available_grades": [GRADE],
+    "available_grades": [GRADE_6, GRADE_7],
     "grades": [
         {"value": "六年级", "status": "available", "note": "2024 年审定新版目录已核对"},
-        {"value": "七年级", "status": "pending", "note": "目录核对中"},
+        {"value": "七年级", "status": "available", "note": "2025 秋季、2026 春季市教委目录已核对"},
         {"value": "八年级", "status": "pending", "note": "目录核对中"},
         {"value": "九年级", "status": "pending", "note": "需区分学校使用的英语版本"},
     ],
-    "edition_note": "六年级数学、英语使用依据 2022 年版课程标准修订并于 2024 年审定的五·四学制教材。",
+    "edition_note": "六、七年级数学和英语使用依据 2022 年版课程标准修订、分册陆续审定启用的五·四学制教材。",
     "scope_note": "仅使用公开教材目录和人工整理知识点，不存储教材正文。",
     "sources": [
         {

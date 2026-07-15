@@ -813,6 +813,111 @@ def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -
 
 
 def _fallback_math_content(point: str) -> dict:
+    if any(key in point for key in ["整式的乘法", "整式的除法", "乘法公式"]):
+        return {
+            "question": "计算 (x+3)(x-3)，结果是什么？",
+            "options": ["A. x²-9", "B. x²+9", "C. x²-6x+9", "D. x²+6x+9"],
+            "answer": "A",
+            "explanation": "使用平方差公式 (a+b)(a-b)=a²-b²，得到 x²-9。",
+        }
+    if point == "整式" or any(key in point for key in ["同类项", "整式的加减"]):
+        return {
+            "question": "化简 3x+2-5x+7，结果是什么？",
+            "options": ["A. -2x+9", "B. 2x+9", "C. -2x+5", "D. 8x+9"],
+            "answer": "A",
+            "explanation": "先合并同类项：3x-5x=-2x，常数项 2+7=9，所以整式化简为 -2x+9。",
+        }
+    if any(key in point for key in ["因式", "公因式", "公式法", "十字相乘"]):
+        return {
+            "question": "把 6x²-9x 因式分解，结果是什么？",
+            "options": ["A. 3x(2x-3)", "B. 3(2x²-3x)", "C. x(6x-9x)", "D. 3x(2x+3)"],
+            "answer": "A",
+            "explanation": "两项的公因式是 3x，提出后得到 3x(2x-3)，且括号内不能再分解。",
+        }
+    if "分式" in point:
+        return {
+            "question": "当 x≠3 时，分式 (x²-9)/(x-3) 化简后的结果是什么？",
+            "options": ["A. x-3", "B. x+3", "C. x²+3", "D. 1"],
+            "answer": "B",
+            "explanation": "先把分子因式分解为 (x-3)(x+3)，再约去公因式 x-3，结果是 x+3；同时保留 x≠3 的限制。",
+        }
+    if "平移" in point:
+        return {
+            "question": "把一个图形向右平移 4 cm，下列说法正确的是哪一项？",
+            "options": ["A. 图形大小不变", "B. 图形面积变大", "C. 图形形状改变", "D. 每个点向上移动 4 cm"],
+            "answer": "A",
+            "explanation": "平移只改变图形的位置，不改变形状和大小；图形上每个点都按同一方向移动相同距离。",
+        }
+    if "旋转" in point:
+        return {
+            "question": "把图形绕点 O 顺时针旋转 90°，下列说法正确的是哪一项？",
+            "options": ["A. 对应点到 O 的距离不变", "B. 图形面积变大", "C. 图形形状改变", "D. 所有点都向右移动"],
+            "answer": "A",
+            "explanation": "旋转前后对应点到旋转中心的距离相等，图形的形状、大小和面积都不变。",
+        }
+    if "轴对称" in point:
+        return {
+            "question": "关于轴对称图形，下列说法正确的是哪一项？",
+            "options": ["A. 沿对称轴翻折后两部分能重合", "B. 一定只有一条对称轴", "C. 面积会变为原来一半", "D. 对应点到对称轴距离不同"],
+            "answer": "A",
+            "explanation": "轴对称图形沿对称轴翻折后两部分能够完全重合，对应点到对称轴的距离相等。",
+        }
+    if "中心对称" in point:
+        return {
+            "question": "把一个中心对称图形绕对称中心旋转多少度后，能与原图形重合？",
+            "options": ["A. 45°", "B. 90°", "C. 180°", "D. 360°以内都可以"],
+            "answer": "C",
+            "explanation": "中心对称图形绕对称中心旋转 180°后与原图形重合。",
+        }
+    if "不等式" in point:
+        return {
+            "question": "解不等式 3x-5<7，解集是什么？",
+            "options": ["A. x<4", "B. x>4", "C. x<2/3", "D. x>2/3"],
+            "answer": "A",
+            "explanation": "两边加 5 得 3x<12，再除以正数 3，不等号方向不变，所以 x<4。",
+        }
+    if any(key in point for key in ["相交线", "平行线", "命题", "证明"]):
+        return {
+            "question": "两条平行线被第三条直线所截，一组同位角中一个角是 65°，另一个角是多少度？",
+            "options": ["A. 25°", "B. 65°", "C. 115°", "D. 125°"],
+            "answer": "B",
+            "explanation": "两直线平行时，同位角相等，所以另一个同位角也是 65°。",
+        }
+    if any(key in point for key in ["等腰", "等边", "垂直平分线"]):
+        if "等边" in point:
+            return {
+                "question": "等边三角形的一个内角是多少度？",
+                "options": ["A. 30°", "B. 45°", "C. 60°", "D. 90°"],
+                "answer": "C",
+                "explanation": "等边三角形三个内角相等，内角和为 180°，所以每个内角都是 60°。",
+            }
+        if "垂直平分线" in point:
+            return {
+                "question": "点 P 在线段 AB 的垂直平分线上，下列结论正确的是哪一项？",
+                "options": ["A. PA=PB", "B. PA>PB", "C. PA<PB", "D. PA+PB=AB"],
+                "answer": "A",
+                "explanation": "线段垂直平分线上的点到线段两个端点的距离相等，所以 PA=PB。",
+            }
+        return {
+            "question": "等腰三角形的顶角为 40°，每个底角是多少度？",
+            "options": ["A. 40°", "B. 60°", "C. 70°", "D. 140°"],
+            "answer": "C",
+            "explanation": "等腰三角形两个底角相等，每个底角为 (180°-40°)÷2=70°。",
+        }
+    if any(key in point for key in ["全等", "三角形全等"]):
+        return {
+            "question": "在△ABC和△DEF中，AB=DE，BC=EF，AC=DF。判定两三角形全等的依据是什么？",
+            "options": ["A. SSS", "B. SAS", "C. ASA", "D. AAS"],
+            "answer": "A",
+            "explanation": "三个对应边分别相等，可用边边边（SSS）判定两个三角形全等。",
+        }
+    if any(key in point for key in ["三角形", "内角和"]):
+        return {
+            "question": "一个三角形的两个内角分别是 48°和 72°，第三个内角是多少度？",
+            "options": ["A. 50°", "B. 60°", "C. 70°", "D. 80°"],
+            "answer": "B",
+            "explanation": "三角形内角和是 180°，所以第三个角为 180°-48°-72°=60°。",
+        }
     if any(key in point for key in ["整除", "因数", "倍数", "素数", "合数"]):
         return {
             "question": "下列哪个数既是 36 的因数，又是 18 的倍数？",
@@ -907,7 +1012,47 @@ def _fallback_math_content(point: str) -> dict:
 
 def _fallback_english_content(point: str) -> dict:
     lower_point = point.lower()
-    if any(key in lower_point for key in ["family", "friend"]):
+    if any(key in lower_point for key in ["wildlife", "wild animal", "conservation"]):
+        question = "Which action best protects wild animals?"
+        options = ["A. Protect their habitats.", "B. Buy products made from them.", "C. Feed them in the street.", "D. Keep every wild animal as a pet."]
+        answer, explanation = "A", "Protecting natural habitats gives wild animals food, shelter and safe places to live."
+    elif any(key in lower_point for key in ["tree", "forest"]):
+        question = "Trees are important because they ______."
+        options = ["A. help clean the air", "B. make rivers dirty", "C. use up all the soil", "D. stop animals from living"]
+        answer, explanation = "A", "Trees help clean the air and provide habitats, so protecting them benefits people and wildlife."
+    elif any(key in lower_point for key in ["helping", "hero", "emergenc", "thankful"]):
+        question = "What should you do first when you see someone badly hurt?"
+        options = ["A. Call an adult or emergency services.", "B. Walk away quietly.", "C. Move the person at once.", "D. Take a photo."]
+        answer, explanation = "A", "Getting trained help is the safest first action in an emergency."
+    elif any(key in lower_point for key in ["honest", "honesty", "promise", "consequence"]):
+        question = "Tom broke a classroom ruler by accident. What is the honest choice?"
+        options = ["A. Tell the teacher the truth.", "B. Hide the ruler.", "C. Blame another student.", "D. Say nothing happened."]
+        answer, explanation = "A", "Being honest means telling the truth and taking responsibility for one's actions."
+    elif any(key in lower_point for key in ["music", "musician"]):
+        question = "Which sentence correctly expresses a music preference?"
+        options = ["A. I enjoy listening to jazz.", "B. I enjoy listen jazz.", "C. I enjoying to jazz.", "D. I enjoy listened jazz."]
+        answer, explanation = "A", "Enjoy is followed by a verb ending in -ing, so listening is correct."
+    elif any(key in lower_point for key in ["communication", "communicat", "introducing oneself"]):
+        question = "Which action helps people communicate well in a group?"
+        options = ["A. Listen before replying.", "B. Interrupt every speaker.", "C. Ignore other ideas.", "D. Speak without looking at anyone."]
+        answer, explanation = "A", "Listening carefully helps group members understand one another before they respond."
+    elif any(key in lower_point for key in ["collect", "hobb", "interest"]):
+        question = "Mia has collected postcards for three years. What is her hobby?"
+        options = ["A. Collecting postcards.", "B. Posting letters.", "C. Drawing maps.", "D. Buying tickets."]
+        answer, explanation = "A", "The repeated activity described in the sentence is collecting postcards."
+    elif any(key in lower_point for key in ["space", "solar", "planet", "mission"]):
+        question = "Astronauts travel into space in a ______."
+        options = ["A. spacecraft", "B. ferry", "C. bicycle", "D. train"]
+        answer, explanation = "A", "A spacecraft is a vehicle designed for travel beyond the Earth."
+    elif any(key in lower_point for key in ["earth", "natural world", "nature", "environment", "green action"]):
+        question = "Which action helps protect the Earth?"
+        options = ["A. Save water and recycle.", "B. Leave lights on all day.", "C. Use a new plastic bag each time.", "D. Throw rubbish into rivers."]
+        answer, explanation = "A", "Saving resources and recycling are practical ways to reduce harm to the Earth."
+    elif any(key in lower_point for key in ["asia", "destination", "introducing a place"]):
+        question = "Which sentence clearly introduces a place in Asia?"
+        options = ["A. Bangkok is a lively city in Thailand.", "B. Bangkok lively Thailand in.", "C. Is city Bangkok Thailand.", "D. Bangkok at lively a city."]
+        answer, explanation = "A", "A gives the place, country and a clear description in a complete sentence."
+    elif any(key in lower_point for key in ["family", "friend"]):
         question = "Alice is my uncle's daughter. Who is Alice?"
         options = ["A. My cousin.", "B. My aunt.", "C. My mother.", "D. My grandmother."]
         answer, explanation = "A", "An uncle's daughter is a cousin."
@@ -915,6 +1060,10 @@ def _fallback_english_content(point: str) -> dict:
         question = "Ben likes helping sick people. He would like to be a ______."
         options = ["A. doctor", "B. pilot", "C. cook", "D. farmer"]
         answer, explanation = "A", "A doctor helps sick people, and would like to is followed by a verb or job choice in context."
+    elif any(key in lower_point for key in ["after-school", "invitation", "planning an activity", "clubs and interests"]):
+        question = "Which sentence is a polite invitation to an after-school activity?"
+        options = ["A. Would you like to join our art club?", "B. You joining art club.", "C. Join you art club?", "D. You would art club."]
+        answer, explanation = "A", "Would you like to ...? is a polite and complete way to invite someone to an activity."
     elif "school" in lower_point:
         question = "We ______ English and maths on Monday morning."
         options = ["A. has", "B. have", "C. having", "D. to have"]
@@ -955,7 +1104,7 @@ def _fallback_english_content(point: str) -> dict:
         question = "The wind is blowing ______, so the flags are moving quickly."
         options = ["A. strong", "B. strongly", "C. strength", "D. strongerly"]
         answer, explanation = "B", "An adverb is needed to describe how the wind is blowing."
-    elif any(key in lower_point for key in ["water", "forest", "environment", "fire", "emergency"]):
+    elif any(key in lower_point for key in ["water", "fire"]):
         question = "Which action is safe in a forest?"
         options = ["A. Leave a fire burning.", "B. Throw away glass bottles.", "C. Follow fire-safety rules.", "D. Play with matches."]
         answer, explanation = "C", "Following fire-safety rules protects forests and people."
