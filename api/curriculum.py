@@ -2,6 +2,7 @@
 
 GRADE_6 = "六年级"
 GRADE_7 = "七年级"
+GRADE_8 = "八年级"
 GRADE = GRADE_6
 MATH_SOURCE_FIRST = "上海六年级第一学期《义务教育教科书（五·四学制）·数学》2024 年审定版目录"
 MATH_SOURCE_SECOND = "上海六年级第二学期《义务教育教科书（五·四学制）·数学》2024 年审定版目录"
@@ -11,6 +12,10 @@ MATH_7_SOURCE_FIRST = "上海七年级第一学期《义务教育教科书（五
 MATH_7_SOURCE_SECOND = "上海七年级第二学期《义务教育教科书（五·四学制）·数学》，册次依据上海市教委 2026 年春季教学用书目录确认"
 ENGLISH_7_SOURCE_FIRST = "上海七年级第一学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2025 年秋季教学用书目录确认"
 ENGLISH_7_SOURCE_SECOND = "上海七年级第二学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2026 年春季教学用书目录确认"
+MATH_8_SOURCE_FIRST = "上海八年级第一学期《义务教育教科书（五·四学制）·数学》，册次依据上海市教委 2025 年秋季教学用书目录确认"
+MATH_8_SOURCE_SECOND = "上海八年级第二学期《义务教育教科书（五·四学制）·数学》，册次依据上海市教委 2026 年春季教学用书目录列示（目录标注待审）"
+ENGLISH_8_SOURCE_FIRST = "上海八年级第一学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2025 年秋季教学用书目录确认"
+ENGLISH_8_SOURCE_SECOND = "上海八年级第二学期《义务教育教科书（五·四学制）·英语》，册次依据上海市教委 2026 年春季教学用书目录列示（目录标注待审）"
 
 
 def unit(unit_id, subject, semester, title, knowledge_points, source_note, grade=GRADE):
@@ -401,20 +406,200 @@ CURRICULUM_UNITS = [
         ENGLISH_7_SOURCE_SECOND,
         grade=GRADE_7,
     ),
+    unit(
+        "math-8a-real-numbers",
+        "math",
+        "first",
+        "第19章 实数",
+        ["平方根与立方根", "实数", "实数的大小比较", "实数的运算"],
+        MATH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "math-8a-radicals",
+        "math",
+        "first",
+        "第20章 二次根式",
+        ["二次根式及其性质", "最简二次根式", "二次根式的乘除", "二次根式的加减"],
+        MATH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "math-8a-quadratic-equations",
+        "math",
+        "first",
+        "第21章 一元二次方程",
+        ["一元二次方程的概念", "一元二次方程的解法", "一元二次方程的判别式", "一元二次方程的根与系数的关系", "一元二次方程的应用"],
+        MATH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "math-8a-right-triangles",
+        "math",
+        "first",
+        "第22章 直角三角形",
+        ["直角三角形的性质", "直角三角形全等的判定", "角平分线", "勾股定理", "勾股定理的逆定理"],
+        MATH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "math-8b-quadrilaterals",
+        "math",
+        "second",
+        "第23章 四边形",
+        ["多边形", "平行四边形", "矩形、菱形与正方形", "三角形的中位线与重心"],
+        MATH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "math-8b-coordinate-plane",
+        "math",
+        "second",
+        "第24章 平面直角坐标系",
+        ["平面直角坐标系", "点的坐标与象限", "两点间的距离公式", "平移与轴对称的坐标变化"],
+        MATH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "math-8b-linear-functions",
+        "math",
+        "second",
+        "第25章 一次函数",
+        ["变量与函数", "正比例函数", "一次函数", "一次函数的图像与性质", "一次函数的应用"],
+        MATH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "math-8b-inverse-functions",
+        "math",
+        "second",
+        "第26章 反比例函数",
+        ["反比例函数", "反比例函数的图像与性质", "反比例函数的应用"],
+        MATH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8a-u1-water",
+        "english",
+        "first",
+        "Unit 1 Water",
+        ["the water cycle", "water use", "water conservation", "describing a process"],
+        ENGLISH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8a-u2-digital-life",
+        "english",
+        "first",
+        "Unit 2 Digital life",
+        ["digital devices", "online habits", "digital safety", "describing digital life"],
+        ENGLISH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8a-u3-curious-minds",
+        "english",
+        "first",
+        "Unit 3 Curious minds",
+        ["asking questions", "scientific discovery", "experiments and observation", "explaining findings"],
+        ENGLISH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8a-u4-then-now",
+        "english",
+        "first",
+        "Unit 4 Then and now",
+        ["past and present", "changes over time", "comparing lifestyles", "describing development"],
+        ENGLISH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8a-u5-teamwork",
+        "english",
+        "first",
+        "Unit 5 Teamwork",
+        ["team roles", "cooperation", "solving problems together", "effective communication"],
+        ENGLISH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8a-u6-future",
+        "english",
+        "first",
+        "Unit 6 Life in the future",
+        ["future entertainment", "future travel", "future living", "expressing predictions"],
+        ENGLISH_8_SOURCE_FIRST,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8b-u1-art",
+        "english",
+        "second",
+        "Unit 1 Art and artists",
+        ["art forms", "artists and artworks", "expressing art preferences", "introducing an artist"],
+        ENGLISH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8b-u2-inventions",
+        "english",
+        "second",
+        "Unit 2 Great inventions and discoveries",
+        ["great inventions", "important discoveries", "explaining an invention", "the impact of inventions"],
+        ENGLISH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8b-u3-money",
+        "english",
+        "second",
+        "Unit 3 Money",
+        ["forms of money", "spending and saving", "the history of money", "responsible money choices"],
+        ENGLISH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8b-u4-fashion",
+        "english",
+        "second",
+        "Unit 4 Fashion",
+        ["clothing and styles", "fashion choices", "describing trends", "sustainable fashion"],
+        ENGLISH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8b-u5-natural-disasters",
+        "english",
+        "second",
+        "Unit 5 Natural disasters",
+        ["types of natural disasters", "warnings and safety", "disaster news reports", "emergency preparation"],
+        ENGLISH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
+    unit(
+        "english-8b-u6-friendship",
+        "english",
+        "second",
+        "Unit 6 Friendship",
+        ["qualities of friendship", "resolving conflict", "supporting friends", "friendship writing"],
+        ENGLISH_8_SOURCE_SECOND,
+        grade=GRADE_8,
+    ),
 ]
 
 
 CURRICULUM_META = {
     "grade": GRADE,
     "default_grade": GRADE,
-    "available_grades": [GRADE_6, GRADE_7],
+    "available_grades": [GRADE_6, GRADE_7, GRADE_8],
     "grades": [
         {"value": "六年级", "status": "available", "note": "2024 年审定新版目录已核对"},
         {"value": "七年级", "status": "available", "note": "2025 秋季、2026 春季市教委目录已核对"},
-        {"value": "八年级", "status": "pending", "note": "目录核对中"},
+        {"value": "八年级", "status": "available", "note": "2025 秋季目录已核对；2026 春季下册目录标注待审"},
         {"value": "九年级", "status": "pending", "note": "需区分学校使用的英语版本"},
     ],
-    "edition_note": "六、七年级数学和英语使用依据 2022 年版课程标准修订、分册陆续审定启用的五·四学制教材。",
+    "edition_note": "六至八年级数学和英语使用依据 2022 年版课程标准修订、分册陆续审定启用的五·四学制教材；八年级下册在 2026 年春季目录中标注待审。",
     "scope_note": "仅使用公开教材目录和人工整理知识点，不存储教材正文。",
     "sources": [
         {

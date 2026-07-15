@@ -813,6 +813,118 @@ def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -
 
 
 def _fallback_math_content(point: str) -> dict:
+    if any(key in point for key in ["反比例函数"]):
+        return {
+            "question": "已知反比例函数 y=12/x，当 x=3 时，y 的值是多少？",
+            "options": ["A. 3", "B. 4", "C. 9", "D. 36"],
+            "answer": "B",
+            "explanation": "反比例函数中 xy=k。把 x=3 代入 y=12/x，得到 y=4。",
+        }
+    if any(key in point for key in ["一次函数", "正比例函数", "变量与函数"]):
+        return {
+            "question": "一次函数 y=2x-1 中，当 x=3 时，y 的值是多少？",
+            "options": ["A. 3", "B. 5", "C. 6", "D. 7"],
+            "answer": "B",
+            "explanation": "把 x=3 代入一次函数 y=2x-1，得到 y=2×3-1=5。",
+        }
+    if "平移与轴对称的坐标变化" in point:
+        return {
+            "question": "点 P(2，-1) 关于 y 轴对称后的坐标是什么？",
+            "options": ["A. (-2，-1)", "B. (2，1)", "C. (-2，1)", "D. (1，-2)"],
+            "answer": "A",
+            "explanation": "关于 y 轴对称时横坐标变为相反数，纵坐标不变，所以得到 (-2，-1)。",
+        }
+    if "两点间的距离" in point:
+        return {
+            "question": "平面直角坐标系中，点 A(1，2) 与点 B(4，6) 之间的距离是多少？",
+            "options": ["A. 3", "B. 4", "C. 5", "D. 7"],
+            "answer": "C",
+            "explanation": "两点间的距离为 √[(4-1)²+(6-2)²]=√25=5。",
+        }
+    if any(key in point for key in ["平面直角坐标系", "坐标", "象限"]):
+        return {
+            "question": "点 A(-3，2) 位于平面直角坐标系的哪个象限？",
+            "options": ["A. 第一象限", "B. 第二象限", "C. 第三象限", "D. 第四象限"],
+            "answer": "B",
+            "explanation": "点 A 的横坐标为负、纵坐标为正，因此它位于第二象限。",
+        }
+    if any(key in point for key in ["矩形", "菱形", "正方形"]):
+        return {
+            "question": "下列哪一项是菱形一定具有的性质？",
+            "options": ["A. 四个角都是直角", "B. 四条边都相等", "C. 对角线一定相等", "D. 只有一组对边平行"],
+            "answer": "B",
+            "explanation": "菱形的四条边都相等；四个角都是直角和对角线相等并不是所有菱形都具有的性质。",
+        }
+    if "平行四边形" in point:
+        return {
+            "question": "平行四边形的一组邻角中，一个角是 70°，另一个角是多少度？",
+            "options": ["A. 20°", "B. 70°", "C. 110°", "D. 140°"],
+            "answer": "C",
+            "explanation": "平行四边形的邻角互补，所以另一个角是 180°-70°=110°。",
+        }
+    if "多边形" in point:
+        return {
+            "question": "一个六边形的内角和是多少度？",
+            "options": ["A. 540°", "B. 720°", "C. 900°", "D. 1080°"],
+            "answer": "B",
+            "explanation": "n 边形内角和为 (n-2)×180°，六边形内角和为 4×180°=720°。",
+        }
+    if any(key in point for key in ["中位线", "重心"]):
+        return {
+            "question": "三角形两边中点的连线长为 6 cm，与它平行的第三边长是多少？",
+            "options": ["A. 3 cm", "B. 6 cm", "C. 9 cm", "D. 12 cm"],
+            "answer": "D",
+            "explanation": "三角形中位线平行于第三边，并且等于第三边的一半，所以第三边长为 12 cm。",
+        }
+    if "判别式" in point:
+        return {
+            "question": "方程 x²-4x+3=0 的判别式 Δ 等于多少？",
+            "options": ["A. 1", "B. 4", "C. 8", "D. 16"],
+            "answer": "B",
+            "explanation": "一元二次方程的判别式 Δ=b²-4ac=(-4)²-4×1×3=4。",
+        }
+    if "根与系数" in point:
+        return {
+            "question": "方程 x²-5x+6=0 的两个根之和是多少？",
+            "options": ["A. -6", "B. -5", "C. 5", "D. 6"],
+            "answer": "C",
+            "explanation": "由一元二次方程根与系数的关系，x₁+x₂=-b/a=5。",
+        }
+    if "一元二次方程" in point:
+        return {
+            "question": "解一元二次方程 x²-5x+6=0，两个根是什么？",
+            "options": ["A. 1 和 6", "B. 2 和 3", "C. -2 和 -3", "D. -1 和 -6"],
+            "answer": "B",
+            "explanation": "把方程左边因式分解为 (x-2)(x-3)，所以两个根是 2 和 3。",
+        }
+    if any(key in point for key in ["二次根式", "最简二次根式"]):
+        return {
+            "question": "化简 √12，结果是什么？",
+            "options": ["A. 2√3", "B. 3√2", "C. 4√3", "D. 6"],
+            "answer": "A",
+            "explanation": "√12=√(4×3)=2√3，这是最简二次根式。",
+        }
+    if any(key in point for key in ["平方根", "立方根", "实数"]):
+        return {
+            "question": "下列哪个数是 64 的算术平方根？",
+            "options": ["A. -8", "B. 8", "C. ±8", "D. 32"],
+            "answer": "B",
+            "explanation": "算术平方根是非负数，且 8²=64，所以 64 的算术平方根是 8。",
+        }
+    if any(key in point for key in ["勾股", "直角三角形"]):
+        return {
+            "question": "直角三角形两条直角边长分别为 6 和 8，斜边长是多少？",
+            "options": ["A. 7", "B. 10", "C. 12", "D. 14"],
+            "answer": "B",
+            "explanation": "由勾股定理，斜边长为 √(6²+8²)=√100=10。",
+        }
+    if "角平分线" in point:
+        return {
+            "question": "点 P 在∠AOB 的角平分线上，且到边 OA 的距离为 4 cm。点 P 到边 OB 的距离是多少？",
+            "options": ["A. 2 cm", "B. 4 cm", "C. 6 cm", "D. 8 cm"],
+            "answer": "B",
+            "explanation": "角平分线上的点到角的两边距离相等，所以点 P 到 OB 的距离也是 4 cm。",
+        }
     if any(key in point for key in ["整式的乘法", "整式的除法", "乘法公式"]):
         return {
             "question": "计算 (x+3)(x-3)，结果是什么？",
@@ -1012,7 +1124,55 @@ def _fallback_math_content(point: str) -> dict:
 
 def _fallback_english_content(point: str) -> dict:
     lower_point = point.lower()
-    if any(key in lower_point for key in ["wildlife", "wild animal", "conservation"]):
+    if any(key in lower_point for key in ["natural disaster", "warning", "disaster news", "emergency preparation"]):
+        question = "What should people do when they receive an earthquake warning?"
+        options = ["A. Follow the safety instructions.", "B. Stand beside a window.", "C. Use the lift at once.", "D. Ignore the warning."]
+        answer, explanation = "A", "During a natural disaster, people should follow official warnings and safety instructions."
+    elif any(key in lower_point for key in ["friendship", "resolving conflict", "supporting friends"]):
+        question = "What is the best way to resolve a conflict with a friend?"
+        options = ["A. Talk calmly and listen.", "B. Stop speaking forever.", "C. Share the argument online.", "D. Blame the friend at once."]
+        answer, explanation = "A", "Good friendship requires calm communication, careful listening and respect for each other's feelings."
+    elif any(key in lower_point for key in ["art", "artist"]):
+        question = "Which sentence clearly expresses an opinion about an artwork?"
+        options = ["A. I like this painting because its colours feel warm.", "B. This painting because warm.", "C. I liking colour painting.", "D. Warm is artwork the."]
+        answer, explanation = "A", "A states an art preference and supports it with a clear reason in a complete sentence."
+    elif any(key in lower_point for key in ["invention", "discover", "impact"]):
+        question = "Which sentence best explains the impact of an invention?"
+        options = ["A. The telephone made long-distance communication faster.", "B. The telephone invent fast.", "C. Communication telephone yesterday.", "D. Faster because invention is."]
+        answer, explanation = "A", "A clearly names the invention and explains how it changed people's lives."
+    elif any(key in lower_point for key in ["money", "spending", "saving"]):
+        question = "Leo wants to buy a bicycle next year. What is the most responsible choice?"
+        options = ["A. Save part of his pocket money each month.", "B. Spend all his money at once.", "C. Borrow without a plan.", "D. Ignore the price."]
+        answer, explanation = "A", "Regular saving is a responsible way to prepare for a planned purchase."
+    elif any(key in lower_point for key in ["fashion", "clothing", "style", "trend"]):
+        question = "Which choice supports sustainable fashion?"
+        options = ["A. Repair and reuse clothes.", "B. Throw away clothes after one use.", "C. Buy more than needed.", "D. Ignore how clothes are made."]
+        answer, explanation = "A", "Repairing and reusing clothing reduces waste and supports sustainable fashion."
+    elif any(key in lower_point for key in ["water", "describing a process"]):
+        question = "In the water cycle, water vapour cools and ______ into tiny drops."
+        options = ["A. condenses", "B. wastes", "C. disappears forever", "D. burns"]
+        answer, explanation = "A", "Condensation is the stage when cooled water vapour changes into tiny water drops."
+    elif any(key in lower_point for key in ["digital", "online"]):
+        question = "Which habit keeps you safer online?"
+        options = ["A. Use a strong password.", "B. Share your password publicly.", "C. Open every unknown link.", "D. Post private information."]
+        answer, explanation = "A", "Strong passwords and careful handling of personal information are basic digital-safety habits."
+    elif any(key in lower_point for key in ["scientific", "experiment", "observation", "finding", "asking questions"]):
+        question = "After doing an experiment, what should a careful student do?"
+        options = ["A. Record the observations.", "B. Change the results.", "C. Ignore the evidence.", "D. Copy a guess as a fact."]
+        answer, explanation = "A", "Recording observations provides evidence that can be used to explain scientific findings."
+    elif any(key in lower_point for key in ["past and present", "changes over time", "comparing lifestyles", "development"]):
+        question = "Which sentence correctly compares life then and now?"
+        options = ["A. People wrote more letters in the past, but many send messages now.", "B. People writes letters now past.", "C. In the past send now letters.", "D. People writing message yesterday now."]
+        answer, explanation = "A", "A uses past and present time markers to make a clear comparison between two periods."
+    elif any(key in lower_point for key in ["team", "cooperation", "solving problems together", "effective communication"]):
+        question = "Which action helps a team solve a problem effectively?"
+        options = ["A. Share ideas and agree on roles.", "B. Let one person do everything.", "C. Ignore different opinions.", "D. Compete with teammates."]
+        answer, explanation = "A", "Teamwork depends on cooperation, clear roles and respectful communication."
+    elif any(key in lower_point for key in ["future", "prediction"]):
+        question = "Which sentence makes a prediction about life in the future?"
+        options = ["A. People may travel in cleaner vehicles.", "B. People travelled yesterday.", "C. Travel clean last week.", "D. People travelling before."]
+        answer, explanation = "A", "May followed by the base verb is a clear way to express a future prediction."
+    elif any(key in lower_point for key in ["wildlife", "wild animal", "conservation"]):
         question = "Which action best protects wild animals?"
         options = ["A. Protect their habitats.", "B. Buy products made from them.", "C. Feed them in the street.", "D. Keep every wild animal as a pet."]
         answer, explanation = "A", "Protecting natural habitats gives wild animals food, shelter and safe places to live."
@@ -1123,6 +1283,65 @@ def _fallback_english_content(point: str) -> dict:
     return {"question": question, "options": options, "answer": answer, "explanation": explanation}
 
 
+def _fallback_review_variant(point: str, content: dict, subject: str, occurrence: int) -> dict:
+    """Avoid printing the same fallback item repeatedly for one knowledge point."""
+    variant = occurrence % 3
+    round_label = "" if occurrence < 3 else f"（第 {occurrence + 1} 题变式）"
+    if variant == 0:
+        if not round_label:
+            return content
+        return {**content, "question": f"{content['question']}{round_label}"}
+
+    if subject == "english":
+        if variant == 1:
+            return {
+                "question": f"Which explanation best supports the topic '{point}'?{round_label}",
+                "options": [
+                    f"A. {content['explanation']}",
+                    "B. The context and grammar do not matter.",
+                    "C. Any incomplete sentence is acceptable.",
+                    "D. The longest option must be correct.",
+                ],
+                "answer": "A",
+                "explanation": content["explanation"],
+            }
+        return {
+            "question": f"When checking an answer about '{point}', which step is most useful?{round_label}",
+            "options": [
+                "A. Read the context, identify the language function and check the complete sentence.",
+                "B. Ignore the key words in the question.",
+                "C. Choose an option only because it is short.",
+                "D. Skip the grammar and meaning checks.",
+            ],
+            "answer": "A",
+            "explanation": f"For {point}, both meaning and language form should fit the context. {content['explanation']}",
+        }
+
+    if variant == 1:
+        return {
+            "question": f"关于“{point}”，下列解题说明正确的是哪一项？{round_label}",
+            "options": [
+                f"A. {content['explanation']}",
+                "B. 可以忽略题目条件，直接套用任意公式。",
+                "C. 只看选项字母分布就能确定答案。",
+                "D. 写出结果后不需要检查是否符合题意。",
+            ],
+            "answer": "A",
+            "explanation": content["explanation"],
+        }
+    return {
+        "question": f"完成“{point}”题目后，下面哪项最适合作为自查步骤？{round_label}",
+        "options": [
+            "A. 核对所用定义或公式，并检查结果是否符合原题条件。",
+            "B. 跳过符号、单位和取值范围。",
+            "C. 把上一题的数字直接写成答案。",
+            "D. 只检查书写是否整齐，不检查计算。",
+        ],
+        "answer": "A",
+        "explanation": f"自查时既要核对方法，也要检查结果。{content['explanation']}",
+    }
+
+
 def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | None = None) -> list:
     selected_units = selected_units or [
         u for u in CURRICULUM_UNITS if u["grade"] == body.grade and u["id"] in body.unit_ids
@@ -1130,12 +1349,16 @@ def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | 
     profile = _unit_exam_profile(body, selected_units)
     plan = _question_plan(body)
     questions = []
+    point_occurrences = {}
     for index in range(1, body.question_count + 1):
         planned = plan[index - 1]
         point = planned["knowledge_point"]
         unit_id = body.unit_ids[(index - 1) % len(body.unit_ids)]
         common_mistake = profile["common_mistakes"][(index - 1) % len(profile["common_mistakes"])]
         content = _fallback_english_content(point) if body.subject == "english" else _fallback_math_content(point)
+        occurrence = point_occurrences.get(point, 0)
+        point_occurrences[point] = occurrence + 1
+        content = _fallback_review_variant(point, content, body.subject, occurrence)
         question = {
             "id": f"q{index}",
             "unit_id": unit_id,
