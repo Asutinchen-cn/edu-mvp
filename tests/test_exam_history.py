@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from api.main import _analysis_history_detail, _analysis_history_summary
+from api.main import _analysis_history_detail, _analysis_history_summary, _normalize_review_progress
 
 
 class AnalysisHistorySummaryTest(unittest.TestCase):
@@ -64,6 +64,32 @@ class AnalysisHistoryDetailTest(unittest.TestCase):
         self.assertEqual(detail["wrong_questions"], [])
         self.assertEqual(detail["weak_points"], ["一般过去时"])
         self.assertEqual(detail["recommendations"], ["回到原句辨认时间标志。"])
+
+
+class ReviewProgressTest(unittest.TestCase):
+    def test_normalizes_completed_review_stages_in_teaching_order(self):
+        progress = _normalize_review_progress(json.dumps({
+            "completed": ["retested", "corrected", "unknown", "corrected"],
+            "updated_at": "2026-07-15T12:00:00",
+        }))
+
+        self.assertEqual(progress["completed"], ["corrected", "retested"])
+        self.assertEqual(progress["completed_count"], 2)
+        self.assertEqual(progress["total"], 3)
+        self.assertEqual(progress["next_step"], "practiced")
+        self.assertEqual(progress["updated_at"], "2026-07-15T12:00:00")
+
+    def test_invalid_review_progress_starts_from_correction(self):
+        self.assertEqual(
+            _normalize_review_progress("not-json"),
+            {
+                "completed": [],
+                "completed_count": 0,
+                "total": 3,
+                "next_step": "corrected",
+                "updated_at": None,
+            },
+        )
 
 
 if __name__ == "__main__":

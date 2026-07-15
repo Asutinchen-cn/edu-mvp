@@ -364,6 +364,7 @@ class Exam(Base):
     ai_analysis = Column(Text)
     weak_points = Column(Text)
     recommendations = Column(Text)
+    review_progress = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # 创建表
@@ -395,6 +396,11 @@ try:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN subject VARCHAR(20)"))
                     conn.execute(text("UPDATE exams SET subject = 'math' WHERE subject IS NULL"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_exams_subject ON exams (subject)"))
+            if "review_progress" not in cols:
+                if "postgresql" in DATABASE_URL:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS review_progress TEXT"))
+                else:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN review_progress TEXT"))
 except Exception as _e:
     print(f"DB migration warning: {_e}")
 
@@ -1422,6 +1428,38 @@ def _analysis_history_detail(
     }
 
 
+REVIEW_STEPS = ("corrected", "practiced", "retested")
+
+
+class ReviewProgressRequest(BaseModel):
+    completed: list[str] = Field(default_factory=list, max_length=3)
+
+
+def _normalize_review_progress(raw_value: str | dict | None) -> dict:
+    """把复习打卡整理成稳定的三步进度结构。"""
+    if isinstance(raw_value, dict):
+        value = raw_value
+    else:
+        value = _stored_json(raw_value, {})
+    if not isinstance(value, dict):
+        value = {}
+
+    raw_completed = value.get("completed", [])
+    completed_values = raw_completed if isinstance(raw_completed, list) else []
+    completed_set = {str(item).strip() for item in completed_values}
+    completed = [step for step in REVIEW_STEPS if step in completed_set]
+    next_step = next((step for step in REVIEW_STEPS if step not in completed_set), None)
+    updated_at = value.get("updated_at")
+
+    return {
+        "completed": completed,
+        "completed_count": len(completed),
+        "total": len(REVIEW_STEPS),
+        "next_step": next_step,
+        "updated_at": str(updated_at).strip() if updated_at else None,
+    }
+
+
 @app.get("/exams")
 async def list_exams(grade: str = None, student_name: str = None, subject: str = None, limit: int = 10):
     """获取最近上传的试卷列表（必须 年级 + 学生名 同时提供，可按学科筛选）"""
@@ -1471,6 +1509,7 @@ async def list_exams(grade: str = None, student_name: str = None, subject: str =
             "ocr_preview": exam.ocr_text[:50] + "..." if exam.ocr_text else None,
             "wrong_count": summary["wrong_count"],
             "weak_points": summary["weak_points"],
+            "review_progress": _normalize_review_progress(exam.review_progress),
             "created": exam.created_at.isoformat() if exam.created_at else None,
         })
     db.close()
@@ -1512,10 +1551,48 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
         "wrong_count": summary["wrong_count"],
         "weak_points": summary["weak_points"],
         "recommendations": _stored_json(exam.recommendations, None),
+        "review_progress": _normalize_review_progress(exam.review_progress),
         "created": exam.created_at.isoformat() if exam.created_at else None
     }
     db.close()
     return JSONResponse(response)
+
+
+@app.patch("/exams/{exam_id}/review-progress")
+async def update_review_progress(
+    exam_id: int,
+    body: ReviewProgressRequest,
+    grade: str = None,
+    student_name: str = None,
+):
+    """保存家长可跨设备查看的订正、同类练习和隔天回测进度。"""
+    grade = (grade or "").strip()
+    student_name = (student_name or "").strip()
+    if not grade or not student_name:
+        return JSONResponse({"success": False, "error": "必须提供年级和学生姓名"}, status_code=400)
+
+    unknown_steps = [step for step in body.completed if step not in REVIEW_STEPS]
+    if unknown_steps:
+        return JSONResponse({"success": False, "error": "复习进度包含无效阶段"}, status_code=400)
+
+    db = SessionLocal()
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        db.close()
+        return JSONResponse({"success": False, "error": "试卷不存在"}, status_code=404)
+    if (exam.grade or "").strip() != grade or (exam.student_name or "").strip() != student_name:
+        db.close()
+        return JSONResponse({"success": False, "error": "无权限更新该记录"}, status_code=403)
+
+    stored_progress = {
+        "completed": body.completed,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    exam.review_progress = json.dumps(stored_progress, ensure_ascii=False)
+    db.commit()
+    progress = _normalize_review_progress(exam.review_progress)
+    db.close()
+    return JSONResponse({"success": True, "exam_id": exam_id, "review_progress": progress})
 
 @app.delete("/exams/{exam_id}")
 async def delete_exam(exam_id: int, grade: str = None, student_name: str = None):

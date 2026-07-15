@@ -74,6 +74,23 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("escapeHtml(JSON.stringify(record.id))", HTML)
         self.assertNotIn('onclick="toggleRecord(${JSON.stringify(r.id)})"', HTML)
 
+    def test_history_has_server_synced_three_step_mastery_progress(self):
+        self.assertIn("三步掌握进度", HTML)
+        self.assertIn("订正原题", HTML)
+        self.assertIn("完成同类题", HTML)
+        self.assertIn("隔天回测", HTML)
+        self.assertIn("async function toggleReviewStep(id, step)", HTML)
+        self.assertRegex(
+            HTML,
+            r"requestJson\(`/exams/\$\{record\.serverId\}/review-progress\?\$\{params\.toString\(\)\}`",
+        )
+        self.assertIn("method: 'PATCH'", HTML)
+
+    def test_transient_history_request_flags_are_cleared_after_reload(self):
+        self.assertIn("detailLoading: false", HTML)
+        self.assertIn("progressSaving: false", HTML)
+        self.assertIn("function saveHistoryRecords()", HTML)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -850,6 +850,102 @@
         .history-answer-line strong { color: var(--ink); }
         .history-recommendations { margin-top: 14px; }
         .history-recommendations ol { padding-left: 20px; }
+        .review-progress-panel {
+            margin-top: 16px;
+            padding: 14px;
+            border: 1px solid rgba(33, 166, 122, 0.2);
+            border-radius: 8px;
+            background: #f5fcf9;
+        }
+        .review-progress-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .review-progress-head strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13px;
+        }
+        .review-progress-head span {
+            color: var(--success);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .review-progress-track {
+            height: 6px;
+            margin: 10px 0 12px;
+            border-radius: 999px;
+            background: #dcefe8;
+            overflow: hidden;
+        }
+        .review-progress-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: var(--success);
+            transition: width 0.2s ease;
+        }
+        .review-step-list {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .review-step {
+            min-height: 72px;
+            padding: 10px;
+            border: 1px solid #cfe3dc;
+            border-radius: 8px;
+            background: #fff;
+            color: #41516b;
+            text-align: left;
+            cursor: pointer;
+        }
+        .review-step:hover { border-color: var(--success); }
+        .review-step.done {
+            border-color: var(--success);
+            background: #e7f8f1;
+        }
+        .review-step:disabled { cursor: wait; opacity: 0.65; }
+        .review-step-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--ink);
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .review-step-mark {
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            border: 1px solid #a9c4bb;
+            border-radius: 4px;
+            color: transparent;
+            background: #fff;
+        }
+        .review-step.done .review-step-mark {
+            border-color: var(--success);
+            color: #fff;
+            background: var(--success);
+        }
+        .review-step-desc {
+            display: block;
+            margin-top: 5px;
+            font-size: 11px;
+            line-height: 1.5;
+            color: var(--muted);
+        }
+        .review-progress-note {
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
+        }
         .history-actions {
             display: flex;
             align-items: center;
@@ -1434,6 +1530,9 @@
             }
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
             .history-wrong-row { grid-template-columns: 1fr; gap: 6px; }
+            .review-progress-head { flex-direction: column; gap: 4px; }
+            .review-step-list { grid-template-columns: 1fr; }
+            .review-step { min-height: 0; }
             .history-actions { align-items: stretch; }
             .history-action { flex: 1 1 140px; }
         }
@@ -1704,13 +1803,34 @@
 <script>
 // ===== STATE =====
 let uploadedFiles = [];
-let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]');
+let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]').map(record => ({
+    ...record,
+    detailLoading: false,
+    progressSaving: false,
+    detailError: ''
+}));
 let currentFilter = 'week';
 let currentSubjectArchive = 'all';
 let selectedRecordId = null;
 let pendingDeleteId = null;
 let worksheetUnits = [];
 let worksheetMeta = null;
+const REVIEW_STEP_DEFINITIONS = [
+    { id: 'corrected', label: '订正原题', description: '说清错因，独立写出正确步骤' },
+    { id: 'practiced', label: '完成同类题', description: '完成同类练习并核对答案' },
+    { id: 'retested', label: '隔天回测', description: '隔天不看答案重新完成' }
+];
+
+function saveHistoryRecords() {
+    const records = historyRecords.map(record => {
+        const persisted = { ...record };
+        delete persisted.detailLoading;
+        delete persisted.progressSaving;
+        delete persisted.detailError;
+        return persisted;
+    });
+    localStorage.setItem('xiahunao_history', JSON.stringify(records));
+}
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -1960,10 +2080,11 @@ async function startAnalysis() {
             structured: true,
             serverId: analysisData.examIds[0] || null,
             imageUrl: analysisData.imageUrls[0] || null,
-            serverSynced: Boolean(analysisData.examIds[0])
+            serverSynced: Boolean(analysisData.examIds[0]),
+            reviewProgress: normalizeReviewProgress(null)
         };
         historyRecords.unshift(record);
-        localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
+        saveHistoryRecords();
 
         // Show result
         currentAnalysisData = analysisData;
@@ -2460,6 +2581,20 @@ function safeUploadUrl(url) {
     return typeof url === 'string' && url.startsWith('/uploads/') ? url : '';
 }
 
+function normalizeReviewProgress(value) {
+    const completedValues = Array.isArray(value?.completed) ? value.completed : [];
+    const completed = REVIEW_STEP_DEFINITIONS
+        .map(step => step.id)
+        .filter(step => completedValues.includes(step));
+    return {
+        completed: completed,
+        completedCount: completed.length,
+        total: REVIEW_STEP_DEFINITIONS.length,
+        nextStep: REVIEW_STEP_DEFINITIONS.find(step => !completed.includes(step.id))?.id || null,
+        updatedAt: value?.updated_at || value?.updatedAt || null
+    };
+}
+
 function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
     const weakPoints = Array.isArray(exam.weak_points) ? exam.weak_points : [];
     const weakPoint = weakPoints[0] || '待分析';
@@ -2485,7 +2620,8 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         result: JSON.stringify(result, null, 2),
         structured: true,
         imageUrl: safeUploadUrl(exam.image_url),
-        serverSynced: true
+        serverSynced: true,
+        reviewProgress: normalizeReviewProgress(exam.review_progress)
     };
 }
 
@@ -2508,6 +2644,42 @@ function historyAnalysisData(record) {
     } catch (e) {
         return null;
     }
+}
+
+function renderReviewProgress(record) {
+    if (!record.serverId) return '';
+    const progress = normalizeReviewProgress(record.reviewProgress);
+    const percent = Math.round((progress.completedCount / progress.total) * 100);
+    const nextDefinition = REVIEW_STEP_DEFINITIONS.find(step => step.id === progress.nextStep);
+    const statusText = record.progressSaving
+        ? '正在保存...'
+        : (nextDefinition ? `下一步：${nextDefinition.label}` : '本轮复习已完成');
+    const recordId = escapeHtml(JSON.stringify(record.id));
+
+    return `
+        <section class="review-progress-panel" aria-label="三步掌握进度">
+            <div class="review-progress-head">
+                <strong>三步掌握进度</strong>
+                <span>${progress.completedCount}/${progress.total} · ${escapeHtml(statusText)}</span>
+            </div>
+            <div class="review-progress-track" aria-hidden="true">
+                <div class="review-progress-fill" style="width:${percent}%"></div>
+            </div>
+            <div class="review-step-list">
+                ${REVIEW_STEP_DEFINITIONS.map(step => {
+                    const done = progress.completed.includes(step.id);
+                    return `
+                        <button type="button" class="review-step ${done ? 'done' : ''}"
+                            aria-pressed="${done ? 'true' : 'false'}"
+                            ${record.progressSaving ? 'disabled' : ''}
+                            onclick="toggleReviewStep(${recordId}, '${step.id}')">
+                            <span class="review-step-title"><span class="review-step-mark">✓</span>${escapeHtml(step.label)}</span>
+                            <span class="review-step-desc">${escapeHtml(step.description)}</span>
+                        </button>`;
+                }).join('')}
+            </div>
+            <p class="review-progress-note">按实际完成情况打勾，进度保存在服务器，换设备查询后仍可继续。</p>
+        </section>`;
 }
 
 function renderHistoryDiagnosis(record) {
@@ -2580,6 +2752,7 @@ function renderHistoryDiagnosis(record) {
                     <strong>接下来怎么练</strong>
                     <ol>${recommendations.slice(0, 3).map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ol>
                 </div>` : ''}
+            ${renderReviewProgress(record)}
             ${actions}
         </div>`;
 }
@@ -2640,10 +2813,15 @@ function buildReviewDashboard(records) {
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'));
     const topWeakPoint = rankedWeakPoints[0] || null;
     const repeatedWeakPoint = topWeakPoint?.count >= 2 ? topWeakPoint : null;
-    const latestRecord = [...safeRecords]
+    const recordsByLatest = [...safeRecords]
         .filter(record => !Number.isNaN(new Date(record.date).getTime()))
-        .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    const latestRecord = recordsByLatest[0] || null;
     const latestFocus = latestRecord ? recordWeakPoints(latestRecord)[0] : '';
+    const incompleteRecord = recordsByLatest.find(record => {
+        const progress = normalizeReviewProgress(record.reviewProgress);
+        return record.serverId && progress.completedCount < progress.total;
+    }) || null;
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
@@ -2655,7 +2833,13 @@ function buildReviewDashboard(records) {
 
     let nextTitle = '上传最近一份试卷';
     let nextAction = '建立第一条可追踪的错题记录，再安排针对性复习。';
-    if (repeatedWeakPoint) {
+    if (incompleteRecord) {
+        const progress = normalizeReviewProgress(incompleteRecord.reviewProgress);
+        const nextStep = REVIEW_STEP_DEFINITIONS.find(step => step.id === progress.nextStep);
+        const focus = recordWeakPoints(incompleteRecord)[0] || '这份错题';
+        nextTitle = `继续${nextStep?.label || '复习'}`;
+        nextAction = `“${focus}”当前完成 ${progress.completedCount}/${progress.total} 步，完成后在记录中打勾。`;
+    } else if (repeatedWeakPoint) {
         nextTitle = `优先复练“${repeatedWeakPoint.name}”`;
         nextAction = `这个薄弱点已在 ${repeatedWeakPoint.count} 份记录中出现。先回做代表错题，再做 5 道同类题。`;
     } else if (latestFocus) {
@@ -2763,11 +2947,12 @@ async function syncServerWrongBank() {
                 wrongCount: record.wrongCount ?? existing.wrongCount,
                 weakPoint: record.weakPoint !== '待分析' ? record.weakPoint : existing.weakPoint,
                 weakPoints: record.weakPoints.length ? record.weakPoints : existing.weakPoints,
+                reviewProgress: record.reviewProgress,
                 serverSynced: true
             });
         });
         historyRecords = [...recordMap.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
-        localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
+        saveHistoryRecords();
         setHistoryFilter('all');
         renderHistory();
         const subjectText = currentSubjectArchive === 'all' ? '全部学科' : (currentSubjectArchive === 'english' ? '英语' : '数学');
@@ -2801,6 +2986,7 @@ function renderHistory() {
         const subjectLabel = subject === 'english' ? '英语' : '数学';
         const wrongCount = historyWrongCount(r);
         const issueText = wrongCount === null ? '已完成分析' : `识别错题 ${wrongCount} 道`;
+        const reviewProgress = normalizeReviewProgress(r.reviewProgress);
         return `
             <div class="history-item ${sel}">
                 <div class="history-item-header">
@@ -2812,6 +2998,7 @@ function renderHistory() {
                                 <span class="subject-tag ${subject}">${subjectLabel}</span>
                                 <span class="issue-count">${issueText}</span>
                                 <span class="weak-tag">薄弱: ${escapeHtml(r.weakPoint)}</span>
+                                ${r.serverId ? `<span class="history-source">掌握 ${reviewProgress.completedCount}/${reviewProgress.total}</span>` : ''}
                                 ${r.serverSynced ? '<span class="history-source">服务器</span>' : ''}
                             </div>
                         </div>
@@ -2854,11 +3041,42 @@ async function loadHistoryDetail(id) {
         record.weakPoints = Array.isArray(detail.weak_points) ? detail.weak_points : record.weakPoints;
         record.weakPoint = record.weakPoints[0] || record.weakPoint || '待分析';
         record.imageUrl = safeUploadUrl(detail.image_url) || record.imageUrl;
-        localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
+        record.reviewProgress = normalizeReviewProgress(detail.review_progress);
+        saveHistoryRecords();
     } catch (e) {
         record.detailError = e.message || '服务器暂时不可用';
     } finally {
         record.detailLoading = false;
+        renderHistory();
+    }
+}
+
+async function toggleReviewStep(id, step) {
+    const record = historyRecords.find(item => item.id === id);
+    if (!record?.serverId || record.progressSaving || !REVIEW_STEP_DEFINITIONS.some(item => item.id === step)) return;
+
+    const previousProgress = normalizeReviewProgress(record.reviewProgress);
+    const completed = previousProgress.completed.includes(step)
+        ? previousProgress.completed.filter(item => item !== step)
+        : [...previousProgress.completed, step];
+    record.reviewProgress = normalizeReviewProgress({ completed: completed });
+    record.progressSaving = true;
+    renderHistory();
+
+    try {
+        const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
+        const data = await requestJson(`/exams/${record.serverId}/review-progress?${params.toString()}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completed: completed })
+        });
+        record.reviewProgress = normalizeReviewProgress(data.review_progress);
+        saveHistoryRecords();
+    } catch (e) {
+        record.reviewProgress = previousProgress;
+        alert('保存复习进度失败：' + e.message);
+    } finally {
+        record.progressSaving = false;
         renderHistory();
     }
 }
@@ -2919,7 +3137,7 @@ async function confirmAction() {
             }
         }
         historyRecords = historyRecords.filter(r => r.id !== pendingDeleteId);
-        localStorage.setItem('xiahunao_history', JSON.stringify(historyRecords));
+        saveHistoryRecords();
         if (selectedRecordId === pendingDeleteId) selectedRecordId = null;
         pendingDeleteId = null;
         document.getElementById('confirmDialog').classList.remove('show');
