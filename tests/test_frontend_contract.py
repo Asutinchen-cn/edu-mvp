@@ -55,6 +55,27 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotIn("localStorage.setItem('familyAccessCode'", HTML)
         self.assertNotRegex(HTML, r"URLSearchParams\([^)]*familyAccessCode")
 
+    def test_returning_parent_can_query_wrong_bank_without_scrolling_to_upload_form(self):
+        self.assertIn('id="wrongBankDialog"', HTML)
+        self.assertIn('id="wrongBankGrade"', HTML)
+        self.assertIn('id="wrongBankStudentName"', HTML)
+        self.assertIn('id="wrongBankFamilyCode"', HTML)
+        self.assertIn('novalidate onsubmit="submitWrongBankQuery(event)"', HTML)
+        self.assertIn('onclick="openWrongBankQuery()"', HTML)
+        self.assertIn("function openWrongBankQuery()", HTML)
+        self.assertIn("function submitWrongBankQuery(event)", HTML)
+        self.assertIn("wrongBankDialog.showModal()", HTML)
+        self.assertIn("wrongBankDialog.addEventListener('cancel'", HTML)
+        self.assertIn("historyStatus.classList.remove('show')", HTML)
+
+    def test_family_access_code_has_safe_visibility_and_generation_helpers(self):
+        self.assertIn("function toggleFamilyCodeVisibility", HTML)
+        self.assertIn("function generateFamilyAccessCode", HTML)
+        self.assertIn("crypto.getRandomValues", HTML)
+        self.assertIn('aria-label="显示家庭访问码"', HTML)
+        self.assertIn('aria-label="生成家庭访问码"', HTML)
+        self.assertNotIn("localStorage.setItem('familyAccessCode'", HTML)
+
     def test_original_exam_files_use_the_protected_image_endpoint(self):
         self.assertIn("async function openProtectedExamImage(id)", HTML)
         self.assertIn("/image?${params.toString()}", HTML)

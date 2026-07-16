@@ -414,6 +414,30 @@
             font-size: 11px;
             line-height: 1.5;
         }
+        .access-code-control {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto;
+            gap: 6px;
+            align-items: stretch;
+        }
+        .access-code-control input { min-width: 0; width: 100%; }
+        .access-code-control.query { grid-template-columns: minmax(0, 1fr) auto; }
+        .access-code-action {
+            min-width: 48px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--brand-blue);
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .access-code-action:hover,
+        .access-code-action:focus-visible {
+            border-color: rgba(23, 105, 232, 0.4);
+            background: #edf5ff;
+            outline: none;
+        }
         .dropzone {
             background: #f3f8ff;
             border: 2px dashed #a9c9f6;
@@ -593,6 +617,18 @@
             color: var(--brand-blue);
             border-color: rgba(23, 105, 232, 0.38);
         }
+        .history-sync-status {
+            display: none;
+            margin: 0 0 14px;
+            padding: 10px 12px;
+            border-left: 3px solid var(--success);
+            border-radius: 6px;
+            background: #edf9f5;
+            color: #176c54;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .history-sync-status.show { display: block; }
         .date-range {
             display: flex; align-items: center; gap: 6px;
             margin-left: auto;
@@ -1459,6 +1495,100 @@
         }
         .curriculum-source a:hover { text-decoration: underline; }
 
+        /* ===== WRONG BANK QUERY ===== */
+        .wrong-bank-dialog {
+            width: min(560px, calc(100% - 32px));
+            max-height: calc(100vh - 32px);
+            margin: auto;
+            padding: 0;
+            border: 0;
+            border-radius: 16px;
+            background: #fff;
+            color: var(--ink);
+            box-shadow: 0 24px 80px rgba(20, 42, 76, 0.28);
+            overflow: auto;
+        }
+        .wrong-bank-dialog::backdrop { background: rgba(21, 34, 58, 0.48); }
+        .wrong-bank-form { padding: 24px; }
+        .wrong-bank-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .wrong-bank-head h2 { font-size: 20px; margin-bottom: 6px; }
+        .wrong-bank-head p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+        .dialog-close {
+            flex: 0 0 auto;
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            background: #fff;
+            color: var(--muted);
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .dialog-close:hover { color: var(--ink); background: #f4f8ff; }
+        .wrong-bank-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .wrong-bank-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+        }
+        .wrong-bank-field.full { grid-column: 1 / -1; }
+        .wrong-bank-field label { color: var(--muted); font-size: 12px; font-weight: 800; }
+        .wrong-bank-field select,
+        .wrong-bank-field input {
+            width: 100%;
+            min-width: 0;
+            min-height: 42px;
+            padding: 10px 12px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--ink);
+            font-size: 14px;
+            outline: none;
+        }
+        .wrong-bank-field select:focus,
+        .wrong-bank-field input:focus {
+            border-color: var(--brand-blue);
+            box-shadow: 0 0 0 4px rgba(23, 105, 232, 0.09);
+        }
+        .wrong-bank-status {
+            min-height: 20px;
+            margin-top: 14px;
+            color: var(--danger);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .wrong-bank-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .dialog-button {
+            min-height: 42px;
+            padding: 0 18px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--muted);
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .dialog-button.primary { border-color: var(--brand-blue); background: var(--brand-blue); color: #fff; }
+        .dialog-button:disabled { opacity: 0.6; cursor: wait; }
+
         /* ===== CONFIRM DIALOG ===== */
         .confirm-dialog {
             display: none;
@@ -1566,6 +1696,11 @@
             .review-step { min-height: 0; }
             .history-actions { align-items: stretch; }
             .history-action { flex: 1 1 140px; }
+            .wrong-bank-grid { grid-template-columns: 1fr; }
+            .wrong-bank-field.full { grid-column: auto; }
+            .wrong-bank-form { padding: 20px; }
+            .wrong-bank-actions { align-items: stretch; }
+            .dialog-button { flex: 1; }
         }
         @media (min-width: 769px) and (max-width: 1080px) {
             .header-nav { display: none; }
@@ -1679,16 +1814,20 @@
             </div>
             <div class="form-group">
                 <label for="familyAccessCode">家庭访问码</label>
-                <input
-                    type="password"
-                    id="familyAccessCode"
-                    placeholder="8-32 位字母或数字"
-                    minlength="8"
-                    maxlength="32"
-                    pattern="[A-Za-z0-9]{8,32}"
-                    autocomplete="current-password"
-                    aria-describedby="familyAccessHint"
-                >
+                <div class="access-code-control">
+                    <input
+                        type="password"
+                        id="familyAccessCode"
+                        placeholder="8-32 位字母或数字"
+                        minlength="8"
+                        maxlength="32"
+                        pattern="[A-Za-z0-9]{8,32}"
+                        autocomplete="current-password"
+                        aria-describedby="familyAccessHint"
+                    >
+                    <button type="button" class="access-code-action" data-family-target="familyAccessCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('familyAccessCode', this)">显示</button>
+                    <button type="button" class="access-code-action" aria-label="生成家庭访问码" onclick="generateFamilyAccessCode('familyAccessCode')">生成</button>
+                </div>
                 <span class="field-hint" id="familyAccessHint">上传和查询错题库时使用，本页不会保存</span>
             </div>
         </div>
@@ -1816,6 +1955,7 @@
         <span class="history-count" id="historyCount">共 0 条记录</span>
     </div>
     <section class="review-dashboard" id="reviewDashboard" aria-live="polite"></section>
+    <div class="history-sync-status" id="historySyncStatus" role="status" aria-live="polite"></div>
     <div class="history-subjects">
         <button class="filter-tab active" data-subject-filter="all" onclick="setSubjectArchive('all')">全部学科 <span id="subjectCountAll">0</span></button>
         <button class="filter-tab" data-subject-filter="math" onclick="setSubjectArchive('math')">数学 <span id="subjectCountMath">0</span></button>
@@ -1825,7 +1965,7 @@
         <button class="filter-tab active" data-filter="week" onclick="filterHistory('week', this)">本周</button>
         <button class="filter-tab" data-filter="month" onclick="filterHistory('month', this)">本月</button>
         <button class="filter-tab" data-filter="all" onclick="filterHistory('all', this)">全部</button>
-        <button class="filter-tab sync-bank-btn" onclick="syncServerWrongBank()">查询服务器错题库</button>
+        <button class="filter-tab sync-bank-btn" onclick="openWrongBankQuery()">查询家庭错题库</button>
         <div class="date-range">
             <input type="date" id="dateFrom">
             <span>~</span>
@@ -1834,6 +1974,63 @@
     </div>
     <div id="historyList"></div>
 </div>
+
+<!-- WRONG BANK QUERY DIALOG -->
+<dialog class="wrong-bank-dialog" id="wrongBankDialog" aria-labelledby="wrongBankDialogTitle">
+    <form class="wrong-bank-form" novalidate onsubmit="submitWrongBankQuery(event)">
+        <div class="wrong-bank-head">
+            <div>
+                <h2 id="wrongBankDialogTitle">查询家庭错题库</h2>
+                <p>输入上传试卷时使用的孩子资料和访问码，即可查看服务器中的错题记录。</p>
+            </div>
+            <button type="button" class="dialog-close" aria-label="关闭查询窗口" onclick="closeWrongBankQuery()">×</button>
+        </div>
+        <div class="wrong-bank-grid">
+            <div class="wrong-bank-field">
+                <label for="wrongBankGrade">年级</label>
+                <select id="wrongBankGrade">
+                    <option value="六年级">六年级</option>
+                    <option value="七年级">七年级</option>
+                    <option value="八年级">八年级</option>
+                    <option value="九年级">九年级</option>
+                </select>
+            </div>
+            <div class="wrong-bank-field">
+                <label for="wrongBankSubject">学科范围</label>
+                <select id="wrongBankSubject">
+                    <option value="all">全部学科</option>
+                    <option value="math">数学</option>
+                    <option value="english">英语</option>
+                </select>
+            </div>
+            <div class="wrong-bank-field full">
+                <label for="wrongBankStudentName">学生姓名</label>
+                <input type="text" id="wrongBankStudentName" placeholder="请输入上传试卷时填写的姓名" autocomplete="name">
+            </div>
+            <div class="wrong-bank-field full">
+                <label for="wrongBankFamilyCode">家庭访问码</label>
+                <div class="access-code-control query">
+                    <input
+                        type="password"
+                        id="wrongBankFamilyCode"
+                        placeholder="8-32 位字母或数字"
+                        minlength="8"
+                        maxlength="32"
+                        pattern="[A-Za-z0-9]{8,32}"
+                        autocomplete="current-password"
+                    >
+                    <button type="button" class="access-code-action" data-family-target="wrongBankFamilyCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('wrongBankFamilyCode', this)">显示</button>
+                </div>
+                <span class="field-hint">必须与上传时使用的访问码一致，本次查询后不会保存</span>
+            </div>
+        </div>
+        <div class="wrong-bank-status" id="wrongBankStatus" role="alert" aria-live="assertive"></div>
+        <div class="wrong-bank-actions">
+            <button type="button" class="dialog-button" onclick="closeWrongBankQuery()">取消</button>
+            <button type="submit" class="dialog-button primary" id="wrongBankSubmit">查询错题库</button>
+        </div>
+    </form>
+</dialog>
 
 <!-- LOADING OVERLAY -->
 <div class="loading-overlay" id="loadingOverlay">
@@ -1909,6 +2106,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFileInput();
     setupDateFilters();
     loadWorksheetUnits();
+    const wrongBankDialog = document.getElementById('wrongBankDialog');
+    wrongBankDialog.addEventListener('click', event => {
+        if (event.target === wrongBankDialog) closeWrongBankQuery();
+    });
+    wrongBankDialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        closeWrongBankQuery();
+    });
 });
 
 async function loadWorksheetUnits() {
@@ -2106,6 +2311,32 @@ function removeFile(index) {
 function updateAnalyzeBtn() {
     const btn = document.getElementById('analyzeBtn');
     btn.classList.toggle('active', uploadedFiles.length > 0);
+}
+
+function toggleFamilyCodeVisibility(inputId, button) {
+    const input = document.getElementById(inputId);
+    const shouldShow = input.type === 'password';
+    input.type = shouldShow ? 'text' : 'password';
+    button.textContent = shouldShow ? '隐藏' : '显示';
+    button.setAttribute('aria-label', shouldShow ? '隐藏家庭访问码' : '显示家庭访问码');
+}
+
+function generateFamilyAccessCode(inputId) {
+    const input = document.getElementById(inputId);
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const randomValues = new Uint32Array(12);
+    crypto.getRandomValues(randomValues);
+    input.value = [...randomValues].map(value => alphabet[value % alphabet.length]).join('');
+    input.type = 'text';
+    const toggle = document.querySelector(`[data-family-target="${inputId}"]`);
+    if (toggle) {
+        toggle.textContent = '隐藏';
+        toggle.setAttribute('aria-label', '隐藏家庭访问码');
+    }
+    if (inputId === 'familyAccessCode') {
+        document.getElementById('familyAccessHint').textContent = '已生成安全访问码，请妥善记住；刷新页面后不会保留';
+    }
+    input.focus();
 }
 
 function getFamilyAccessCode() {
@@ -3112,21 +3343,97 @@ function setSubjectArchive(subject) {
     renderHistory();
 }
 
-async function syncServerWrongBank() {
+function openWrongBankQuery() {
+    const wrongBankDialog = document.getElementById('wrongBankDialog');
+    const historyStatus = document.getElementById('historySyncStatus');
+    historyStatus.textContent = '';
+    historyStatus.classList.remove('show');
+    document.getElementById('wrongBankGrade').value = document.getElementById('gradeSelect').value;
+    document.getElementById('wrongBankSubject').value = currentSubjectArchive;
+    document.getElementById('wrongBankStudentName').value = document.getElementById('studentName').value;
+    document.getElementById('wrongBankFamilyCode').value = document.getElementById('familyAccessCode').value;
+    document.getElementById('wrongBankStatus').textContent = '';
+    if (!wrongBankDialog.open) wrongBankDialog.showModal();
+    const firstEmptyField = document.getElementById('wrongBankStudentName').value.trim()
+        ? document.getElementById('wrongBankFamilyCode')
+        : document.getElementById('wrongBankStudentName');
+    window.setTimeout(() => firstEmptyField.focus(), 0);
+}
+
+function closeWrongBankQuery() {
+    const dialog = document.getElementById('wrongBankDialog');
+    if (dialog.open) dialog.close();
+    const codeInput = document.getElementById('wrongBankFamilyCode');
+    codeInput.value = '';
+    codeInput.type = 'password';
+    const toggle = document.querySelector('[data-family-target="wrongBankFamilyCode"]');
+    toggle.textContent = '显示';
+    toggle.setAttribute('aria-label', '显示家庭访问码');
+    document.getElementById('wrongBankStatus').textContent = '';
+}
+
+async function submitWrongBankQuery(event) {
+    event.preventDefault();
+    const grade = document.getElementById('wrongBankGrade').value;
+    const subject = document.getElementById('wrongBankSubject').value;
+    const studentName = document.getElementById('wrongBankStudentName').value.trim();
+    const familyCode = document.getElementById('wrongBankFamilyCode').value.trim();
+    const status = document.getElementById('wrongBankStatus');
+    const submitButton = document.getElementById('wrongBankSubmit');
+
+    if (!studentName) {
+        status.textContent = '请输入上传试卷时填写的学生姓名';
+        document.getElementById('wrongBankStudentName').focus();
+        return;
+    }
+    if (!/^[A-Za-z0-9]{8,32}$/.test(familyCode)) {
+        status.textContent = '请输入 8-32 位字母或数字组成的家庭访问码';
+        document.getElementById('wrongBankFamilyCode').focus();
+        return;
+    }
+
+    document.getElementById('gradeSelect').value = grade;
+    document.getElementById('studentName').value = studentName;
+    document.getElementById('familyAccessCode').value = familyCode;
+    setSubjectArchive(subject);
+    status.textContent = '正在查询家庭错题库...';
+    submitButton.disabled = true;
+    submitButton.textContent = '正在查询...';
+
+    try {
+        const result = await syncServerWrongBank({ quiet: true });
+        const historyStatus = document.getElementById('historySyncStatus');
+        historyStatus.textContent = result.message;
+        historyStatus.classList.add('show');
+        closeWrongBankQuery();
+        document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+        status.textContent = error.message || '查询失败，请稍后重试';
+    } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = '查询错题库';
+    }
+}
+
+async function syncServerWrongBank(options = {}) {
+    const quiet = Boolean(options.quiet);
     const grade = document.getElementById('gradeSelect').value;
     const studentName = (document.getElementById('studentName').value || '').trim();
     if (!grade || !studentName) {
-        alert('请先在上传区选择年级并填写学生姓名，再查询服务器错题库');
-        return;
+        const error = new Error('请选择年级并填写学生姓名');
+        if (quiet) throw error;
+        alert(error.message);
+        return null;
     }
 
     let accessHeaders;
     try {
         accessHeaders = familyAccessHeaders();
     } catch (e) {
+        if (quiet) throw e;
         alert(e.message);
         document.getElementById('familyAccessCode').focus();
-        return;
+        return null;
     }
 
     const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '50' });
@@ -3162,9 +3469,15 @@ async function syncServerWrongBank() {
         setHistoryFilter('all');
         renderHistory();
         const subjectText = currentSubjectArchive === 'all' ? '全部学科' : (currentSubjectArchive === 'english' ? '英语' : '数学');
-        alert(serverRecords.length ? `已同步 ${subjectText} ${serverRecords.length} 条服务器错题库记录` : `服务器错题库暂无${subjectText}记录`);
+        const message = serverRecords.length
+            ? `已同步 ${subjectText} ${serverRecords.length} 条家庭错题记录`
+            : `家庭错题库中暂无${subjectText}记录`;
+        if (!quiet) alert(message);
+        return { count: serverRecords.length, message: message };
     } catch (e) {
-        alert('查询服务器错题库失败：' + e.message);
+        if (quiet) throw e;
+        alert('查询家庭错题库失败：' + e.message);
+        return null;
     }
 }
 
