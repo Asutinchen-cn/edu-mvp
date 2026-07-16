@@ -7,6 +7,7 @@ from api.main import (
     _normalize_ai_analysis,
     _normalize_review_progress,
     generate_correction_sheet_pdf,
+    generate_family_review_report_pdf,
 )
 
 
@@ -199,6 +200,30 @@ class CorrectionSheetPdfTest(unittest.TestCase):
                 "root_cause": "没有理解移项要改变符号。",
                 "recommendations": ["先口述等式两边同时运算的理由。"],
             },
+        )
+
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 5000)
+
+
+class FamilyReviewReportPdfTest(unittest.TestCase):
+    def test_builds_a_weekly_report_from_saved_summary_evidence(self):
+        pdf_bytes = generate_family_review_report_pdf(
+            student_name="小明",
+            grade="六年级",
+            records=[{
+                "subject": "math",
+                "created_at": "2026-07-16T10:00:00",
+                "wrong_count": 2,
+                "weak_points": ["一元一次方程"],
+                "review_progress": {
+                    "completed": ["corrected"],
+                    "completed_count": 1,
+                    "total": 3,
+                    "next_step": "practiced",
+                },
+            }],
         )
 
         self.assertIsInstance(pdf_bytes, bytes)

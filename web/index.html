@@ -693,6 +693,30 @@
             font-size: 12px;
             font-weight: 800;
         }
+        .review-dashboard-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .review-report-btn {
+            min-height: 36px;
+            padding: 0 13px;
+            border: 1px solid rgba(23, 105, 232, 0.25);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .review-report-btn:hover { background: #edf5ff; }
+        .review-report-btn:disabled {
+            opacity: 0.56;
+            cursor: wait;
+        }
         .review-dashboard-body {
             display: grid;
             grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
@@ -1776,6 +1800,8 @@
             .history-mastery-filters .filter-tab { flex: 1 1 90px; }
             .date-range { width: 100%; flex-wrap: wrap; }
             .review-dashboard-head { flex-direction: column; gap: 6px; }
+            .review-dashboard-actions { width: 100%; justify-content: space-between; }
+            .review-report-btn { flex: 1 1 160px; }
             .review-dashboard-body { grid-template-columns: 1fr; }
             .review-metrics { grid-template-columns: 1fr; }
             .review-metric { padding: 12px 0; }
@@ -2187,6 +2213,7 @@ let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]'
 let currentFilter = 'week';
 let currentSubjectArchive = 'all';
 let currentMasteryFilter = 'pending';
+let familyReportExporting = false;
 let selectedRecordId = null;
 let pendingDeleteId = null;
 let worksheetUnits = [];
@@ -3352,6 +3379,44 @@ async function exportCorrectionSheet(id) {
     }
 }
 
+async function exportFamilyReviewReport() {
+    if (familyReportExporting) return;
+    const grade = document.getElementById('gradeSelect').value;
+    const studentName = document.getElementById('studentName').value.trim();
+    if (!grade || !studentName) {
+        alert('请先选择年级并填写学生姓名');
+        return;
+    }
+
+    familyReportExporting = true;
+    renderHistory();
+    try {
+        const params = new URLSearchParams({ grade: grade, student_name: studentName });
+        if (currentSubjectArchive !== 'all') params.set('subject', currentSubjectArchive);
+        const response = await fetch(`/family-review-report?${params.toString()}`, {
+            headers: familyAccessHeaders()
+        });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || `导出近 7 天报告失败（${response.status}）`);
+        }
+
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = `近7天复习报告-${grade}-${studentName}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (e) {
+        alert(e.message || '导出近 7 天报告失败，请稍后重试');
+    } finally {
+        familyReportExporting = false;
+        renderHistory();
+    }
+}
+
 function normalizeWrongCount(value) {
     if (value === null || value === undefined || value === '') return null;
     const count = Number(value);
@@ -3489,7 +3554,10 @@ function renderReviewDashboard(records) {
                 <h4>家长复习看板</h4>
                 <p>只看真实记录，快速找到近期反复卡住的地方。</p>
             </div>
-            <span class="review-scope">${escapeHtml(scopeLabel)}</span>
+            <div class="review-dashboard-actions">
+                <span class="review-scope">${escapeHtml(scopeLabel)}</span>
+                <button type="button" class="review-report-btn" onclick="exportFamilyReviewReport()" ${!summary.analysisCount || familyReportExporting ? 'disabled' : ''}>${familyReportExporting ? '正在导出...' : '导出近 7 天报告'}</button>
+            </div>
         </div>
         <div class="review-dashboard-body">
             <div class="review-metrics">

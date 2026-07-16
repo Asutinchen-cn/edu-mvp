@@ -173,6 +173,14 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("继续复习", HTML)
         self.assertIn("setMasteryFilter('pending')", HTML)
 
+    def test_parent_can_export_a_protected_seven_day_review_report(self):
+        self.assertIn("function exportFamilyReviewReport()", HTML)
+        self.assertIn("/family-review-report?${params.toString()}", HTML)
+        self.assertIn("headers: familyAccessHeaders()", HTML)
+        self.assertIn("URL.createObjectURL(await response.blob())", HTML)
+        self.assertIn("导出近 7 天报告", HTML)
+        self.assertIn("let familyReportExporting = false", HTML)
+
     def test_transient_history_request_flags_are_cleared_after_reload(self):
         self.assertIn("detailLoading: false", HTML)
         self.assertIn("progressSaving: false", HTML)

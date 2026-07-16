@@ -17,7 +17,7 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from dotenv import load_dotenv
 try:
@@ -3020,6 +3020,221 @@ def generate_correction_sheet_pdf(
     return bytes(pdf.output())
 
 
+def generate_family_review_report_pdf(
+    student_name: str,
+    grade: str,
+    records: list[dict],
+) -> bytes:
+    """把近 7 天已保存的错题摘要整理成家长复习报告。"""
+    from fpdf import FPDF
+
+    def clean(value) -> str:
+        text_value = str(value or "")
+        return "".join(
+            char for char in text_value if char >= " " or char in "\n\t"
+        ).strip()
+
+    class FamilyReportPDF(FPDF):
+        document_font = "helvetica"
+
+        def header(self):
+            self.set_font(self.document_font, "", 9)
+            self.set_text_color(100, 116, 139)
+            self.cell(
+                0,
+                7,
+                "虾胡闹学习 · 家庭复习报告",
+                new_x="LMARGIN",
+                new_y="NEXT",
+                align="R",
+            )
+            self.set_draw_color(220, 231, 247)
+            self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+            self.ln(6)
+
+        def footer(self):
+            self.set_y(-13)
+            self.set_font(self.document_font, "", 8)
+            self.set_text_color(100, 116, 139)
+            self.cell(0, 7, f"第 {self.page_no()} 页", align="C")
+
+    pdf = FamilyReportPDF()
+    pdf.set_margins(18, 14, 18)
+    pdf.set_auto_page_break(auto=True, margin=18)
+
+    project_font = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
+    )
+    font_paths = [
+        project_font,
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/System/Library/Fonts/PingFang.ttc",
+    ]
+    document_font = None
+    for font_path in font_paths:
+        if not os.path.exists(font_path):
+            continue
+        try:
+            pdf.add_font("zh", "", font_path)
+            pdf.add_font("zh", "B", font_path)
+            document_font = "zh"
+            break
+        except Exception:
+            continue
+    if not document_font:
+        raise RuntimeError("缺少中文字体，暂时无法生成家庭复习报告")
+    pdf.document_font = document_font
+
+    safe_records = [record for record in records if isinstance(record, dict)]
+    subject_counts = {"math": 0, "english": 0}
+    weak_frequency: dict[str, int] = {}
+    known_wrong_counts = []
+    mastered_count = 0
+    pending_records = []
+    for record in safe_records:
+        subject = record.get("subject") if record.get("subject") in subject_counts else "math"
+        subject_counts[subject] += 1
+        wrong_count = record.get("wrong_count")
+        if isinstance(wrong_count, int) and wrong_count >= 0:
+            known_wrong_counts.append(wrong_count)
+        for point in {
+            clean(item) for item in record.get("weak_points", []) if clean(item)
+        }:
+            weak_frequency[point] = weak_frequency.get(point, 0) + 1
+        progress = record.get("review_progress", {})
+        completed_count = int(progress.get("completed_count") or 0)
+        total = int(progress.get("total") or 3)
+        if completed_count >= total:
+            mastered_count += 1
+        else:
+            pending_records.append(record)
+
+    ranked_weak_points = sorted(
+        weak_frequency.items(), key=lambda item: (-item[1], item[0])
+    )
+    now = datetime.now()
+    period_start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    period_end = now.strftime("%Y-%m-%d")
+    pending_count = len(pending_records)
+    known_wrong_total = sum(known_wrong_counts)
+    wrong_count_label = (
+        str(known_wrong_total)
+        if len(known_wrong_counts) == len(safe_records)
+        else (f"至少 {known_wrong_total}" if known_wrong_total else "待补充")
+    )
+
+    def write_text(value, line_height=7, bold=False, color=(21, 34, 58)):
+        text_value = clean(value)
+        if not text_value:
+            return
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font(document_font, "B" if bold else "", 11)
+        pdf.set_text_color(*color)
+        pdf.multi_cell(
+            pdf.epw,
+            line_height,
+            text_value,
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+
+    def section_title(value):
+        pdf.ln(4)
+        write_text(value, 8, bold=True)
+        pdf.set_draw_color(220, 231, 247)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+        pdf.ln(3)
+
+    pdf.add_page()
+    pdf.set_font(document_font, "B", 20)
+    pdf.set_text_color(21, 34, 58)
+    pdf.cell(0, 12, "近 7 天家庭复习报告", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font(document_font, "", 10)
+    pdf.set_text_color(65, 81, 107)
+    pdf.cell(
+        0,
+        7,
+        f"学生：{clean(student_name)}    年级：{clean(grade)}    周期：{period_start} 至 {period_end}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
+    )
+    pdf.ln(5)
+
+    section_title("本周概览")
+    metrics = [
+        f"试卷 {len(safe_records)} 份",
+        f"错题 {wrong_count_label} 道",
+        f"已掌握 {mastered_count} 份",
+        f"待复习 {pending_count} 份",
+    ]
+    metric_width = pdf.epw / len(metrics)
+    pdf.set_fill_color(241, 247, 255)
+    pdf.set_text_color(23, 105, 232)
+    pdf.set_font(document_font, "B", 10)
+    for index, metric in enumerate(metrics):
+        is_last = index == len(metrics) - 1
+        pdf.cell(
+            metric_width,
+            16,
+            metric,
+            fill=True,
+            align="C",
+            new_x="LMARGIN" if is_last else "RIGHT",
+            new_y="NEXT" if is_last else "TOP",
+        )
+    pdf.ln(3)
+    subject_summary = []
+    if subject_counts["math"]:
+        subject_summary.append(f"数学 {subject_counts['math']} 份")
+    if subject_counts["english"]:
+        subject_summary.append(f"英语 {subject_counts['english']} 份")
+    write_text("学科分布：" + ("、".join(subject_summary) or "暂无"), 7)
+
+    section_title("反复薄弱点")
+    if ranked_weak_points:
+        for index, (point, count) in enumerate(ranked_weak_points[:5], start=1):
+            write_text(f"{index}. {point}（出现在 {count} 份记录中）", 7)
+    else:
+        write_text("当前记录中还没有可确认的薄弱知识点。", 7, color=(65, 81, 107))
+
+    section_title("接下来优先完成")
+    step_labels = {
+        "corrected": "订正原题",
+        "practiced": "完成同类题",
+        "retested": "隔天回测",
+    }
+    if pending_records:
+        for index, record in enumerate(pending_records[:5], start=1):
+            progress = record.get("review_progress", {})
+            subject_label = SUBJECT_LABELS.get(record.get("subject"), "数学")
+            points = [clean(item) for item in record.get("weak_points", []) if clean(item)]
+            focus = points[0] if points else "这份错题"
+            next_step = step_labels.get(progress.get("next_step"), "继续复习")
+            completed_count = int(progress.get("completed_count") or 0)
+            total = int(progress.get("total") or 3)
+            write_text(
+                f"{index}. [{subject_label}] {focus}：{next_step}（完成 {completed_count}/{total}）",
+                7,
+            )
+    else:
+        write_text("近 7 天记录均已完成三步复习。", 7, color=(33, 166, 122))
+
+    section_title("家长本周核对")
+    write_text("[ ] 孩子能独立说清主要错因", 8)
+    write_text("[ ] 同类题已核对步骤，不只核对答案", 8)
+    write_text("[ ] 隔天回测时没有查看原答案", 8)
+    write_text("家长签名：________________    日期：________________", 9)
+
+    pdf.ln(4)
+    write_text(
+        "说明：本报告只统计已保存且可确认的分析记录，不代表考试成绩；错题数缺失时不做推算。",
+        6,
+        color=(100, 116, 139),
+    )
+    return bytes(pdf.output())
+
+
 def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, include_answers: bool) -> bytes:
     """生成按单元筛选的题目卷或答案解析卷。"""
     from fpdf import FPDF
@@ -3276,6 +3491,96 @@ async def export_correction_sheet(
         headers={"Content-Disposition": content_disposition},
     )
 
+
+@app.get("/family-review-report")
+async def export_family_review_report(
+    grade: str = None,
+    student_name: str = None,
+    subject: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """导出受家庭访问码保护的近 7 天复习汇总。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    subject = (subject or "").strip()
+    if subject and subject not in SUBJECT_LABELS:
+        return JSONResponse(
+            {"success": False, "error": "subject 必须是 math 或 english"},
+            status_code=400,
+        )
+
+    db = SessionLocal()
+    candidates = (
+        db.query(Exam)
+        .filter(Exam.grade == grade, Exam.student_name == student_name)
+        .order_by(Exam.created_at.desc())
+        .all()
+    )
+    if subject:
+        candidates = [exam for exam in candidates if exam.subject == subject]
+    accessible_exams = [
+        exam for exam in candidates
+        if _exam_has_family_access(exam, grade, student_name, family_code)
+    ]
+    if not accessible_exams:
+        db.close()
+        return JSONResponse(
+            {"success": False, "error": FAMILY_ACCESS_DENIED_ERROR},
+            status_code=403,
+        )
+
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+    recent_exams = [
+        exam for exam in accessible_exams
+        if exam.created_at and exam.created_at >= cutoff
+    ]
+    if not recent_exams:
+        db.close()
+        return JSONResponse(
+            {"success": False, "error": "近 7 天暂无可汇总的错题记录"},
+            status_code=400,
+        )
+
+    records = []
+    for exam in recent_exams:
+        summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
+        records.append({
+            "subject": exam.subject,
+            "created_at": exam.created_at.isoformat(),
+            "wrong_count": summary["wrong_count"],
+            "weak_points": summary["weak_points"],
+            "review_progress": _normalize_review_progress(exam.review_progress),
+        })
+    db.close()
+
+    try:
+        pdf_bytes = generate_family_review_report_pdf(
+            student_name=student_name,
+            grade=grade,
+            records=records,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": f"生成家庭复习报告失败：{str(e)[:160]}"},
+            status_code=500,
+        )
+
+    safe_filename = "family_review_report.pdf"
+    utf8_filename = f"近7天复习报告_{grade}_{student_name}.pdf"
+    content_disposition = (
+        f"attachment; filename={safe_filename}; "
+        f"filename*=UTF-8''{quote(utf8_filename)}"
+    )
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": content_disposition},
+    )
+
 @app.get("/api-info")
 async def api_info():
     """API信息"""
@@ -3294,6 +3599,8 @@ async def api_info():
             "list": "GET /exams?grade=...&student_name=...（请求头 X-Family-Code）",
             "detail": "GET /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）",
             "image": "GET /exams/{id}/image?grade=...&student_name=...（请求头 X-Family-Code）",
+            "correction_sheet": "GET /exams/{id}/correction-sheet?grade=...&student_name=...（请求头 X-Family-Code）",
+            "family_review_report": "GET /family-review-report?grade=...&student_name=...（请求头 X-Family-Code）",
             "delete": "DELETE /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）"
         },
         "status": "OCR已接入百度试卷识别+通用识别，AI分析已接入DeepSeek",

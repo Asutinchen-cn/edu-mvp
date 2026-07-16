@@ -21,6 +21,7 @@ from api.main import (
     analyze_exam,
     delete_exam,
     export_correction_sheet,
+    export_family_review_report,
     export_practice_pdf,
     generate_practice,
     get_exam,
@@ -187,6 +188,18 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("没有可导出的错题", json.loads(response.body)["error"])
 
+    def test_family_review_report_is_returned_for_the_matching_code(self):
+        response = asyncio.run(export_family_review_report(
+            grade="六年级",
+            student_name="小明",
+            subject="math",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.media_type, "application/pdf")
+        self.assertIn("attachment", response.headers["content-disposition"])
+
     def test_every_record_operation_rejects_the_wrong_family_code(self):
         calls = [
             lambda: analyze_exam(
@@ -200,6 +213,9 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             ),
             lambda: export_correction_sheet(
                 self.first_exam_id, "六年级", "小明", family_code="Other2026B"
+            ),
+            lambda: export_family_review_report(
+                "六年级", "小明", subject="math", family_code="Other2026B"
             ),
             lambda: get_exam_image(
                 self.first_exam_id, "六年级", "小明", family_code="Other2026B"
