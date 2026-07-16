@@ -1588,12 +1588,131 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 
 # ===== AI 分析（DeepSeek） =====
 
+ANALYSIS_CROSS_SUBJECT_TERMS = {
+    "english": ("数学", "小数", "分数", "方程", "函数", "几何", "面积", "体积", "代数运算", "单位换算"),
+    "math": ("英语", "语法", "词汇", "时态", "介词", "冠词", "拼写", "阅读理解"),
+}
+
+
+def _analysis_text_matches_subject(value, subject: str) -> bool:
+    text_value = str(value or "").strip().lower()
+    return bool(text_value) and not any(
+        term.lower() in text_value
+        for term in ANALYSIS_CROSS_SUBJECT_TERMS.get(subject, ())
+    )
+
+
+def _analysis_string_list(values, subject: str) -> tuple[list, int]:
+    if not isinstance(values, list):
+        return [], 1 if values not in (None, "") else 0
+
+    cleaned = []
+    filtered_count = 0
+    for value in values:
+        text_value = str(value or "").strip()
+        if not _analysis_text_matches_subject(text_value, subject):
+            filtered_count += 1
+            continue
+        if text_value not in cleaned:
+            cleaned.append(text_value)
+    return cleaned, filtered_count
+
+
+def _analysis_error_type_stats(wrong_questions: list) -> list:
+    counts = {}
+    for item in wrong_questions:
+        error_type = item["error_type"]
+        counts[error_type] = counts.get(error_type, 0) + 1
+    if not counts:
+        return []
+
+    total = sum(counts.values())
+    remaining = 100
+    stats = []
+    entries = list(counts.items())
+    for index, (name, count) in enumerate(entries):
+        percent = remaining if index == len(entries) - 1 else round(count / total * 100)
+        remaining -= percent
+        stats.append({"name": name, "count": count, "percent": percent})
+    return stats
+
+
+def _normalize_ai_analysis(raw_analysis, subject: str) -> dict:
+    """只保留结构完整且符合所选学科的可确认分析内容。"""
+    analysis = raw_analysis if isinstance(raw_analysis, dict) else {}
+    filtered_count = 0 if isinstance(raw_analysis, dict) else 1
+    model_subject = str(analysis.get("subject") or "").strip()
+    subject_mismatch = model_subject in SUBJECT_LABELS and model_subject != subject
+
+    wrong_questions = []
+    raw_wrong_questions = analysis.get("wrong_questions", [])
+    if not isinstance(raw_wrong_questions, list):
+        raw_wrong_questions = []
+        filtered_count += 1
+    for item in raw_wrong_questions:
+        if not isinstance(item, dict):
+            filtered_count += 1
+            continue
+        normalized_item = {
+            "question": str(item.get("question") or "").strip(),
+            "error_type": str(item.get("error_type") or "待确认").strip(),
+            "student_answer": str(item.get("student_answer") or "").strip(),
+            "correct_answer": str(item.get("correct_answer") or "").strip(),
+        }
+        evidence_text = " ".join(normalized_item.values())
+        if not normalized_item["question"] or not _analysis_text_matches_subject(evidence_text, subject):
+            filtered_count += 1
+            continue
+        wrong_questions.append(normalized_item)
+
+    weak_points, removed_weak_points = _analysis_string_list(analysis.get("weak_points", []), subject)
+    recommendations, removed_recommendations = _analysis_string_list(
+        analysis.get("recommendations", []), subject
+    )
+    provided_error_types, removed_error_types = _analysis_string_list(
+        analysis.get("error_types", []), subject
+    )
+    filtered_count += removed_weak_points + removed_recommendations + removed_error_types
+
+    error_types = list(dict.fromkeys(
+        [item["error_type"] for item in wrong_questions] or provided_error_types
+    ))
+    root_cause = str(analysis.get("root_cause") or "").strip()
+    if not _analysis_text_matches_subject(root_cause, subject):
+        if root_cause:
+            filtered_count += 1
+        root_cause = "当前仅保留与所选学科一致、且能由上传内容支持的分析。"
+
+    if filtered_count or subject_mismatch:
+        evidence_status = "filtered"
+        evidence_note = f"已过滤 {filtered_count + int(subject_mismatch)} 条与所选学科不一致或格式无效的内容；当前仅展示剩余可确认信息。"
+    elif wrong_questions:
+        evidence_status = "confirmed"
+        evidence_note = f"共识别 {len(wrong_questions)} 道有明确题目证据的错题，错误类型按这些错题实际计数。"
+    else:
+        evidence_status = "insufficient"
+        evidence_note = "未识别到具备明确题目证据的错题，请检查图片清晰度与批改痕迹。"
+
+    return {
+        "subject": subject,
+        "wrong_questions": wrong_questions,
+        "wrong_count": len(wrong_questions),
+        "error_types": error_types,
+        "error_type_stats": _analysis_error_type_stats(wrong_questions),
+        "weak_points": weak_points,
+        "root_cause": root_cause,
+        "recommendations": recommendations,
+        "evidence_status": evidence_status,
+        "evidence_note": evidence_note,
+    }
+
+
 async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
     """使用 DeepSeek 进行错题分析"""
     subject_label = SUBJECT_LABELS.get(subject, "未知学科")
     ocr_text = (ocr_text or "").strip()
     if not ocr_text or ocr_text.startswith("[OCR"):
-        return {
+        return _normalize_ai_analysis({
             "subject": subject,
             "wrong_questions": [],
             "error_types": ["OCR识别未完成"],
@@ -1604,7 +1723,7 @@ async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
                 "重新上传文字清晰、包含批改痕迹的试卷图片",
                 f"如需分析{subject_label}试卷，请在上传区选择正确学科"
             ]
-        }
+        }, subject)
     subject_rules = (
         "这是英语试卷。请只分析英语相关问题，例如词汇理解、句型语法、阅读信息提取、拼写、时态、介词、物主代词、表达完整性。不要输出数学知识点。"
         if subject == "english"
@@ -1645,23 +1764,17 @@ async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
     try:
         result = await call_deepseek(prompt, max_tokens=3000, json_mode=True)
         analysis = json.loads(_strip_json_fence(result))
-        analysis.setdefault("subject", subject)
-        analysis.setdefault("wrong_questions", [])
-        analysis.setdefault("error_types", [])
-        analysis.setdefault("weak_points", [])
-        analysis.setdefault("root_cause", "")
-        analysis.setdefault("recommendations", [])
-        return analysis
+        return _normalize_ai_analysis(analysis, subject)
     except Exception as e:
         print(f"DeepSeek API error: {e}")
-        return {
+        return _normalize_ai_analysis({
             "subject": subject,
             "wrong_questions": [],
             "error_types": ["分析服务暂时不可用"],
             "weak_points": ["请稍后重试"],
             "root_cause": f"AI分析服务异常: {str(e)[:50]}",
             "recommendations": ["请稍后重试AI分析"]
-        }
+        }, subject)
 
 # ===== AI 生成巩固练习题（DeepSeek） =====
 
@@ -1882,7 +1995,7 @@ def _analysis_history_detail(
             continue
         wrong_questions.append({
             "question": str(item.get("question") or "").strip(),
-            "error_type": str(item.get("error_type") or "").strip(),
+            "error_type": str(item.get("error_type") or "待确认").strip(),
             "student_answer": str(item.get("student_answer") or "").strip(),
             "correct_answer": str(item.get("correct_answer") or "").strip(),
         })
@@ -1893,13 +2006,28 @@ def _analysis_history_detail(
     recommendations = clean_list(analysis.get("recommendations"))
     if not recommendations:
         recommendations = clean_list(_stored_json(raw_recommendations, []))
+    error_type_stats = _analysis_error_type_stats(wrong_questions)
+    evidence_status = str(analysis.get("evidence_status") or "").strip()
+    if evidence_status not in {"confirmed", "filtered", "insufficient"}:
+        evidence_status = "confirmed" if wrong_questions else "insufficient"
+    evidence_note = str(analysis.get("evidence_note") or "").strip()
+    if not evidence_note:
+        evidence_note = (
+            f"共保存 {len(wrong_questions)} 道有明确题目证据的错题，错误类型按实际错题计数。"
+            if wrong_questions
+            else "这条旧记录没有可确认的错题明细。"
+        )
 
     return {
         "wrong_questions": wrong_questions,
-        "error_types": clean_list(analysis.get("error_types")),
+        "error_types": [item["name"] for item in error_type_stats]
+        or clean_list(analysis.get("error_types")),
+        "error_type_stats": error_type_stats,
         "weak_points": weak_points,
         "root_cause": str(analysis.get("root_cause") or "").strip(),
         "recommendations": recommendations,
+        "evidence_status": evidence_status,
+        "evidence_note": evidence_note,
     }
 
 

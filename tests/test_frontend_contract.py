@@ -53,6 +53,13 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("本次识别错题", HTML)
         self.assertNotIn("总错误率", HTML)
 
+    def test_analysis_distribution_uses_real_wrong_question_counts(self):
+        self.assertIn("function buildErrorTypeStats(wrongQuestions, providedStats = [])", HTML)
+        self.assertIn("analysis.evidence_note", HTML)
+        self.assertIn("证据已核对", HTML)
+        self.assertIn("已过滤串科内容", HTML)
+        self.assertNotIn("Math.ceil(wq.length / displayErrorTypes.length)", HTML)
+
     def test_ai_practice_content_is_escaped_before_rendering(self):
         self.assertIn("currentPracticeQuestions = questions", HTML)
         self.assertIn("${escapeHtml(q.question)}", HTML)

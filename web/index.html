@@ -1085,11 +1085,27 @@
             line-height: 1.6;
         }
         .evidence-note {
-            margin-top: 10px;
+            flex: 1;
             color: var(--muted);
             font-size: 12px;
             line-height: 1.6;
         }
+        .evidence-line {
+            margin-top: 10px;
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+        }
+        .evidence-status {
+            flex: 0 0 auto;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+        .evidence-status.confirmed { color: #087a57; background: #e5f8f1; }
+        .evidence-status.filtered { color: #a84600; background: #fff0df; }
+        .evidence-status.insufficient { color: #5f6f86; background: #edf2f8; }
         .parent-plan {
             margin-top: 22px;
             padding-top: 20px;
@@ -1232,6 +1248,12 @@
         .error-type-row {
             display: flex; align-items: center; gap: 12px;
             margin-bottom: 10px;
+        }
+        .detail-empty {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+            padding: 14px 0;
         }
         .error-type-label {
             width: 80px; font-size: 13px; color: #555; text-align: right;
@@ -2141,6 +2163,28 @@ async function requestJson(url, options) {
     return json;
 }
 
+function buildErrorTypeStats(wrongQuestions, providedStats = []) {
+    const counts = new Map();
+    (Array.isArray(wrongQuestions) ? wrongQuestions : []).forEach(item => {
+        const name = String(item?.error_type || '').trim();
+        if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    if (!counts.size) return [];
+
+    const preferredOrder = (Array.isArray(providedStats) ? providedStats : [])
+        .map(item => String(item?.name || '').trim())
+        .filter(name => counts.has(name));
+    const names = [...new Set([...preferredOrder, ...counts.keys()])];
+    const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+    let remaining = 100;
+    return names.map((name, index) => {
+        const count = counts.get(name);
+        const percent = index === names.length - 1 ? remaining : Math.round(count / total * 100);
+        remaining -= percent;
+        return { name: name, count: count, percent: percent };
+    });
+}
+
 function mergeApiAnalyses(analyses, subject) {
     const merged = {
         subject: subject,
@@ -2150,8 +2194,12 @@ function mergeApiAnalyses(analyses, subject) {
         recommendations: [],
         exam_ids: [],
         image_urls: [],
-        root_cause: ''
+        root_cause: '',
+        evidence_status: 'insufficient',
+        evidence_note: ''
     };
+    const evidenceStatuses = [];
+    const evidenceNotes = [];
     const addUnique = (target, values) => {
         (values || []).forEach(v => {
             if (v && !target.includes(v)) target.push(v);
@@ -2165,10 +2213,22 @@ function mergeApiAnalyses(analyses, subject) {
         addUnique(merged.error_types, analysis.error_types || []);
         addUnique(merged.weak_points, analysis.weak_points || []);
         addUnique(merged.recommendations, analysis.recommendations || []);
+        if (analysis.evidence_status) evidenceStatuses.push(analysis.evidence_status);
+        if (analysis.evidence_note && !evidenceNotes.includes(analysis.evidence_note)) {
+            evidenceNotes.push(analysis.evidence_note);
+        }
         if (analysis.root_cause) {
             merged.root_cause += (merged.root_cause ? '\n' : '') + analysis.root_cause;
         }
     });
+    merged.error_type_stats = buildErrorTypeStats(merged.wrong_questions);
+    merged.wrong_count = merged.wrong_questions.length;
+    merged.evidence_status = evidenceStatuses.includes('filtered')
+        ? 'filtered'
+        : (merged.wrong_questions.length ? 'confirmed' : 'insufficient');
+    merged.evidence_note = evidenceNotes.join(' ') || (merged.wrong_questions.length
+        ? `共识别 ${merged.wrong_questions.length} 道有明确题目证据的错题，错误类型按这些错题实际计数。`
+        : '未识别到具备明确题目证据的错题，请检查图片清晰度与批改痕迹。');
     return merged;
 }
 
@@ -2178,13 +2238,15 @@ function parseApiResponse(json, name, grade, subject) {
         const analysis = json.analysis || json || {};
         const wp = Array.isArray(analysis.weak_points) ? analysis.weak_points : [];
         const wq = Array.isArray(analysis.wrong_questions) ? analysis.wrong_questions : [];
-        const et = Array.isArray(analysis.error_types) ? analysis.error_types : [];
         const rec = Array.isArray(analysis.recommendations) ? analysis.recommendations : [];
         const examIds = Array.isArray(analysis.exam_ids) ? analysis.exam_ids : [];
         const imageUrls = Array.isArray(analysis.image_urls) ? analysis.image_urls : [];
         const subjectLabel = subject === 'english' ? '英语' : '数学';
-        const displayErrorTypes = et.length ? et : ['待进一步确认'];
         const displayWeakPoints = wp.length ? wp.slice(0, 3) : ['未识别到明确薄弱点'];
+        const errorTypeStats = buildErrorTypeStats(wq, analysis.error_type_stats);
+        const evidenceStatus = ['confirmed', 'filtered', 'insufficient'].includes(analysis.evidence_status)
+            ? analysis.evidence_status
+            : (wq.length ? 'confirmed' : 'insufficient');
         return {
             studentName: name,
             grade: grade,
@@ -2194,10 +2256,14 @@ function parseApiResponse(json, name, grade, subject) {
             imageUrls: imageUrls,
             weakPoints: displayWeakPoints,
             evaluation: analysis.root_cause || '未能从图片中识别到明确错题，请确认图片清晰且包含批改痕迹。',
-            errorTypes: displayErrorTypes.map((e, i) => ({
-                name: e,
-                count: wq.length ? Math.max(1, Math.ceil(wq.length / displayErrorTypes.length)) : 0,
-                percent: Math.floor(100 / displayErrorTypes.length),
+            evidenceStatus: evidenceStatus,
+            evidenceNote: analysis.evidence_note || (wq.length
+                ? `共识别 ${wq.length} 道有明确题目证据的错题，错误类型按这些错题实际计数。`
+                : '未识别到具备明确题目证据的错题，请检查图片清晰度与批改痕迹。'),
+            errorTypes: errorTypeStats.map((item, i) => ({
+                name: item.name,
+                count: item.count,
+                percent: item.percent,
                 color: ['#FFB74D','#FF7043','#E53935'][i%3]
             })),
             wrongQuestions: wq.map((q, i) => ({
@@ -2245,6 +2311,12 @@ function renderAnalysisResult(data) {
     const badgeClasses = ['hot', 'warm', 'cool'];
     const plan = buildParentReviewPlan(data);
     const wrongCount = data.wrongQuestions.length;
+    const evidenceLabels = {
+        confirmed: '证据已核对',
+        filtered: '已过滤串科内容',
+        insufficient: '需要补充清晰图片'
+    };
+    const evidenceStatus = evidenceLabels[data.evidenceStatus] ? data.evidenceStatus : 'insufficient';
 
     document.getElementById('summaryCard').innerHTML = `
         <div class="summary-top">
@@ -2260,7 +2332,10 @@ function renderAnalysisResult(data) {
             </div>
         </div>
         <div class="summary-eval"><strong>老师判断：</strong>${escapeHtml(data.evaluation)}</div>
-        <div class="evidence-note">本结果仅依据上传图片中可见的题目、作答和批改痕迹，不把识别到的错题数推算成整张试卷错误率。</div>
+        <div class="evidence-line">
+            <span class="evidence-status ${evidenceStatus}">${evidenceLabels[evidenceStatus]}</span>
+            <div class="evidence-note">${escapeHtml(data.evidenceNote)} 不把识别到的错题数推算成整张试卷错误率。</div>
+        </div>
         <section class="parent-plan" aria-label="家长复习摘要">
             <div class="parent-plan-header">
                 <div>
@@ -2300,7 +2375,7 @@ function renderAnalysisResult(data) {
                 <span class="detail-toggle">▶</span>
             </div>
             <div class="detail-body">
-                ${data.errorTypes.map(et => `
+                ${data.errorTypes.length ? data.errorTypes.map(et => `
                     <div class="error-type-row">
                         <div class="error-type-label">${escapeHtml(et.name)}</div>
                         <div class="error-type-bar-bg">
@@ -2308,7 +2383,7 @@ function renderAnalysisResult(data) {
                         </div>
                         <div class="error-type-count">${et.count}题 (${et.percent}%)</div>
                     </div>
-                `).join('')}
+                `).join('') : '<div class="detail-empty">暂无可由错题证据统计的错误类型。请上传包含清晰作答与批改痕迹的试卷。</div>'}
             </div>
         </div>
 
@@ -2747,12 +2822,24 @@ function renderHistoryDiagnosis(record) {
         : (data.weakDetails || []).map(item => item.practice).filter(Boolean);
     const rootCause = raw.root_cause || data.evaluation || '暂未形成明确错因判断。';
     const weakPoints = recordWeakPoints(record);
+    const historyEvidenceStatus = ['confirmed', 'filtered', 'insufficient'].includes(data.evidenceStatus)
+        ? data.evidenceStatus
+        : (wrongQuestions.length ? 'confirmed' : 'insufficient');
+    const historyEvidenceLabels = {
+        confirmed: '证据已核对',
+        filtered: '已过滤串科内容',
+        insufficient: '需要补充清晰图片'
+    };
 
     return `
         <div class="history-diagnosis">
             <div class="history-diagnosis-head">
                 <h4>错题诊断</h4>
                 <span class="history-diagnosis-status">${wrongQuestions.length ? `${wrongQuestions.length} 道错题 · ${weakPoints.length} 个薄弱点` : '未识别到明确错题'}</span>
+            </div>
+            <div class="evidence-line">
+                <span class="evidence-status ${historyEvidenceStatus}">${historyEvidenceLabels[historyEvidenceStatus]}</span>
+                <div class="evidence-note">${escapeHtml(data.evidenceNote || '这条旧记录没有证据说明，请以原卷为准。')}</div>
             </div>
             <div class="history-cause">
                 <strong>老师判断</strong>

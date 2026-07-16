@@ -1,7 +1,73 @@
 import json
 import unittest
 
-from api.main import _analysis_history_detail, _analysis_history_summary, _normalize_review_progress
+from api.main import (
+    _analysis_history_detail,
+    _analysis_history_summary,
+    _normalize_ai_analysis,
+    _normalize_review_progress,
+)
+
+
+class AiAnalysisNormalizationTest(unittest.TestCase):
+    def test_error_distribution_uses_saved_wrong_question_counts(self):
+        analysis = _normalize_ai_analysis({
+            "subject": "math",
+            "wrong_questions": [
+                {"question": "计算 1", "error_type": "计算错误", "student_answer": "1", "correct_answer": "2"},
+                {"question": "计算 2", "error_type": "计算错误", "student_answer": "3", "correct_answer": "4"},
+                {"question": "应用题", "error_type": "审题错误", "student_answer": "5", "correct_answer": "6"},
+            ],
+            "error_types": ["计算错误", "审题错误"],
+            "weak_points": ["有理数运算"],
+            "root_cause": "计算步骤不稳定。",
+            "recommendations": ["逐步验算。"],
+        }, "math")
+
+        self.assertEqual(analysis["wrong_count"], 3)
+        self.assertEqual(
+            analysis["error_type_stats"],
+            [
+                {"name": "计算错误", "count": 2, "percent": 67},
+                {"name": "审题错误", "count": 1, "percent": 33},
+            ],
+        )
+        self.assertEqual(analysis["evidence_status"], "confirmed")
+
+    def test_english_analysis_filters_math_content_before_it_is_saved(self):
+        analysis = _normalize_ai_analysis({
+            "subject": "math",
+            "wrong_questions": [
+                {"question": "计算小数加法", "error_type": "小数计算错误", "student_answer": "1.2", "correct_answer": "1.3"},
+                {"question": "Choose the correct past tense.", "error_type": "一般过去时错误", "student_answer": "go", "correct_answer": "went"},
+            ],
+            "error_types": ["小数计算错误", "一般过去时错误"],
+            "weak_points": ["小数运算", "一般过去时", "阅读理解", "一般过去时"],
+            "root_cause": "小数计算和时态都不稳定。",
+            "recommendations": ["练习小数计算。", "圈出英语句中的时间标志。"],
+        }, "english")
+
+        self.assertEqual(analysis["subject"], "english")
+        self.assertEqual(len(analysis["wrong_questions"]), 1)
+        self.assertEqual(analysis["wrong_questions"][0]["error_type"], "一般过去时错误")
+        self.assertEqual(analysis["weak_points"], ["一般过去时", "阅读理解"])
+        self.assertEqual(analysis["recommendations"], ["圈出英语句中的时间标志。"])
+        self.assertEqual(analysis["evidence_status"], "filtered")
+        self.assertIn("已过滤", analysis["evidence_note"])
+
+    def test_analysis_without_wrong_question_evidence_is_not_presented_as_confirmed(self):
+        analysis = _normalize_ai_analysis({
+            "subject": "english",
+            "wrong_questions": [],
+            "error_types": ["一般过去时错误"],
+            "weak_points": ["一般过去时"],
+            "root_cause": "图片中没有看清学生作答。",
+            "recommendations": ["重新上传清晰图片。"],
+        }, "english")
+
+        self.assertEqual(analysis["wrong_count"], 0)
+        self.assertEqual(analysis["error_type_stats"], [])
+        self.assertEqual(analysis["evidence_status"], "insufficient")
 
 
 class AnalysisHistorySummaryTest(unittest.TestCase):
@@ -53,6 +119,28 @@ class AnalysisHistoryDetailTest(unittest.TestCase):
         self.assertEqual(detail["weak_points"], ["一元一次方程"])
         self.assertEqual(detail["root_cause"], "没有理解移项要改变符号。")
         self.assertEqual(detail["recommendations"], ["先口述等式两边同时运算的理由。"])
+
+    def test_recomputes_error_distribution_from_saved_wrong_questions(self):
+        detail = _analysis_history_detail(json.dumps({
+            "wrong_questions": [
+                {"question": "题 1", "error_type": "计算错误"},
+                {"question": "题 2", "error_type": "计算错误"},
+                {"question": "题 3", "error_type": "审题错误"},
+            ],
+            "error_type_stats": [{"name": "错误的旧统计", "count": 9, "percent": 100}],
+            "evidence_status": "confirmed",
+            "evidence_note": "只依据保存的错题证据。",
+        }, ensure_ascii=False))
+
+        self.assertEqual(
+            detail["error_type_stats"],
+            [
+                {"name": "计算错误", "count": 2, "percent": 67},
+                {"name": "审题错误", "count": 1, "percent": 33},
+            ],
+        )
+        self.assertEqual(detail["evidence_status"], "confirmed")
+        self.assertEqual(detail["evidence_note"], "只依据保存的错题证据。")
 
     def test_falls_back_to_legacy_weak_points_and_recommendations(self):
         detail = _analysis_history_detail(
