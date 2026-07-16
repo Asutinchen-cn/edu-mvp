@@ -259,6 +259,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         compose_config = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
 
         self.assertNotIn("location /uploads", nginx_config)
+        self.assertIn("family-review-report", nginx_config)
         self.assertEqual(compose_config.count("./uploads:/uploads"), 1)
 
 
