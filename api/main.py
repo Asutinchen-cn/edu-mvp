@@ -702,6 +702,8 @@ async def call_deepseek(
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temperature,
         "max_tokens": max_tokens,
+        # V4 defaults to thinking mode, which is too slow for bounded JSON tasks.
+        "thinking": {"type": "disabled"},
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
@@ -709,7 +711,13 @@ async def call_deepseek(
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(DEEPSEEK_API_URL, json=payload, headers=headers)
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        choice = resp.json()["choices"][0]
+        if choice.get("finish_reason") == "length":
+            raise ValueError("模型输出被截断")
+        content = choice["message"].get("content")
+        if not str(content or "").strip():
+            raise ValueError("模型返回空内容")
+        return content
 
 
 class UnitWorksheetRequest(BaseModel):
@@ -817,44 +825,44 @@ def _question_plan(body: UnitWorksheetRequest) -> list[dict]:
     if body.subject == "math":
         if body.difficulty == "basic":
             cycle = [
-                ("概念辨析", "判断学生是否真正理解核心概念"),
-                ("基础计算", "检查单步算法和书写准确性"),
-                ("常规应用", "把单一考点放入直接情境"),
+                ("选择题", "判断学生是否真正理解核心概念"),
+                ("填空题", "检查单步算法和书写准确性"),
+                ("应用题", "把单一考点放入直接情境"),
             ]
         elif body.difficulty == "advanced":
             cycle = [
-                ("基础计算", "检查熟练度"),
-                ("方法辨析", "比较不同方法并识别易错步骤"),
-                ("应用建模", "根据题意建立数量关系"),
-                ("易错校验", "暴露小数点、单位或等量关系错误"),
+                ("填空题", "检查基本计算和概念熟练度"),
+                ("选择题", "比较不同方法并识别易错步骤"),
+                ("解答题", "写出关键步骤并解释数量关系"),
+                ("应用题", "根据真实情境建立数量关系"),
             ]
         else:
             cycle = [
-                ("综合应用", "整合两个以上考点解决问题"),
-                ("方法解释", "说明为什么这样列式或判断"),
-                ("易错辨析", "识别看似合理的错误做法"),
-                ("迁移建模", "换情境后仍能使用本单元方法"),
+                ("解答题", "整合两个以上考点解决问题"),
+                ("应用题", "说明为什么这样列式或判断"),
+                ("选择题", "识别看似合理的错误做法"),
+                ("探究题", "换情境后仍能使用本单元方法"),
             ]
     else:
         if body.difficulty == "basic":
             cycle = [
-                ("词汇语境", "在句子中识别和使用本单元词汇"),
-                ("核心句型", "检查目标句型的基本使用"),
-                ("短文信息", "从短文中定位明确信息"),
+                ("词汇选择", "在句子中识别和使用本单元词汇"),
+                ("语法选择", "检查目标句型的基本使用"),
+                ("阅读理解", "从短文中定位明确信息"),
             ]
         elif body.difficulty == "advanced":
             cycle = [
-                ("词汇语境", "辨析词汇在真实语境中的用法"),
-                ("句型语法", "检查本单元核心句型和语法功能"),
+                ("词汇选择", "辨析词汇在真实语境中的用法"),
+                ("语法选择", "检查本单元核心句型和语法功能"),
                 ("阅读理解", "提取信息并作简单推断"),
-                ("表达任务", "用 2-4 句完成主题表达"),
+                ("书面表达", "用 3-5 句完成主题表达"),
             ]
         else:
             cycle = [
                 ("阅读推断", "整合短文信息完成判断"),
-                ("语境改写", "在新语境中转换或补全句子"),
-                ("表达任务", "有条理地输出主题短文"),
-                ("易错辨析", "识别语法或搭配干扰项"),
+                ("句型改写", "在新语境中转换或补全句子"),
+                ("书面表达", "有条理地输出主题短文"),
+                ("语法选择", "识别语法或搭配干扰项"),
             ]
 
     return [
@@ -868,37 +876,130 @@ def _question_plan(body: UnitWorksheetRequest) -> list[dict]:
     ]
 
 
+CHOICE_QUESTION_TYPES = {"选择题", "词汇选择", "语法选择"}
+OPTIONAL_CHOICE_QUESTION_TYPES = {"阅读理解", "阅读推断"}
+
+
+def _choice_answer_label(value: str) -> str:
+    match = re.match(r"^\s*([A-D])(?:\s|[.、:：)）]|$)", str(value or "").upper())
+    return match.group(1) if match else ""
+
+
+def _question_matches_planned_point(point: str, question: dict) -> bool:
+    text_value = f"{question.get('question', '')} {question.get('explanation', '')}"
+    if "圆柱及其侧面展开图" in point:
+        return (
+            "圆柱" in text_value
+            and "体积" not in text_value
+            and any(term in text_value for term in ("展开", "侧面", "底面周长"))
+        )
+    if "圆锥及其侧面展开图" in point:
+        return (
+            "圆锥" in text_value
+            and "体积" not in text_value
+            and any(term in text_value for term in ("展开", "侧面", "扇形", "母线", "弧长"))
+        )
+    return True
+
+
 def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -> list:
     if len(questions) != body.question_count:
         raise ValueError("生成题目数量与设置不一致")
 
+    plan = _question_plan(body)
+    seen_stems = set()
     normalized = []
     for index, question in enumerate(questions, start=1):
         if not isinstance(question, dict):
             raise ValueError(f"第 {index} 题格式不正确")
+        planned = plan[index - 1]
         question.setdefault("id", f"q{index}")
-        question.setdefault("type", "选择题")
         question.setdefault("options", [])
         question.setdefault("knowledge_points", [])
         question.setdefault("exam_focus", "")
         question.setdefault("common_mistake", "")
-        question.setdefault("teaching_intent", "")
+        question["teaching_intent"] = planned["teaching_intent"]
         if question.get("unit_id") not in body.unit_ids:
             question["unit_id"] = body.unit_ids[(index - 1) % len(body.unit_ids)]
-        if not str(question.get("question", "")).strip():
+        stem = " ".join(str(question.get("question", "")).split())
+        if not stem:
             raise ValueError(f"第 {index} 题缺少题干")
+        if any(marker in stem for marker in ("如图", "见图", "下图", "图中")):
+            raise ValueError(f"第 {index} 题引用了未提供的图片")
+        stem_key = stem.casefold()
+        if stem_key in seen_stems:
+            raise ValueError(f"第 {index} 题与前面题目重复")
+        seen_stems.add(stem_key)
+        question["question"] = stem
+
+        question_type = str(question.get("type", "")).strip()
+        if question_type != planned["planned_type"]:
+            raise ValueError(
+                f"第 {index} 题题型应为{planned['planned_type']}，实际为{question_type or '空'}"
+            )
+        knowledge_points = question.get("knowledge_points")
+        if (
+            not isinstance(knowledge_points, list)
+            or planned["knowledge_point"] not in knowledge_points
+            or any(point not in body.knowledge_points for point in knowledge_points)
+        ):
+            raise ValueError(f"第 {index} 题知识点与题组计划不一致")
         if not str(question.get("answer", "")).strip():
             raise ValueError(f"第 {index} 题缺少答案")
         if not str(question.get("explanation", "")).strip():
             raise ValueError(f"第 {index} 题缺少解析")
+        if (
+            body.subject == "math"
+            and question_type not in CHOICE_QUESTION_TYPES
+            and len(str(question.get("answer", "")).strip()) > 60
+        ):
+            raise ValueError(f"第 {index} 题答案应保持简洁，计算步骤请放入解析")
+        if not _question_matches_planned_point(planned["knowledge_point"], question):
+            raise ValueError(f"第 {index} 题内容偏离所选考点")
+        if not str(question.get("exam_focus", "")).strip():
+            raise ValueError(f"第 {index} 题缺少考点说明")
+        if not str(question.get("common_mistake", "")).strip():
+            raise ValueError(f"第 {index} 题缺少易错提醒")
         options = question.get("options") or []
-        if options and len(options) != 4:
-            raise ValueError(f"第 {index} 题选择题选项必须为 4 个")
+        if not isinstance(options, list):
+            raise ValueError(f"第 {index} 题选项格式不正确")
+        uses_choice_options = question_type in CHOICE_QUESTION_TYPES or (
+            question_type in OPTIONAL_CHOICE_QUESTION_TYPES and bool(options)
+        )
+        if uses_choice_options:
+            if len(options) != 4:
+                raise ValueError(f"第 {index} 题选择题选项必须为 4 个")
+            option_texts = [
+                re.sub(r"^\s*[A-D][.、:：)）]\s*", "", str(item)).strip()
+                for item in options
+            ]
+            if any(not item for item in option_texts) or len(
+                {item.casefold() for item in option_texts}
+            ) != 4:
+                raise ValueError(f"第 {index} 题选择题选项存在空项或重复")
+            if not _choice_answer_label(question.get("answer", "")):
+                raise ValueError(f"第 {index} 题答案必须是 A、B、C、D 之一")
+        elif options:
+            raise ValueError(f"第 {index} 题为开放题，不能包含选择项")
         normalized.append(question)
     return normalized
 
 
 def _fallback_math_content(point: str) -> dict:
+    if "圆柱及其侧面展开图" in point:
+        return {
+            "question": "一个圆柱的底面半径是 3 cm，高是 8 cm。沿高剪开侧面后，展开图的长和宽分别是多少？",
+            "options": ["A. 3π cm 和 8 cm", "B. 6π cm 和 8 cm", "C. 9π cm 和 8 cm", "D. 6π cm 和 16 cm"],
+            "answer": "B",
+            "explanation": "圆柱侧面展开图是长方形，长等于底面周长 2πr=6π cm，宽等于圆柱的高 8 cm。",
+        }
+    if "圆锥及其侧面展开图" in point:
+        return {
+            "question": "把一个圆锥的侧面沿一条母线剪开并展开，得到的图形是什么？",
+            "options": ["A. 三角形", "B. 长方形", "C. 扇形", "D. 圆"],
+            "answer": "C",
+            "explanation": "圆锥的侧面沿母线剪开后展开成扇形，扇形的弧长等于圆锥底面圆的周长。",
+        }
     if "二次函数" in point:
         return {
             "question": "二次函数 y=(x-2)²-3 的图像顶点坐标是什么？",
@@ -1188,10 +1289,10 @@ def _fallback_math_content(point: str) -> dict:
         }
     if any(key in point for key in ["圆柱", "圆锥", "展开图"]):
         return {
-            "question": "把圆柱的侧面沿高剪开并展开，得到一个长方形。这个长方形的一条边等于圆柱的什么？",
-            "options": ["A. 底面半径", "B. 底面直径", "C. 底面周长", "D. 底面积"],
-            "answer": "C",
-            "explanation": "圆柱侧面展开图的长等于底面圆的周长，宽等于圆柱的高。",
+            "question": "立体图形的侧面展开后，哪一项必须根据原图形的对应长度来确定？",
+            "options": ["A. 展开图的边长", "B. 纸张颜色", "C. 摆放方向", "D. 图形名称的字数"],
+            "answer": "A",
+            "explanation": "展开图中的边长来自原立体图形的对应线段或周长，必须根据原图形条件确定。",
         }
     if any(key in point for key in ["圆", "弧", "扇形"]):
         return {
@@ -1245,7 +1346,23 @@ def _fallback_math_content(point: str) -> dict:
 
 def _fallback_english_content(point: str) -> dict:
     lower_point = point.lower()
-    if any(key in lower_point for key in ["ancient greek", "myth", "legend", "historical event", "historical narrative"]):
+    if "types of natural disasters" in lower_point:
+        question = "Which natural disaster is caused by a sudden movement of the ground?"
+        options = ["A. An earthquake", "B. A drought", "C. A snowstorm", "D. A flood"]
+        answer, explanation = "A", "An earthquake happens when the ground suddenly moves; the other options describe different natural hazards."
+    elif "warnings and safety" in lower_point:
+        question = "When an earthquake warning is issued, people ______ follow official safety instructions."
+        options = ["A. should", "B. should not", "C. may never", "D. used to"]
+        answer, explanation = "A", "Should is used to give sensible safety advice; official instructions help people act safely."
+    elif "disaster news reports" in lower_point:
+        question = "Which sentence is most suitable for a factual disaster news report?"
+        options = ["A. Heavy rain flooded three roads last night, but no one was hurt.", "B. The storm was the coolest thing ever!", "C. Maybe something happened somewhere.", "D. Rain roads last night exciting."]
+        answer, explanation = "A", "A news report should state clear facts such as what happened, where or when it happened, and the result."
+    elif "emergency preparation" in lower_point:
+        question = "Which item is most useful in a family emergency kit?"
+        options = ["A. Drinking water", "B. A glass vase", "C. A heavy toy", "D. An empty gift box"]
+        answer, explanation = "A", "Safe drinking water is an essential emergency supply, together with food, a torch and basic first-aid items."
+    elif any(key in lower_point for key in ["ancient greek", "myth", "legend", "historical event", "historical narrative"]):
         question = "Which sentence correctly describes an event in ancient Greek history?"
         options = ["A. The Greeks built temples to honour their gods.", "B. The Greeks builded temples tomorrow.", "C. Ancient temples is modern offices.", "D. History happen next year."]
         answer, explanation = "A", "A uses the simple past and gives a clear historical event in a complete sentence."
@@ -1468,62 +1585,152 @@ def _fallback_english_content(point: str) -> dict:
     return {"question": question, "options": options, "answer": answer, "explanation": explanation}
 
 
-def _fallback_review_variant(point: str, content: dict, subject: str, occurrence: int) -> dict:
-    """Avoid printing the same fallback item repeatedly for one knowledge point."""
-    variant = occurrence % 3
-    round_label = "" if occurrence < 3 else f"（第 {occurrence + 1} 题变式）"
-    if variant == 0:
-        if not round_label:
-            return content
-        return {**content, "question": f"{content['question']}{round_label}"}
+def _selected_option_text(content: dict) -> str:
+    label = _choice_answer_label(content.get("answer", ""))
+    for option in content.get("options") or []:
+        if str(option).strip().upper().startswith(f"{label}."):
+            return re.sub(r"^\s*[A-D][.、:：)）]\s*", "", str(option)).strip()
+    return str(content.get("answer", "")).strip()
 
-    if subject == "english":
-        if variant == 1:
+
+def _fallback_planned_content(
+    point: str,
+    content: dict,
+    subject: str,
+    planned_type: str,
+    occurrence: int,
+) -> dict:
+    """Turn a topic-specific fallback item into the planned response format."""
+    suffix = "" if occurrence == 0 else f"（变式 {occurrence + 1}）"
+
+    if subject == "math" and "圆柱及其侧面展开图" in point:
+        if planned_type == "选择题":
+            return {**content, "question": f"{content['question']}{suffix}"}
+        if planned_type == "填空题":
+            radius = 3 + occurrence
+            height = 8 + occurrence
             return {
-                "question": f"Which explanation best supports the topic '{point}'?{round_label}",
-                "options": [
-                    f"A. {content['explanation']}",
-                    "B. The context and grammar do not matter.",
-                    "C. Any incomplete sentence is acceptable.",
-                    "D. The longest option must be correct.",
-                ],
+                "question": f"一个圆柱的底面半径是 {radius} cm，高是 {height} cm。沿高剪开侧面后，展开图的长是____cm，宽是____cm。",
+                "options": [],
+                "answer": f"{2 * radius}π，{height}",
+                "explanation": f"展开图的长等于底面周长 2πr={2 * radius}π cm，宽等于圆柱的高 {height} cm。",
+            }
+        if planned_type == "解答题":
+            radius = 3 + occurrence
+            height = 7 + occurrence
+            return {
+                "question": f"一个圆柱的底面半径是 {radius} cm，高是 {height} cm。求它的侧面积，并写出计算过程。",
+                "options": [],
+                "answer": f"{2 * radius * height}π cm²",
+                "explanation": f"侧面积=底面周长×高=2π×{radius}×{height}={2 * radius * height}π cm²。",
+            }
+        diameter = 8 + 2 * occurrence
+        height = 10 + occurrence
+        return {
+            "question": f"制作一个底面直径 {diameter} cm、高 {height} cm 的圆柱形纸筒，接缝处另留 2 cm。至少需要多长、多宽的长方形纸？",
+            "options": [],
+            "answer": f"长为 {diameter}π+2 cm，宽为 {height} cm",
+            "explanation": f"纸的长等于底面周长加接缝，πd+2={diameter}π+2 cm；纸的宽等于圆柱的高 {height} cm。",
+        }
+
+    if subject == "math" and "圆锥及其侧面展开图" in point:
+        if planned_type == "选择题":
+            if occurrence == 0:
+                return content
+            return {
+                "question": "圆锥侧面展开所得扇形的弧长等于圆锥的哪一个量？",
+                "options": ["A. 底面半径", "B. 底面直径", "C. 底面周长", "D. 圆锥的高"],
+                "answer": "C",
+                "explanation": "圆锥侧面围成一周时，扇形的弧正好与底面圆周重合，所以弧长等于底面周长。",
+            }
+        if planned_type == "填空题":
+            radius = 3 + occurrence
+            return {
+                "question": f"一个圆锥的底面半径是 {radius} cm，它的侧面展开扇形的弧长是____cm。",
+                "options": [],
+                "answer": f"{2 * radius}π",
+                "explanation": f"扇形弧长等于圆锥底面周长，即 2π×{radius}={2 * radius}π cm。",
+            }
+        if planned_type == "解答题":
+            return {
+                "question": f"请说明圆锥侧面展开图为什么是扇形，并写出扇形弧长与底面圆周长的关系。{suffix}",
+                "options": [],
+                "answer": "展开图是扇形，扇形弧长等于圆锥底面圆的周长。",
+                "explanation": "圆锥侧面由顶点向底面圆周展开，形成扇形；重新围合时扇形弧与底面圆周重合。",
+            }
+        radius = 4 + occurrence
+        return {
+            "question": f"一个圆锥形派对帽的底面半径是 {radius} cm。若不计接缝，制作帽身的扇形纸片弧长应是多少？请说明理由。",
+            "options": [],
+            "answer": f"{2 * radius}π cm",
+            "explanation": f"帽身扇形的弧长等于底面圆周长，2πr=2π×{radius}={2 * radius}π cm。",
+        }
+
+    if subject == "english" and any(
+        key in point.lower()
+        for key in ["natural disaster", "warning", "disaster news", "emergency preparation"]
+    ):
+        if planned_type == "词汇选择":
+            if occurrence == 0:
+                return _fallback_english_content("types of natural disasters")
+            return {
+                "question": "A long period with almost no rain is called a ______.",
+                "options": ["A. drought", "B. flood", "C. typhoon", "D. earthquake"],
                 "answer": "A",
-                "explanation": content["explanation"],
+                "explanation": "A drought is a long period with little or no rain; a flood involves too much water."
+            }
+        if planned_type == "语法选择":
+            if occurrence == 0:
+                return _fallback_english_content("warnings and safety")
+            return {
+                "question": "During a fire, students ______ use the lift; they should take the stairs.",
+                "options": ["A. must", "B. mustn't", "C. need", "D. used to"],
+                "answer": "B",
+                "explanation": "Mustn't expresses a strict safety prohibition. People must not use a lift during a fire."
+            }
+        if planned_type in {"阅读理解", "阅读推断"}:
+            return {
+                "question": f"Read the report: Heavy rain hit River Town on Friday night. Two roads were closed, and firefighters moved twelve families to a school hall. No one was hurt. Why were the families moved to the school hall?{suffix}",
+                "options": [],
+                "answer": "They were moved there to keep them safe from the flooding caused by the heavy rain.",
+                "explanation": "The closed roads and the emergency move show that the heavy rain created a flood risk, so the hall provided a safe place."
             }
         return {
-            "question": f"When checking an answer about '{point}', which step is most useful?{round_label}",
-            "options": [
-                "A. Read the context, identify the language function and check the complete sentence.",
-                "B. Ignore the key words in the question.",
-                "C. Choose an option only because it is short.",
-                "D. Skip the grammar and meaning checks.",
-            ],
-            "answer": "A",
-            "explanation": f"For {point}, both meaning and language form should fit the context. {content['explanation']}",
+            "question": f"Write 3-5 sentences for a family emergency plan. Include one item to prepare, one safe action and one way to get help.{suffix}",
+            "options": [],
+            "answer": "Sample: We should keep water, food and a torch in an emergency bag. During an emergency, we should stay calm and follow official instructions. We can call emergency services or ask a trusted adult for help.",
+            "explanation": "A complete response covers preparation, safe behaviour and a reliable way to get help, using should or can correctly."
         }
 
-    if variant == 1:
+    if planned_type in CHOICE_QUESTION_TYPES:
+        return {**content, "question": f"{content['question']}{suffix}"}
+
+    answer_text = _selected_option_text(content)
+    if subject == "english":
+        if planned_type in {"阅读理解", "阅读推断"}:
+            question = f"Read the situation and answer in one complete sentence: {content['question']}{suffix}"
+        elif planned_type == "句型改写":
+            question = f"Rewrite the key idea as one complete sentence about '{point}'.{suffix}"
+        else:
+            question = f"Write 3-5 sentences about '{point}'. Include a clear example and a reason.{suffix}"
         return {
-            "question": f"关于“{point}”，下列解题说明正确的是哪一项？{round_label}",
-            "options": [
-                f"A. {content['explanation']}",
-                "B. 可以忽略题目条件，直接套用任意公式。",
-                "C. 只看选项字母分布就能确定答案。",
-                "D. 写出结果后不需要检查是否符合题意。",
-            ],
-            "answer": "A",
+            "question": question,
+            "options": [],
+            "answer": answer_text,
             "explanation": content["explanation"],
         }
+
+    if planned_type == "填空题":
+        question = f"不看选项，直接写出答案：{content['question']}{suffix}"
+    elif planned_type == "应用题":
+        question = f"在实际情境中完成下面问题，并写出依据：{content['question']}{suffix}"
+    else:
+        question = f"请写出关键步骤并说明理由：{content['question']}{suffix}"
     return {
-        "question": f"完成“{point}”题目后，下面哪项最适合作为自查步骤？{round_label}",
-        "options": [
-            "A. 核对所用定义或公式，并检查结果是否符合原题条件。",
-            "B. 跳过符号、单位和取值范围。",
-            "C. 把上一题的数字直接写成答案。",
-            "D. 只检查书写是否整齐，不检查计算。",
-        ],
-        "answer": "A",
-        "explanation": f"自查时既要核对方法，也要检查结果。{content['explanation']}",
+        "question": question,
+        "options": [],
+        "answer": answer_text,
+        "explanation": content["explanation"],
     }
 
 
@@ -1538,12 +1745,20 @@ def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | 
     for index in range(1, body.question_count + 1):
         planned = plan[index - 1]
         point = planned["knowledge_point"]
-        unit_id = body.unit_ids[(index - 1) % len(body.unit_ids)]
+        unit_id = next(
+            unit["id"] for unit in selected_units if point in unit["knowledge_points"]
+        )
         common_mistake = profile["common_mistakes"][(index - 1) % len(profile["common_mistakes"])]
         content = _fallback_english_content(point) if body.subject == "english" else _fallback_math_content(point)
         occurrence = point_occurrences.get(point, 0)
         point_occurrences[point] = occurrence + 1
-        content = _fallback_review_variant(point, content, body.subject, occurrence)
+        content = _fallback_planned_content(
+            point,
+            content,
+            body.subject,
+            planned["planned_type"],
+            occurrence,
+        )
         question = {
             "id": f"q{index}",
             "unit_id": unit_id,
@@ -1558,7 +1773,7 @@ def _fallback_unit_worksheet(body: UnitWorksheetRequest, selected_units: list | 
             "teaching_intent": planned["teaching_intent"],
         }
         questions.append(question)
-    return questions
+    return _validate_generated_questions(body, questions)
 
 
 def _validate_unit_request(body: UnitWorksheetRequest) -> list:
@@ -1595,9 +1810,21 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
 async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
     """按已核对的上海初中教材目录范围和知识点生成原创复习题。"""
     model_question_count = min(body.question_count, 6)
-    model_body = body.copy(update={"question_count": model_question_count})
+    model_body = body.model_copy(update={"question_count": model_question_count})
     exam_profile = _unit_exam_profile(body, selected_units)
     question_plan = _question_plan(model_body)
+    topic_guardrails = []
+    if any("圆柱及其侧面展开图" in point for point in body.knowledge_points):
+        topic_guardrails.append(
+            "圆柱及其侧面展开图：只考展开图边长、底面周长、高或侧面积，不得考体积。"
+        )
+    if any("圆锥及其侧面展开图" in point for point in body.knowledge_points):
+        topic_guardrails.append(
+            "圆锥及其侧面展开图：只考扇形、母线、弧长与底面周长关系，不得考体积。"
+        )
+    topic_guardrail_text = "\n".join(topic_guardrails) or (
+        "严格围绕每题标注的 knowledge_point，不延伸到未选择考点。"
+    )
     prompt = f"""你是一位熟悉上海初中{body.grade}教学节奏的命题老师。
 你的任务不是随机出练习题，而是按“单元诊断型复习卷”的方式命题。
 只依据下面给出的单元名称、考点画像和题组计划生成原创题目，不引用或复刻教材原文。
@@ -1616,15 +1843,19 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 题组计划：
 {json.dumps(question_plan, ensure_ascii=False)}
 
+考点边界：
+{topic_guardrail_text}
+
 要求：
-1. 必须逐题遵守“题组计划”的 planned_type、teaching_intent 和 knowledge_point。
-2. 数学题要体现概念辨析、基本计算、方法辨析、易错校验、应用建模中的一种，不出奥数题，不超出{body.grade}范围。
-3. 英语题要围绕语言功能：词汇语境、核心句型、语法功能、阅读信息提取、短句表达。不要出脱离单元主题的百科常识题。
-4. 选择题必须有4个互不重复的选项；非选择题 options 返回空数组。
-5. 每道题必须有明确答案和教师式解析：说明考点、解题步骤或语言规则、易错提醒。
-6. 每道题都必须填写 exam_focus、common_mistake、teaching_intent。
-7. unit_id 必须从这些值中选择：{", ".join(body.unit_ids)}
-8. 只返回 JSON 对象，不要输出 Markdown。
+1. 每题 type 必须与“题组计划”的 planned_type 完全一致，knowledge_points 必须包含对应 knowledge_point；teaching_intent 按计划原文填写。
+2. 数学填空题、解答题、应用题必须有可计算或可论证的具体条件，不能写成“如何检查答案”之类的泛化题；不出奥数题，不超出{body.grade}范围。
+3. 英语词汇选择、语法选择要有真实语境；阅读理解必须在题干中提供足够的短文或信息；书面表达要求 3-5 句，并在 answer 中给出参考范文。
+4. 选择题必须有4个互不重复的选项，答案只能是 A、B、C、D；阅读理解和阅读推断可做四选一或简答题；其他题型 options 必须返回空数组。
+5. 题目之间不得重复或只替换知识点标签，题干内容必须真正考查所标注的知识点。
+6. 每道题必须有明确答案和教师式解析：answer 只写便于核对的最终答案（数学不超过 50 个字），所有步骤放入 explanation；解析说明关键步骤或语言规则，并指出为什么容易错。
+7. 当前试卷不生成插图，题干不得出现“如图”“见图”“下图”“图中”等对缺失图片的引用。
+8. 每道题都必须填写 exam_focus、common_mistake、teaching_intent；unit_id 必须从这些值中选择：{", ".join(body.unit_ids)}。
+9. 只返回 JSON 对象，不要输出 Markdown。
 
 返回格式：
 {{
@@ -1632,7 +1863,7 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
     {{
       "id": "q1",
       "unit_id": "{body.unit_ids[0]}",
-      "type": "选择题",
+      "type": "{question_plan[0]['planned_type']}",
       "question": "题目内容",
       "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],
       "answer": "A",
@@ -1644,33 +1875,23 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
     }}
   ]
 }}"""
-    last_error = None
-    max_attempts = 1 if body.question_count > model_question_count else 2
-    for attempt in range(max_attempts):
-        retry_note = (
-            "\n上一次输出未通过校验。请务必严格返回指定题量和字段。"
-            if attempt
-            else ""
+    try:
+        raw = await call_deepseek(
+            prompt,
+            temperature=0.2,
+            max_tokens=6000,
+            json_mode=True,
+            timeout_seconds=35.0,
         )
-        try:
-            raw = await call_deepseek(
-                prompt + retry_note,
-                temperature=0.3 if attempt else 0.5,
-                max_tokens=6000,
-                json_mode=True,
-                timeout_seconds=35.0,
-            )
-            result = json.loads(_strip_json_fence(raw))
-            questions = result.get("questions", [])
-            questions = _validate_generated_questions(model_body, questions)
-            if body.question_count > model_question_count:
-                fallback_questions = _fallback_unit_worksheet(body, selected_units)
-                questions.extend(fallback_questions[model_question_count:])
-            return _validate_generated_questions(body, questions)
-        except Exception as e:
-            last_error = e
-    print(f"Unit worksheet AI fallback: {last_error}")
-    return _fallback_unit_worksheet(body, selected_units)
+        result = json.loads(_strip_json_fence(raw))
+        questions = _validate_generated_questions(model_body, result.get("questions", []))
+        if body.question_count > model_question_count:
+            fallback_questions = _fallback_unit_worksheet(body, selected_units)
+            questions.extend(fallback_questions[model_question_count:])
+        return _validate_generated_questions(body, questions)
+    except Exception as error:
+        print(f"Unit worksheet AI fallback: {type(error).__name__}: {error!r}")
+        return _fallback_unit_worksheet(body, selected_units)
 
 # ===== AI 分析（DeepSeek） =====
 
@@ -2612,31 +2833,51 @@ def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, inc
         f"{DIFFICULTY_LABELS[body.difficulty]} · {'答案解析卷' if include_answers else '题目卷'}"
     )
     safe_multicell(pdf, subtitle, align="C")
+    if not include_answers:
+        pdf.ln(2)
+        pdf.set_font("zh", "", 10)
+        safe_multicell(pdf, "姓名：________________  班级：________  日期：____________")
     pdf.ln(4)
 
     for index, question in enumerate(questions, start=1):
-        pdf.set_font("zh", "B", 11)
-        safe_multicell(pdf, f"{index}. [{question.get('type', '')}]")
-        pdf.set_font("zh", "", 11)
-        safe_multicell(pdf, question.get("question", ""))
-        for option in question.get("options") or []:
-            safe_multicell(pdf, option)
-        if not include_answers and not question.get("options"):
-            safe_multicell(pdf, "答：____________________________________________")
-        if include_answers:
-            pdf.set_text_color(20, 100, 55)
-            safe_multicell(pdf, f"答案：{question.get('answer', '')}")
-            if body.include_explanations:
-                pdf.set_text_color(70, 78, 90)
-                if question.get("exam_focus"):
-                    safe_multicell(pdf, f"考点：{question.get('exam_focus', '')}")
-                if question.get("common_mistake"):
-                    safe_multicell(pdf, f"易错提醒：{question.get('common_mistake', '')}")
-                if question.get("teaching_intent"):
-                    safe_multicell(pdf, f"命题意图：{question.get('teaching_intent', '')}")
-                safe_multicell(pdf, f"解析：{question.get('explanation', '')}")
-            pdf.set_text_color(0, 0, 0)
-        pdf.ln(3)
+        if (
+            not include_answers
+            and index == len(questions) - 1
+            and pdf.get_y() > pdf.h * 0.75
+        ):
+            pdf.add_page()
+        with pdf.unbreakable() as block:
+            block.set_font("zh", "B", 11)
+            safe_multicell(block, f"{index}. [{question.get('type', '')}]")
+            block.set_font("zh", "", 11)
+            safe_multicell(block, question.get("question", ""))
+            for option in question.get("options") or []:
+                safe_multicell(block, option)
+            if not include_answers and not question.get("options"):
+                question_type = question.get("type", "")
+                if question_type == "书面表达":
+                    line_count = 5
+                elif question_type in {"解答题", "应用题", "探究题"}:
+                    line_count = 3
+                else:
+                    line_count = 2
+                for line_index in range(line_count):
+                    prefix = "答：" if line_index == 0 else "    "
+                    safe_multicell(block, f"{prefix}____________________________________________")
+            if include_answers:
+                block.set_text_color(20, 100, 55)
+                safe_multicell(block, f"答案：{question.get('answer', '')}")
+                if body.include_explanations:
+                    block.set_text_color(70, 78, 90)
+                    if question.get("exam_focus"):
+                        safe_multicell(block, f"考点：{question.get('exam_focus', '')}")
+                    if question.get("common_mistake"):
+                        safe_multicell(block, f"易错提醒：{question.get('common_mistake', '')}")
+                    if question.get("teaching_intent"):
+                        safe_multicell(block, f"命题意图：{question.get('teaching_intent', '')}")
+                    safe_multicell(block, f"解析：{question.get('explanation', '')}")
+                block.set_text_color(0, 0, 0)
+            block.ln(3)
     return bytes(pdf.output())
 
 
