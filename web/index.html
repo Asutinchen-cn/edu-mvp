@@ -755,6 +755,76 @@
             font-size: 12px;
             line-height: 1.7;
         }
+        .review-task-list {
+            margin-top: 18px;
+            border-top: 1px solid rgba(23, 105, 232, 0.12);
+        }
+        .review-task-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 0 8px;
+        }
+        .review-task-head h5 {
+            color: var(--ink);
+            font-size: 14px;
+        }
+        .review-task-count {
+            color: var(--muted);
+            font-size: 11px;
+        }
+        .review-task-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 18px;
+            min-height: 64px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .review-task-main { min-width: 0; }
+        .review-task-title {
+            color: var(--ink);
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+        .review-task-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
+            flex-wrap: wrap;
+        }
+        .review-task-subject {
+            color: var(--brand-blue);
+            font-weight: 800;
+        }
+        .review-task-action {
+            min-width: 104px;
+            min-height: 36px;
+            padding: 0 12px;
+            border: 1px solid rgba(23, 105, 232, 0.25);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .review-task-action:hover { background: #edf5ff; }
+        .review-task-empty,
+        .review-task-more {
+            padding: 10px 0;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
         .review-evidence { margin-top: 14px; }
 
         /* History items */
@@ -1718,6 +1788,8 @@
                 border-left: 0;
                 border-top: 1px solid rgba(23, 105, 232, 0.12);
             }
+            .review-task-row { grid-template-columns: 1fr; gap: 8px; padding: 12px 0; }
+            .review-task-action { width: 100%; }
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
             .history-wrong-row { grid-template-columns: 1fr; gap: 6px; }
             .review-progress-head { flex-direction: column; gap: 4px; }
@@ -3345,6 +3417,24 @@ function buildReviewDashboard(records) {
         const progress = normalizeReviewProgress(record.reviewProgress);
         return record.serverId && progress.completedCount < progress.total;
     }) || null;
+    const pendingTasks = recordsByLatest
+        .filter(record => {
+            const progress = normalizeReviewProgress(record.reviewProgress);
+            return record.serverId && progress.completedCount < progress.total;
+        })
+        .map(record => {
+            const progress = normalizeReviewProgress(record.reviewProgress);
+            const nextStep = REVIEW_STEP_DEFINITIONS.find(step => step.id === progress.nextStep);
+            return {
+                id: record.id,
+                subject: record.subject === 'english' ? '英语' : '数学',
+                focus: recordWeakPoints(record)[0] || '这份错题',
+                completedCount: progress.completedCount,
+                total: progress.total,
+                nextStep: nextStep?.label || '继续复习',
+                date: record.date
+            };
+        });
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
@@ -3380,13 +3470,16 @@ function buildReviewDashboard(records) {
             ? `在 ${repeatedWeakPoint.count} 份记录中出现`
             : (topWeakPoint ? '目前每个薄弱点只出现 1 次' : '需要更多分析记录'),
         nextTitle: nextTitle,
-        nextAction: nextAction
+        nextAction: nextAction,
+        pendingTasks: pendingTasks
     };
 }
 
 function renderReviewDashboard(records) {
     const dashboard = document.getElementById('reviewDashboard');
     const summary = buildReviewDashboard(records);
+    const visibleTasks = summary.pendingTasks.slice(0, 3);
+    const remainingTaskCount = Math.max(0, summary.pendingTasks.length - visibleTasks.length);
     const scopeLabel = currentSubjectArchive === 'all'
         ? '当前筛选：全部学科'
         : `当前筛选：${currentSubjectArchive === 'english' ? '英语' : '数学'}`;
@@ -3422,8 +3515,42 @@ function renderReviewDashboard(records) {
                 <p>${escapeHtml(summary.nextAction)}</p>
             </div>
         </div>
+        <section class="review-task-list" aria-label="今日复习清单">
+            <div class="review-task-head">
+                <h5>今日复习清单</h5>
+                <span class="review-task-count">${summary.pendingTasks.length} 项待完成</span>
+            </div>
+            ${visibleTasks.length ? visibleTasks.map(task => `
+                <div class="review-task-row">
+                    <div class="review-task-main">
+                        <div class="review-task-title">${escapeHtml(task.focus)}</div>
+                        <div class="review-task-meta">
+                            <span class="review-task-subject">${escapeHtml(task.subject)}</span>
+                            <span>下一步：${escapeHtml(task.nextStep)}</span>
+                            <span>完成 ${task.completedCount}/${task.total}</span>
+                            <span>${escapeHtml(new Date(task.date).toLocaleDateString('zh-CN'))}</span>
+                        </div>
+                    </div>
+                    <button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">继续复习 →</button>
+                </div>`).join('') : '<p class="review-task-empty">当前范围内没有待复习任务。</p>'}
+            ${remainingTaskCount ? `<p class="review-task-more">还有 ${remainingTaskCount} 项，可在下方“待复习”列表中继续。</p>` : ''}
+        </section>
         <p class="review-evidence">这些数字只反映已保存的分析记录，不代表考试成绩；“反复薄弱点”仅按同名知识点统计。</p>
     `;
+}
+
+async function openReviewTask(id) {
+    const record = historyRecords.find(item => item.id === id);
+    if (!record) return;
+    setMasteryFilter('pending');
+    selectedRecordId = id;
+    renderHistory();
+    if (record.serverId && !record.detailLoaded && !record.detailLoading) {
+        await loadHistoryDetail(id);
+    }
+    window.requestAnimationFrame(() => {
+        document.querySelector('.history-item.selected')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
 }
 
 function setHistoryFilter(filter) {

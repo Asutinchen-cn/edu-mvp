@@ -165,6 +165,14 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("currentMasteryFilter !== 'all'", HTML)
         self.assertIn("本筛选范围内的错题都已完成三步复习", HTML)
 
+    def test_parent_dashboard_turns_pending_records_into_actionable_review_tasks(self):
+        self.assertIn("今日复习清单", HTML)
+        self.assertIn("pendingTasks: pendingTasks", HTML)
+        self.assertIn("pendingTasks.slice(0, 3)", HTML)
+        self.assertIn("function openReviewTask(id)", HTML)
+        self.assertIn("继续复习", HTML)
+        self.assertIn("setMasteryFilter('pending')", HTML)
+
     def test_transient_history_request_flags_are_cleared_after_reload(self):
         self.assertIn("detailLoading: false", HTML)
         self.assertIn("progressSaving: false", HTML)
