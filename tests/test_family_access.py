@@ -20,6 +20,7 @@ from api.main import (
     _verify_family_access_code,
     analyze_exam,
     delete_exam,
+    export_correction_sheet,
     export_practice_pdf,
     generate_practice,
     get_exam,
@@ -83,6 +84,17 @@ class FamilyAccessEndpointTest(unittest.TestCase):
                 access_code_hash=digest_a,
                 image_path="/uploads/protected.png",
                 ocr_text="第一份试卷",
+                ai_analysis=json.dumps({
+                    "wrong_questions": [{
+                        "question": "解方程 2x + 3 = 9",
+                        "error_type": "移项符号错误",
+                        "student_answer": "x = 6",
+                        "correct_answer": "x = 3",
+                    }],
+                    "weak_points": ["一元一次方程"],
+                    "root_cause": "没有理解移项要改变符号。",
+                    "recommendations": ["先口述等式两边同时运算的理由。"],
+                }, ensure_ascii=False),
             ),
             Exam(
                 grade="六年级",
@@ -148,6 +160,33 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Path(response.path).name, "protected.png")
 
+    def test_correction_sheet_is_returned_for_the_matching_family_code(self):
+        response = asyncio.run(export_correction_sheet(
+            self.first_exam_id,
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.media_type, "application/pdf")
+        self.assertIn("attachment", response.headers["content-disposition"])
+
+    def test_correction_sheet_requires_saved_wrong_question_evidence(self):
+        db = self.session_factory()
+        english_exam_id = db.query(Exam).filter(Exam.subject == "english").one().id
+        db.close()
+
+        response = asyncio.run(export_correction_sheet(
+            english_exam_id,
+            grade="六年级",
+            student_name="小明",
+            family_code="Other2026B",
+        ))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("没有可导出的错题", json.loads(response.body)["error"])
+
     def test_every_record_operation_rejects_the_wrong_family_code(self):
         calls = [
             lambda: analyze_exam(
@@ -157,6 +196,9 @@ class FamilyAccessEndpointTest(unittest.TestCase):
                 self.first_exam_id, "六年级", "小明", family_code="Other2026B"
             ),
             lambda: export_practice_pdf(
+                self.first_exam_id, "六年级", "小明", family_code="Other2026B"
+            ),
+            lambda: export_correction_sheet(
                 self.first_exam_id, "六年级", "小明", family_code="Other2026B"
             ),
             lambda: get_exam_image(

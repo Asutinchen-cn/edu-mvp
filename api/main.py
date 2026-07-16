@@ -2805,6 +2805,221 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
     return pdf.output()
 
 
+def generate_correction_sheet_pdf(
+    student_name: str,
+    grade: str,
+    subject: str,
+    created_at: str,
+    analysis: dict,
+) -> bytes:
+    """把已保存的错题证据整理成孩子订正页和家长核对页。"""
+    from fpdf import FPDF
+
+    def clean(value) -> str:
+        text_value = str(value or "")
+        return "".join(
+            char for char in text_value if char >= " " or char in "\n\t"
+        ).strip()
+
+    class CorrectionPDF(FPDF):
+        document_font = "helvetica"
+
+        def header(self):
+            self.set_font(self.document_font, "", 9)
+            self.set_text_color(100, 116, 139)
+            self.cell(
+                0,
+                7,
+                "虾胡闹学习 · 错题订正单",
+                new_x="LMARGIN",
+                new_y="NEXT",
+                align="R",
+            )
+            self.set_draw_color(220, 231, 247)
+            self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+            self.ln(6)
+
+        def footer(self):
+            self.set_y(-13)
+            self.set_font(self.document_font, "", 8)
+            self.set_text_color(100, 116, 139)
+            self.cell(0, 7, f"第 {self.page_no()} 页", align="C")
+
+    pdf = CorrectionPDF()
+    pdf.set_margins(18, 14, 18)
+    pdf.set_auto_page_break(auto=True, margin=18)
+
+    project_font = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
+    )
+    font_paths = [
+        project_font,
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/System/Library/Fonts/PingFang.ttc",
+    ]
+    document_font = None
+    for font_path in font_paths:
+        if not os.path.exists(font_path):
+            continue
+        try:
+            pdf.add_font("zh", "", font_path)
+            pdf.add_font("zh", "B", font_path)
+            document_font = "zh"
+            break
+        except Exception:
+            continue
+    if not document_font:
+        raise RuntimeError("缺少中文字体，暂时无法生成订正单")
+    pdf.document_font = document_font
+
+    def write_text(value, line_height=7, bold=False, color=(21, 34, 58)):
+        text_value = clean(value)
+        if not text_value:
+            return
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font(document_font, "B" if bold else "", 11)
+        pdf.set_text_color(*color)
+        pdf.multi_cell(
+            pdf.epw,
+            line_height,
+            text_value,
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+
+    wrong_questions = [
+        item for item in analysis.get("wrong_questions", [])
+        if isinstance(item, dict) and clean(item.get("question"))
+    ]
+    weak_points = [clean(item) for item in analysis.get("weak_points", []) if clean(item)]
+    recommendations = [
+        clean(item) for item in analysis.get("recommendations", []) if clean(item)
+    ]
+    subject_label = SUBJECT_LABELS.get(subject, "数学")
+    created_label = clean(created_at)[:10] or "未记录"
+
+    pdf.add_page()
+    pdf.set_font(document_font, "B", 20)
+    pdf.set_text_color(21, 34, 58)
+    pdf.cell(0, 12, "错题订正单", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font(document_font, "", 10)
+    pdf.set_text_color(65, 81, 107)
+    pdf.cell(
+        0,
+        7,
+        f"学生：{clean(student_name)}    年级：{clean(grade)}    学科：{subject_label}    原卷日期：{created_label}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
+    )
+    pdf.ln(3)
+    if weak_points:
+        pdf.set_fill_color(241, 247, 255)
+        pdf.set_text_color(23, 105, 232)
+        pdf.set_font(document_font, "B", 10)
+        pdf.multi_cell(
+            pdf.epw,
+            7,
+            "本次薄弱点：" + "、".join(weak_points),
+            fill=True,
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.ln(3)
+    write_text("完成顺序：先独立订正，再完成同类题，最后隔天回测。家长核对页在文末。", 6, color=(65, 81, 107))
+    pdf.ln(3)
+
+    for index, question in enumerate(wrong_questions, start=1):
+        if pdf.get_y() > pdf.h - pdf.b_margin - 88:
+            pdf.add_page()
+        pdf.set_fill_color(247, 250, 255)
+        pdf.set_text_color(21, 34, 58)
+        pdf.set_font(document_font, "B", 12)
+        error_type = clean(question.get("error_type")) or "错因待确认"
+        pdf.multi_cell(
+            pdf.epw,
+            8,
+            f"第 {index} 题  ·  {error_type}",
+            fill=True,
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.ln(2)
+        pdf.set_font(document_font, "", 11)
+        pdf.multi_cell(
+            pdf.epw,
+            7,
+            clean(question.get("question")),
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        student_answer = clean(question.get("student_answer")) or "未识别到明确作答"
+        pdf.set_font(document_font, "", 10)
+        pdf.set_text_color(100, 116, 139)
+        pdf.multi_cell(
+            pdf.epw,
+            6,
+            f"原作答：{student_answer}",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.ln(2)
+        pdf.set_text_color(21, 34, 58)
+        pdf.set_font(document_font, "B", 10)
+        pdf.cell(0, 7, "重新作答：", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_draw_color(184, 199, 218)
+        for _ in range(3):
+            y = pdf.get_y() + 7
+            pdf.line(pdf.l_margin, y, pdf.w - pdf.r_margin, y)
+            pdf.ln(9)
+        pdf.set_font(document_font, "B", 10)
+        pdf.cell(0, 7, "我错在：", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_draw_color(184, 199, 218)
+        y = pdf.get_y() + 7
+        pdf.line(pdf.l_margin, y, pdf.w - pdf.r_margin, y)
+        pdf.ln(12)
+
+    pdf.add_page()
+    pdf.set_font(document_font, "B", 18)
+    pdf.set_text_color(21, 34, 58)
+    pdf.cell(0, 11, "家长核对页", new_x="LMARGIN", new_y="NEXT", align="C")
+    write_text("请在孩子独立完成订正后再核对。", 6, color=(65, 81, 107))
+    pdf.ln(4)
+    for index, question in enumerate(wrong_questions, start=1):
+        if pdf.get_y() > pdf.h - pdf.b_margin - 35:
+            pdf.add_page()
+        pdf.set_font(document_font, "B", 11)
+        pdf.set_text_color(23, 105, 232)
+        pdf.cell(0, 7, f"第 {index} 题参考答案", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(document_font, "", 11)
+        pdf.set_text_color(21, 34, 58)
+        pdf.multi_cell(
+            pdf.epw,
+            7,
+            clean(question.get("correct_answer")) or "请结合原卷和老师讲评核对",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.ln(3)
+
+    root_cause = clean(analysis.get("root_cause"))
+    if root_cause:
+        write_text("老师判断", 8, bold=True)
+        write_text(root_cause, 7)
+        pdf.ln(2)
+    if recommendations:
+        write_text("接下来怎么练", 8, bold=True)
+        for index, recommendation in enumerate(recommendations[:3], start=1):
+            write_text(f"{index}. {recommendation}", 7)
+        pdf.ln(2)
+
+    write_text("复习打卡", 8, bold=True)
+    write_text("[ ] 已独立订正原题    [ ] 已完成同类题    [ ] 已隔天回测", 7)
+    write_text("家长签名：________________    日期：________________", 8)
+
+    return bytes(pdf.output())
+
+
 def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, include_answers: bool) -> bytes:
     """生成按单元筛选的题目卷或答案解析卷。"""
     from fpdf import FPDF
@@ -2984,6 +3199,82 @@ async def export_practice_pdf(
         )
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/exams/{exam_id}/correction-sheet")
+async def export_correction_sheet(
+    exam_id: int,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """导出受家庭访问码保护的错题订正单。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+    db = SessionLocal()
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        db.close()
+        return JSONResponse({"success": False, "error": "试卷不存在"}, status_code=404)
+    if not _exam_has_family_access(exam, grade, student_name, family_code):
+        db.close()
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
+
+    analysis = _analysis_history_detail(
+        exam.ai_analysis,
+        exam.weak_points,
+        exam.recommendations,
+    )
+    analysis["wrong_questions"] = [
+        item for item in analysis["wrong_questions"] if item.get("question")
+    ]
+    if not analysis["wrong_questions"]:
+        db.close()
+        return JSONResponse(
+            {"success": False, "error": "这条记录没有可导出的错题证据，请重新上传清晰原卷"},
+            status_code=400,
+        )
+
+    exam_snapshot = {
+        "student_name": exam.student_name,
+        "grade": exam.grade,
+        "subject": exam.subject,
+        "created_at": exam.created_at.isoformat() if exam.created_at else "",
+    }
+    db.close()
+
+    try:
+        pdf_bytes = generate_correction_sheet_pdf(
+            student_name=exam_snapshot["student_name"],
+            grade=exam_snapshot["grade"],
+            subject=exam_snapshot["subject"],
+            created_at=exam_snapshot["created_at"],
+            analysis=analysis,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": f"生成订正单失败：{str(e)[:160]}"},
+            status_code=500,
+        )
+
+    safe_filename = f"correction_sheet_{exam_id}.pdf"
+    utf8_filename = (
+        f"错题订正单_{exam_snapshot['grade']}_{exam_snapshot['student_name']}_{exam_id}.pdf"
+    )
+    content_disposition = (
+        f"attachment; filename={safe_filename}; "
+        f"filename*=UTF-8''{quote(utf8_filename)}"
+    )
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": content_disposition},
+    )
 
 @app.get("/api-info")
 async def api_info():

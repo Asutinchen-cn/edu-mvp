@@ -119,6 +119,14 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("生成巩固练习", HTML)
         self.assertNotIn("<pre>${escapeHtml(r.result)}</pre>", HTML)
 
+    def test_history_can_export_a_protected_correction_sheet(self):
+        self.assertIn("function exportCorrectionSheet(id)", HTML)
+        self.assertIn("/correction-sheet?${params.toString()}", HTML)
+        self.assertIn("headers: familyAccessHeaders()", HTML)
+        self.assertIn("URL.createObjectURL(await response.blob())", HTML)
+        self.assertIn("导出订正单", HTML)
+        self.assertIn("correctionExporting: false", HTML)
+
     def test_practice_generation_uses_the_saved_exam_endpoint(self):
         self.assertIn("const examId = currentAnalysisData.examIds?.[0]", HTML)
         self.assertRegex(

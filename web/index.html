@@ -1018,6 +1018,11 @@
             color: #fff;
         }
         .history-action:hover { transform: translateY(-1px); }
+        .history-action:disabled {
+            opacity: 0.58;
+            cursor: wait;
+            transform: none;
+        }
         .history-detail-state {
             padding: 14px 0;
             color: var(--muted);
@@ -2072,6 +2077,7 @@ let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]'
     imageAvailable: Boolean(record.imageAvailable || record.serverId),
     detailLoading: false,
     progressSaving: false,
+    correctionExporting: false,
     detailError: ''
 }));
 let currentFilter = 'week';
@@ -2091,6 +2097,7 @@ function saveHistoryRecords() {
         const persisted = { ...record };
         delete persisted.detailLoading;
         delete persisted.progressSaving;
+        delete persisted.correctionExporting;
         delete persisted.detailError;
         delete persisted.imageUrl;
         persisted.result = stripStoredImageLinks(persisted.result);
@@ -3006,6 +3013,7 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         structured: true,
         imageAvailable: Boolean(exam.image_available),
         serverSynced: true,
+        correctionExporting: false,
         reviewProgress: normalizeReviewProgress(exam.review_progress)
     };
 }
@@ -3069,6 +3077,7 @@ function renderHistoryDiagnosis(record) {
     const actions = `
         <div class="history-actions">
             ${record.serverId && recordWeakPoints(record).length ? `<button type="button" class="history-action primary" onclick="prepareHistoryPractice(${escapeHtml(JSON.stringify(record.id))})">生成巩固练习</button>` : ''}
+            ${record.serverId && historyWrongCount(record) > 0 ? `<button type="button" class="history-action" ${record.correctionExporting ? 'disabled' : ''} onclick="exportCorrectionSheet(${escapeHtml(JSON.stringify(record.id))})">${record.correctionExporting ? '正在导出...' : '导出订正单'}</button>` : ''}
             ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">查看原卷</button>` : ''}
         </div>`;
 
@@ -3179,6 +3188,38 @@ async function openProtectedExamImage(id) {
     } catch (e) {
         if (previewWindow && !previewWindow.closed) previewWindow.close();
         alert(e.message || '读取原卷失败，请稍后重试');
+    }
+}
+
+async function exportCorrectionSheet(id) {
+    const record = historyRecords.find(item => item.id === id);
+    if (!record?.serverId || record.correctionExporting) return;
+
+    record.correctionExporting = true;
+    renderHistory();
+    try {
+        const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
+        const response = await fetch(`/exams/${record.serverId}/correction-sheet?${params.toString()}`, {
+            headers: familyAccessHeaders()
+        });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || `导出订正单失败（${response.status}）`);
+        }
+
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = `错题订正单-${record.grade}-${record.name}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (e) {
+        alert(e.message || '导出订正单失败，请稍后重试');
+    } finally {
+        record.correctionExporting = false;
+        renderHistory();
     }
 }
 

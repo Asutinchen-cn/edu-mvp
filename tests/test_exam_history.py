@@ -6,6 +6,7 @@ from api.main import (
     _analysis_history_summary,
     _normalize_ai_analysis,
     _normalize_review_progress,
+    generate_correction_sheet_pdf,
 )
 
 
@@ -178,6 +179,31 @@ class ReviewProgressTest(unittest.TestCase):
                 "updated_at": None,
             },
         )
+
+
+class CorrectionSheetPdfTest(unittest.TestCase):
+    def test_builds_a_printable_pdf_from_saved_wrong_question_evidence(self):
+        pdf_bytes = generate_correction_sheet_pdf(
+            student_name="小明",
+            grade="六年级",
+            subject="math",
+            created_at="2026-07-16",
+            analysis={
+                "wrong_questions": [{
+                    "question": "解方程 2x + 3 = 9",
+                    "error_type": "移项符号错误",
+                    "student_answer": "x = 6",
+                    "correct_answer": "x = 3",
+                }],
+                "weak_points": ["一元一次方程"],
+                "root_cause": "没有理解移项要改变符号。",
+                "recommendations": ["先口述等式两边同时运算的理由。"],
+            },
+        )
+
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 5000)
 
 
 if __name__ == "__main__":
