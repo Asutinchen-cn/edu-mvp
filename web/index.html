@@ -392,7 +392,8 @@
             font-size: 12px; color: var(--muted); font-weight: 700;
         }
         .form-group select,
-        .form-group input[type="text"] {
+        .form-group input[type="text"],
+        .form-group input[type="password"] {
             padding: 10px 14px;
             border: 1px solid var(--line);
             border-radius: 12px;
@@ -403,9 +404,15 @@
             transition: border-color 0.2s;
         }
         .form-group select:focus,
-        .form-group input[type="text"]:focus {
+        .form-group input[type="text"]:focus,
+        .form-group input[type="password"]:focus {
             border-color: #4D8BFF;
             box-shadow: 0 0 0 4px rgba(23, 105, 232, 0.09);
+        }
+        .field-hint {
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
         }
         .dropzone {
             background: #f3f8ff;
@@ -1670,6 +1677,20 @@
                 <label>学生姓名</label>
                 <input type="text" id="studentName" placeholder="请输入学生姓名">
             </div>
+            <div class="form-group">
+                <label for="familyAccessCode">家庭访问码</label>
+                <input
+                    type="password"
+                    id="familyAccessCode"
+                    placeholder="8-32 位字母或数字"
+                    minlength="8"
+                    maxlength="32"
+                    pattern="[A-Za-z0-9]{8,32}"
+                    autocomplete="current-password"
+                    aria-describedby="familyAccessHint"
+                >
+                <span class="field-hint" id="familyAccessHint">上传和查询错题库时使用，本页不会保存</span>
+            </div>
         </div>
 
         <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
@@ -1833,9 +1854,25 @@
 
 <script>
 // ===== STATE =====
+function stripStoredImageLinks(rawResult) {
+    try {
+        const parsed = JSON.parse(rawResult || '{}');
+        if (!parsed || typeof parsed !== 'object') return rawResult;
+        delete parsed.imageUrls;
+        delete parsed.image_urls;
+        delete parsed['上传文件'];
+        return JSON.stringify(parsed);
+    } catch (e) {
+        return rawResult;
+    }
+}
+
 let uploadedFiles = [];
 let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]').map(record => ({
     ...record,
+    result: stripStoredImageLinks(record.result),
+    imageUrl: '',
+    imageAvailable: Boolean(record.imageAvailable || record.serverId),
     detailLoading: false,
     progressSaving: false,
     detailError: ''
@@ -1858,6 +1895,8 @@ function saveHistoryRecords() {
         delete persisted.detailLoading;
         delete persisted.progressSaving;
         delete persisted.detailError;
+        delete persisted.imageUrl;
+        persisted.result = stripStoredImageLinks(persisted.result);
         return persisted;
     });
     localStorage.setItem('xiahunao_history', JSON.stringify(records));
@@ -2069,6 +2108,19 @@ function updateAnalyzeBtn() {
     btn.classList.toggle('active', uploadedFiles.length > 0);
 }
 
+function getFamilyAccessCode() {
+    const familyCode = (document.getElementById('familyAccessCode').value || '').trim();
+    if (!/^[A-Za-z0-9]{8,32}$/.test(familyCode)) {
+        throw new Error('请输入 8-32 位字母或数字组成的家庭访问码');
+    }
+    return familyCode;
+}
+
+function familyAccessHeaders(headers = {}) {
+    const familyCode = getFamilyAccessCode();
+    return { ...headers, 'X-Family-Code': familyCode };
+}
+
 // ===== ANALYSIS =====
 async function startAnalysis() {
     if (uploadedFiles.length === 0) return;
@@ -2078,6 +2130,15 @@ async function startAnalysis() {
     const name = document.getElementById('studentName').value || '同学';
     if (!grade) {
         alert('请先选择年级');
+        return;
+    }
+
+    let accessHeaders;
+    try {
+        accessHeaders = familyAccessHeaders();
+    } catch (e) {
+        alert(e.message);
+        document.getElementById('familyAccessCode').focus();
         return;
     }
 
@@ -2095,14 +2156,16 @@ async function startAnalysis() {
             fd.append('subject', subject);
             fd.append('file', current.file, current.name);
 
-            const uploadJson = await requestJson('/upload', { method: 'POST', body: fd });
+            const uploadJson = await requestJson('/upload', { method: 'POST', headers: accessHeaders, body: fd });
             document.getElementById('loadingText').textContent = `正在分析第 ${i + 1}/${uploadedFiles.length} 份试卷...`;
             const params = new URLSearchParams({ grade: grade, student_name: name });
-            const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, { method: 'POST' });
+            const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, {
+                method: 'POST',
+                headers: accessHeaders
+            });
             apiAnalyses.push({
                 ...(analysisJson.analysis || {}),
-                exam_id: analysisJson.exam_id || uploadJson.id,
-                image_url: analysisJson.image_url || uploadJson.image_url || null
+                exam_id: analysisJson.exam_id || uploadJson.id
             });
         }
 
@@ -2123,7 +2186,7 @@ async function startAnalysis() {
             result: JSON.stringify(analysisData),
             structured: true,
             serverId: analysisData.examIds[0] || null,
-            imageUrl: analysisData.imageUrls[0] || null,
+            imageAvailable: Boolean(analysisData.examIds[0]),
             serverSynced: Boolean(analysisData.examIds[0]),
             reviewProgress: normalizeReviewProgress(null)
         };
@@ -2193,7 +2256,6 @@ function mergeApiAnalyses(analyses, subject) {
         weak_points: [],
         recommendations: [],
         exam_ids: [],
-        image_urls: [],
         root_cause: '',
         evidence_status: 'insufficient',
         evidence_note: ''
@@ -2208,7 +2270,6 @@ function mergeApiAnalyses(analyses, subject) {
     analyses.forEach(item => {
         const analysis = item.analysis || item || {};
         if (item.exam_id && !merged.exam_ids.includes(item.exam_id)) merged.exam_ids.push(item.exam_id);
-        if (item.image_url && !merged.image_urls.includes(item.image_url)) merged.image_urls.push(item.image_url);
         merged.wrong_questions.push(...(analysis.wrong_questions || []));
         addUnique(merged.error_types, analysis.error_types || []);
         addUnique(merged.weak_points, analysis.weak_points || []);
@@ -2240,7 +2301,6 @@ function parseApiResponse(json, name, grade, subject) {
         const wq = Array.isArray(analysis.wrong_questions) ? analysis.wrong_questions : [];
         const rec = Array.isArray(analysis.recommendations) ? analysis.recommendations : [];
         const examIds = Array.isArray(analysis.exam_ids) ? analysis.exam_ids : [];
-        const imageUrls = Array.isArray(analysis.image_urls) ? analysis.image_urls : [];
         const subjectLabel = subject === 'english' ? '英语' : '数学';
         const displayWeakPoints = wp.length ? wp.slice(0, 3) : ['未识别到明确薄弱点'];
         const errorTypeStats = buildErrorTypeStats(wq, analysis.error_type_stats);
@@ -2253,7 +2313,6 @@ function parseApiResponse(json, name, grade, subject) {
             subject: subject,
             subjectLabel: subjectLabel,
             examIds: examIds,
-            imageUrls: imageUrls,
             weakPoints: displayWeakPoints,
             evaluation: analysis.root_cause || '未能从图片中识别到明确错题，请确认图片清晰且包含批改痕迹。',
             evidenceStatus: evidenceStatus,
@@ -2459,7 +2518,10 @@ async function generatePractice() {
             grade: currentAnalysisData.grade,
             student_name: currentAnalysisData.studentName
         });
-        const data = await requestJson(`/generate-practice/${examId}?${params.toString()}`, { method: 'POST' });
+        const data = await requestJson(`/generate-practice/${examId}?${params.toString()}`, {
+            method: 'POST',
+            headers: familyAccessHeaders()
+        });
         questions = data.questions;
     } catch(e) {
         generationError = e.message || '生成服务暂时不可用';
@@ -2613,7 +2675,7 @@ function loadExample() {
 
 // ===== GUIDE =====
 function showGuide() {
-    alert('使用指南：\n\n1. 选择年级并输入学生姓名\n2. 上传试卷照片（支持多张）\n3. 点击"开始分析"按钮\n4. AI 将自动识别错题并分析薄弱知识点\n5. 生成个性化学习强化方案\n6. 历史记录可随时回看');
+    alert('使用指南：\n\n1. 选择年级、学科并填写学生姓名\n2. 设置 8-32 位家庭访问码，请妥善记住\n3. 上传试卷照片（支持多张）\n4. 点击“开始分析”\n5. 查看有证据的错题诊断与复习安排\n6. 使用相同访问码查询服务器错题库');
 }
 
 // ===== HISTORY =====
@@ -2674,10 +2736,6 @@ function escapeHtml(value) {
     }[char]));
 }
 
-function safeUploadUrl(url) {
-    return typeof url === 'string' && url.startsWith('/uploads/') ? url : '';
-}
-
 function normalizeReviewProgress(value) {
     const completedValues = Array.isArray(value?.completed) ? value.completed : [];
     const completed = REVIEW_STEP_DEFINITIONS
@@ -2701,8 +2759,7 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         试卷编号: serverId,
         学科: exam.subject === 'english' ? '英语' : '数学',
         薄弱知识点: weakPoints,
-        识别预览: exam.ocr_preview || '',
-        上传文件: exam.image_url || ''
+        识别预览: exam.ocr_preview || ''
     };
     return {
         id: `server-${serverId}`,
@@ -2716,7 +2773,7 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         weakPoints: weakPoints,
         result: JSON.stringify(result, null, 2),
         structured: true,
-        imageUrl: safeUploadUrl(exam.image_url),
+        imageAvailable: Boolean(exam.image_available),
         serverSynced: true,
         reviewProgress: normalizeReviewProgress(exam.review_progress)
     };
@@ -2726,8 +2783,7 @@ function historyAnalysisData(record) {
     if (record.analysis && typeof record.analysis === 'object') {
         return parseApiResponse({
             ...record.analysis,
-            exam_ids: record.serverId ? [record.serverId] : [],
-            image_urls: record.imageUrl ? [record.imageUrl] : []
+            exam_ids: record.serverId ? [record.serverId] : []
         }, record.name, record.grade, record.subject || 'math');
     }
     try {
@@ -2735,8 +2791,7 @@ function historyAnalysisData(record) {
         if (!stored || !Array.isArray(stored.wrongQuestions)) return null;
         return {
             ...stored,
-            examIds: stored.examIds?.length ? stored.examIds : (record.serverId ? [record.serverId] : []),
-            imageUrls: stored.imageUrls?.length ? stored.imageUrls : (record.imageUrl ? [record.imageUrl] : [])
+            examIds: stored.examIds?.length ? stored.examIds : (record.serverId ? [record.serverId] : [])
         };
     } catch (e) {
         return null;
@@ -2780,11 +2835,10 @@ function renderReviewProgress(record) {
 }
 
 function renderHistoryDiagnosis(record) {
-    const imageUrl = safeUploadUrl(record.imageUrl);
     const actions = `
         <div class="history-actions">
             ${record.serverId && recordWeakPoints(record).length ? `<button type="button" class="history-action primary" onclick="prepareHistoryPractice(${escapeHtml(JSON.stringify(record.id))})">生成巩固练习</button>` : ''}
-            ${imageUrl ? `<a class="history-action" href="${escapeHtml(imageUrl)}" target="_blank" rel="noopener">查看原卷</a>` : ''}
+            ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">查看原卷</button>` : ''}
         </div>`;
 
     if (record.detailLoading) {
@@ -2864,6 +2918,37 @@ function renderHistoryDiagnosis(record) {
             ${renderReviewProgress(record)}
             ${actions}
         </div>`;
+}
+
+async function openProtectedExamImage(id) {
+    const record = historyRecords.find(item => item.id === id);
+    if (!record?.serverId) return;
+
+    let previewWindow;
+    try {
+        const accessHeaders = familyAccessHeaders();
+        previewWindow = window.open('about:blank', '_blank');
+        if (!previewWindow) throw new Error('浏览器阻止了新窗口，请允许弹窗后重试');
+        previewWindow.opener = null;
+        previewWindow.document.title = '正在读取原卷';
+        previewWindow.document.body.textContent = '正在安全读取原卷...';
+
+        const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
+        const response = await fetch(`/exams/${record.serverId}/image?${params.toString()}`, {
+            headers: accessHeaders
+        });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || `读取原卷失败（${response.status}）`);
+        }
+
+        const objectUrl = URL.createObjectURL(await response.blob());
+        previewWindow.location.replace(objectUrl);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60 * 1000);
+    } catch (e) {
+        if (previewWindow && !previewWindow.closed) previewWindow.close();
+        alert(e.message || '读取原卷失败，请稍后重试');
+    }
 }
 
 function normalizeWrongCount(value) {
@@ -3035,12 +3120,24 @@ async function syncServerWrongBank() {
         return;
     }
 
+    let accessHeaders;
+    try {
+        accessHeaders = familyAccessHeaders();
+    } catch (e) {
+        alert(e.message);
+        document.getElementById('familyAccessCode').focus();
+        return;
+    }
+
     const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '50' });
     if (currentSubjectArchive !== 'all') {
         params.set('subject', currentSubjectArchive);
     }
     try {
-        const data = await requestJson(`/exams?${params.toString()}`, { method: 'GET' });
+        const data = await requestJson(`/exams?${params.toString()}`, {
+            method: 'GET',
+            headers: accessHeaders
+        });
         const serverRecords = (data.exams || []).map(exam => makeServerHistoryRecord(exam, grade, studentName));
         const recordMap = new Map(historyRecords.map(r => [r.serverId ? `server-${r.serverId}` : `local-${r.id}`, r]));
         serverRecords.forEach(record => {
@@ -3143,13 +3240,16 @@ async function loadHistoryDetail(id) {
     renderHistory();
     try {
         const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
-        const detail = await requestJson(`/exams/${record.serverId}?${params.toString()}`, { method: 'GET' });
+        const detail = await requestJson(`/exams/${record.serverId}?${params.toString()}`, {
+            method: 'GET',
+            headers: familyAccessHeaders()
+        });
         record.analysis = detail.analysis || detail.ai_analysis || null;
         record.detailLoaded = true;
         record.wrongCount = normalizeWrongCount(detail.wrong_count);
         record.weakPoints = Array.isArray(detail.weak_points) ? detail.weak_points : record.weakPoints;
         record.weakPoint = record.weakPoints[0] || record.weakPoint || '待分析';
-        record.imageUrl = safeUploadUrl(detail.image_url) || record.imageUrl;
+        record.imageAvailable = Boolean(detail.image_available);
         record.reviewProgress = normalizeReviewProgress(detail.review_progress);
         saveHistoryRecords();
     } catch (e) {
@@ -3176,7 +3276,7 @@ async function toggleReviewStep(id, step) {
         const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
         const data = await requestJson(`/exams/${record.serverId}/review-progress?${params.toString()}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: familyAccessHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ completed: completed })
         });
         record.reviewProgress = normalizeReviewProgress(data.review_progress);
@@ -3199,8 +3299,7 @@ function prepareHistoryPractice(id) {
     }
     currentAnalysisData = {
         ...data,
-        examIds: [record.serverId],
-        imageUrls: record.imageUrl ? [record.imageUrl] : []
+        examIds: [record.serverId]
     };
     renderAnalysisResult(currentAnalysisData);
     document.getElementById('resultSection').classList.add('show');
@@ -3239,7 +3338,10 @@ async function confirmAction() {
         if (record?.serverId) {
             const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
             try {
-                await requestJson(`/exams/${record.serverId}?${params.toString()}`, { method: 'DELETE' });
+                await requestJson(`/exams/${record.serverId}?${params.toString()}`, {
+                    method: 'DELETE',
+                    headers: familyAccessHeaders()
+                });
             } catch (e) {
                 alert('删除服务器记录失败：' + e.message);
                 return;

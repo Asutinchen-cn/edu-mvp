@@ -47,6 +47,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         for grade in ("一年级", "五年级", "高一", "高三"):
             self.assertNotIn(f'<option value="{grade}"', HTML)
 
+    def test_wrong_bank_uses_a_family_access_code_without_persisting_it(self):
+        self.assertIn('id="familyAccessCode"', HTML)
+        self.assertIn('type="password"', HTML)
+        self.assertIn("function familyAccessHeaders", HTML)
+        self.assertIn("'X-Family-Code': familyCode", HTML)
+        self.assertNotIn("localStorage.setItem('familyAccessCode'", HTML)
+        self.assertNotRegex(HTML, r"URLSearchParams\([^)]*familyAccessCode")
+
+    def test_original_exam_files_use_the_protected_image_endpoint(self):
+        self.assertIn("async function openProtectedExamImage(id)", HTML)
+        self.assertIn("/image?${params.toString()}", HTML)
+        self.assertIn("headers: accessHeaders", HTML)
+        self.assertNotIn("function safeUploadUrl", HTML)
+        self.assertNotIn("href=\"${escapeHtml(imageUrl)}\"", HTML)
+
     def test_analysis_result_gives_parents_an_evidence_based_action_plan(self):
         self.assertIn("function buildParentReviewPlan(data)", HTML)
         self.assertIn("7 天复习安排", HTML)

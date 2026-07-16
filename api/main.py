@@ -1,10 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Header
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, inspect, text, func
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -13,6 +13,10 @@ import io
 import httpx
 import base64
 import uuid
+import hashlib
+import hmac
+import re
+import secrets
 from datetime import datetime
 from urllib.parse import quote
 from dotenv import load_dotenv
@@ -365,6 +369,8 @@ class Exam(Base):
     weak_points = Column(Text)
     recommendations = Column(Text)
     review_progress = Column(Text)
+    access_code_salt = Column(String(32))
+    access_code_hash = Column(String(64))
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # 创建表
@@ -401,6 +407,16 @@ try:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS review_progress TEXT"))
                 else:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN review_progress TEXT"))
+            if "access_code_salt" not in cols:
+                if "postgresql" in DATABASE_URL:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS access_code_salt VARCHAR(32)"))
+                else:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN access_code_salt VARCHAR(32)"))
+            if "access_code_hash" not in cols:
+                if "postgresql" in DATABASE_URL:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS access_code_hash VARCHAR(64)"))
+                else:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN access_code_hash VARCHAR(64)"))
 except Exception as _e:
     print(f"DB migration warning: {_e}")
 
@@ -416,8 +432,6 @@ app.add_middleware(
 static_dir = os.path.join(os.path.dirname(__file__), "..", "web")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
-if os.path.exists(UPLOAD_DIR):
-    app.mount(UPLOAD_URL_PREFIX, StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # 数据库依赖
 def get_db():
@@ -426,6 +440,73 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+FAMILY_ACCESS_CODE_PATTERN = re.compile(r"^[A-Za-z0-9]{8,32}$")
+FAMILY_ACCESS_CODE_ITERATIONS = 210_000
+FAMILY_ACCESS_DENIED_ERROR = "家庭访问码不正确，或该记录尚未绑定访问码"
+
+
+def _validate_family_access_code(value: str | None) -> str:
+    code = str(value or "").strip()
+    if not FAMILY_ACCESS_CODE_PATTERN.fullmatch(code):
+        raise ValueError("家庭访问码须为 8-32 位字母或数字")
+    return code
+
+
+def _hash_family_access_code(value: str) -> tuple[str, str]:
+    code = _validate_family_access_code(value)
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        code.encode("utf-8"),
+        salt,
+        FAMILY_ACCESS_CODE_ITERATIONS,
+    )
+    return salt.hex(), digest.hex()
+
+
+def _verify_family_access_code(value: str | None, salt_hex: str | None, digest_hex: str | None) -> bool:
+    if not salt_hex or not digest_hex:
+        return False
+    try:
+        code = _validate_family_access_code(value)
+        salt = bytes.fromhex(salt_hex)
+        expected_digest = bytes.fromhex(digest_hex)
+    except (TypeError, ValueError):
+        return False
+
+    actual_digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        code.encode("utf-8"),
+        salt,
+        FAMILY_ACCESS_CODE_ITERATIONS,
+    )
+    return hmac.compare_digest(actual_digest, expected_digest)
+
+
+def _exam_has_family_access(exam: Exam, grade: str, student_name: str, family_code: str | None) -> bool:
+    return (
+        (exam.grade or "").strip() == grade
+        and (exam.student_name or "").strip() == student_name
+        and _verify_family_access_code(
+            family_code,
+            exam.access_code_salt,
+            exam.access_code_hash,
+        )
+    )
+
+
+def _normalize_family_access_request(
+    grade: str | None,
+    student_name: str | None,
+    family_code: str | None,
+) -> tuple[str, str, str]:
+    clean_grade = (grade or "").strip()
+    clean_student_name = (student_name or "").strip()
+    if not clean_grade or not clean_student_name or family_code is None:
+        raise ValueError("必须提供年级、学生姓名和家庭访问码")
+    return clean_grade, clean_student_name, _validate_family_access_code(family_code)
 
 
 def _save_upload_file(content: bytes, file: UploadFile) -> str:
@@ -458,6 +539,11 @@ def _local_upload_path(image_path: str | None) -> str | None:
     if local_path.startswith(upload_root + os.sep):
         return local_path
     return None
+
+
+def _stored_upload_exists(image_path: str | None) -> bool:
+    local_path = _local_upload_path(image_path)
+    return bool(local_path and os.path.isfile(local_path))
 
 # ===== 百度 OCR =====
 
@@ -1837,9 +1923,15 @@ async def upload_exam(
     student_name: str = Form(...),
     grade: str = Form(...),
     subject: str = Form("math"),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
 ):
-    """上传试卷图片（按 年级 + 学生名 隔离）"""
+    """上传试卷图片，并绑定家庭访问码。"""
+    try:
+        family_code = _validate_family_access_code(family_code)
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
     try:
         db = SessionLocal()
 
@@ -1865,18 +1957,21 @@ async def upload_exam(
             db.close()
             return JSONResponse({"success": False, "error": "文件大小不能超过 10MB"}, status_code=400)
 
-        image_url = _save_upload_file(content, file)
+        stored_image_path = _save_upload_file(content, file)
 
         # 百度 OCR 识别
         ocr_result = await baidu_ocr(content)
 
         # 创建记录
+        access_code_salt, access_code_hash = _hash_family_access_code(family_code)
         exam = Exam(
             grade=grade,
             subject=subject,
             student_name=student_name,
-            image_path=image_url,
-            ocr_text=ocr_result
+            image_path=stored_image_path,
+            ocr_text=ocr_result,
+            access_code_salt=access_code_salt,
+            access_code_hash=access_code_hash,
         )
         db.add(exam)
         db.commit()
@@ -1890,16 +1985,28 @@ async def upload_exam(
             "grade": grade,
             "subject": subject,
             "student": student_name,
-            "image_url": image_url,
+            "image_available": True,
             "ocr_preview": ocr_result[:200] + "..." if len(ocr_result) > 200 else ocr_result,
-            "next_step": f"POST /analyze/{exam.id}?grade={grade}&student_name={student_name} 进行AI分析"
+            "next_step": f"POST /analyze/{exam.id}?grade={grade}&student_name={student_name}，并携带 X-Family-Code 请求头"
         })
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 @app.post("/analyze/{exam_id}")
-async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None):
-    """AI分析错题（DeepSeek，按 年级 + 学生名 校验）"""
+async def analyze_exam(
+    exam_id: int,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """AI分析错题（DeepSeek，按学生身份和家庭访问码校验）。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
@@ -1908,13 +2015,9 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
             db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
 
-        # 双字段隔离校验：仅允许操作当前年级+学生的记录
-        if grade and (exam.grade or "").strip() != grade.strip():
+        if not _exam_has_family_access(exam, grade, student_name, family_code):
             db.close()
-            return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
-        if student_name and (exam.student_name or "").strip() != student_name.strip():
-            db.close()
-            return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+            return JSONResponse({"error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
         # 调用 DeepSeek AI 分析
         analysis = await ai_analyze(exam.ocr_text or "", exam.subject or "math", exam.grade or grade or "")
@@ -1932,7 +2035,7 @@ async def analyze_exam(exam_id: int, grade: str = None, student_name: str = None
             "grade": exam.grade,
             "subject": exam.subject,
             "student": exam.student_name,
-            "image_url": _public_upload_url(exam.image_path),
+            "image_available": _stored_upload_exists(exam.image_path),
             "analysis": analysis,
             "summary": {
                 "weak_points": analysis.get("weak_points", []),
@@ -2064,41 +2167,49 @@ def _normalize_review_progress(raw_value: str | dict | None) -> dict:
 
 
 @app.get("/exams")
-async def list_exams(grade: str = None, student_name: str = None, subject: str = None, limit: int = 10):
-    """获取最近上传的试卷列表（必须 年级 + 学生名 同时提供，可按学科筛选）"""
-    grade = (grade or "").strip()
-    student_name = (student_name or "").strip()
+async def list_exams(
+    grade: str = None,
+    student_name: str = None,
+    subject: str = None,
+    limit: int = 10,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """获取当前家庭可访问的最近试卷，可按学科筛选。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
     subject = (subject or "").strip()
 
-    # 按产品需求：只有年级不展示任何历史，必须双字段同时存在
-    if not grade or not student_name:
-        return JSONResponse({"exams": [], "subject_archive": {"all": 0, "math": 0, "english": 0}})
     if subject and subject not in SUBJECT_LABELS:
         return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
 
     db = SessionLocal()
-    base_query = db.query(Exam).filter(Exam.grade == grade, Exam.student_name == student_name)
-    archive_rows = (
-        db.query(Exam.subject, func.count(Exam.id))
+    candidates = (
+        db.query(Exam)
         .filter(Exam.grade == grade, Exam.student_name == student_name)
-        .group_by(Exam.subject)
+        .order_by(Exam.created_at.desc())
         .all()
     )
+    accessible_exams = [
+        exam for exam in candidates
+        if _exam_has_family_access(exam, grade, student_name, family_code)
+    ]
+    if not accessible_exams:
+        db.close()
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
+
     archive = {"all": 0, "math": 0, "english": 0}
-    for row_subject, row_count in archive_rows:
-        if row_subject in archive:
-            archive[row_subject] = row_count
-            archive["all"] += row_count
+    for exam in accessible_exams:
+        if exam.subject in {"math", "english"}:
+            archive[exam.subject] += 1
+            archive["all"] += 1
 
     if subject:
-        base_query = base_query.filter(Exam.subject == subject)
-
-    exams = (
-        base_query
-        .order_by(Exam.created_at.desc())
-        .limit(max(1, min(limit, 100)))
-        .all()
-    )
+        accessible_exams = [exam for exam in accessible_exams if exam.subject == subject]
+    exams = accessible_exams[:max(1, min(limit, 100))]
     exam_items = []
     for exam in exams:
         summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
@@ -2107,8 +2218,7 @@ async def list_exams(grade: str = None, student_name: str = None, subject: str =
             "grade": exam.grade,
             "subject": exam.subject,
             "student": exam.student_name,
-            "image": exam.image_path,
-            "image_url": _public_upload_url(exam.image_path),
+            "image_available": _stored_upload_exists(exam.image_path),
             "ocr_preview": exam.ocr_text[:50] + "..." if exam.ocr_text else None,
             "wrong_count": summary["wrong_count"],
             "weak_points": summary["weak_points"],
@@ -2123,8 +2233,20 @@ async def list_exams(grade: str = None, student_name: str = None, subject: str =
     })
 
 @app.get("/exams/{exam_id}")
-async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
-    """获取单个试卷详情（支持按 年级 + 学生名 校验）"""
+async def get_exam(
+    exam_id: int,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """获取单个试卷详情。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
     db = SessionLocal()
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
 
@@ -2132,12 +2254,9 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
         db.close()
         return JSONResponse({"error": "试卷不存在"}, status_code=404)
 
-    if grade and (exam.grade or "").strip() != grade.strip():
+    if not _exam_has_family_access(exam, grade, student_name, family_code):
         db.close()
-        return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
-    if student_name and (exam.student_name or "").strip() != student_name.strip():
-        db.close()
-        return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+        return JSONResponse({"error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
     summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
     analysis = _analysis_history_detail(exam.ai_analysis, exam.weak_points, exam.recommendations)
@@ -2146,8 +2265,7 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
         "grade": exam.grade,
         "subject": exam.subject,
         "student": exam.student_name,
-        "image": exam.image_path,
-        "image_url": _public_upload_url(exam.image_path),
+        "image_available": _stored_upload_exists(exam.image_path),
         "ocr_text": exam.ocr_text,
         "ai_analysis": _stored_json(exam.ai_analysis, None),
         "analysis": analysis,
@@ -2161,18 +2279,52 @@ async def get_exam(exam_id: int, grade: str = None, student_name: str = None):
     return JSONResponse(response)
 
 
+@app.get("/exams/{exam_id}/image")
+async def get_exam_image(
+    exam_id: int,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """读取受家庭访问码保护的原卷文件。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+    db = SessionLocal()
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        db.close()
+        return JSONResponse({"success": False, "error": "试卷不存在"}, status_code=404)
+    if not _exam_has_family_access(exam, grade, student_name, family_code):
+        db.close()
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
+
+    stored_file = _local_upload_path(exam.image_path)
+    db.close()
+    if not stored_file or not os.path.isfile(stored_file):
+        return JSONResponse({"success": False, "error": "原卷文件不存在"}, status_code=404)
+    return FileResponse(stored_file)
+
+
 @app.patch("/exams/{exam_id}/review-progress")
 async def update_review_progress(
     exam_id: int,
     body: ReviewProgressRequest,
     grade: str = None,
     student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
 ):
     """保存家长可跨设备查看的订正、同类练习和隔天回测进度。"""
-    grade = (grade or "").strip()
-    student_name = (student_name or "").strip()
-    if not grade or not student_name:
-        return JSONResponse({"success": False, "error": "必须提供年级和学生姓名"}, status_code=400)
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
     unknown_steps = [step for step in body.completed if step not in REVIEW_STEPS]
     if unknown_steps:
@@ -2183,9 +2335,9 @@ async def update_review_progress(
     if not exam:
         db.close()
         return JSONResponse({"success": False, "error": "试卷不存在"}, status_code=404)
-    if (exam.grade or "").strip() != grade or (exam.student_name or "").strip() != student_name:
+    if not _exam_has_family_access(exam, grade, student_name, family_code):
         db.close()
-        return JSONResponse({"success": False, "error": "无权限更新该记录"}, status_code=403)
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
     stored_progress = {
         "completed": body.completed,
@@ -2198,8 +2350,20 @@ async def update_review_progress(
     return JSONResponse({"success": True, "exam_id": exam_id, "review_progress": progress})
 
 @app.delete("/exams/{exam_id}")
-async def delete_exam(exam_id: int, grade: str = None, student_name: str = None):
-    """删除试卷（支持按 年级 + 学生名 校验）"""
+async def delete_exam(
+    exam_id: int,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """删除当前家庭有权访问的试卷。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
     db = SessionLocal()
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
 
@@ -2207,12 +2371,9 @@ async def delete_exam(exam_id: int, grade: str = None, student_name: str = None)
         db.close()
         return JSONResponse({"success": False, "error": "试卷不存在"}, status_code=404)
 
-    if grade and (exam.grade or "").strip() != grade.strip():
+    if not _exam_has_family_access(exam, grade, student_name, family_code):
         db.close()
-        return JSONResponse({"success": False, "error": "无权限删除该记录（年级不匹配）"}, status_code=403)
-    if student_name and (exam.student_name or "").strip() != student_name.strip():
-        db.close()
-        return JSONResponse({"success": False, "error": "无权限删除该记录（学生姓名不匹配）"}, status_code=403)
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
     stored_file = _local_upload_path(exam.image_path)
     db.delete(exam)
@@ -2242,8 +2403,20 @@ async def root():
     return JSONResponse({"message": "虾胡闹教育 API运行中，前端文件未找到", "searched_paths": [os.path.normpath(p) for p in possible_paths]})
 
 @app.post("/generate-practice/{exam_id}")
-async def generate_practice(exam_id: int, grade: str = None, student_name: str = None):
+async def generate_practice(
+    exam_id: int,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
     """根据薄弱知识点生成5道巩固练习题（DeepSeek AI 生成）"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
@@ -2252,12 +2425,9 @@ async def generate_practice(exam_id: int, grade: str = None, student_name: str =
             db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
 
-        if grade and (exam.grade or "").strip() != grade.strip():
+        if not _exam_has_family_access(exam, grade, student_name, family_code):
             db.close()
-            return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
-        if student_name and (exam.student_name or "").strip() != student_name.strip():
-            db.close()
-            return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+            return JSONResponse({"error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
         # 获取薄弱知识点
         weak_points = json.loads(exam.weak_points) if exam.weak_points else []
@@ -2520,8 +2690,20 @@ async def generate_unit_worksheet(body: UnitWorksheetRequest):
         return JSONResponse({"success": False, "error": f"生成失败：{str(e)[:180]}"}, status_code=500)
 
 @app.post("/export-practice-pdf/{exam_id}")
-async def export_practice_pdf(exam_id: int, grade: str = None, student_name: str = None):
+async def export_practice_pdf(
+    exam_id: int,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
     """导出巩固练习题为 PDF"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
     try:
         db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
@@ -2530,12 +2712,9 @@ async def export_practice_pdf(exam_id: int, grade: str = None, student_name: str
             db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
 
-        if grade and (exam.grade or "").strip() != grade.strip():
+        if not _exam_has_family_access(exam, grade, student_name, family_code):
             db.close()
-            return JSONResponse({"error": "无权限访问该记录（年级不匹配）"}, status_code=403)
-        if student_name and (exam.student_name or "").strip() != student_name.strip():
-            db.close()
-            return JSONResponse({"error": "无权限访问该记录（学生姓名不匹配）"}, status_code=403)
+            return JSONResponse({"error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
         weak_points = json.loads(exam.weak_points) if exam.weak_points else []
         if not weak_points:
@@ -2574,15 +2753,16 @@ async def api_info():
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
-            "upload": "POST /upload (form-data: grade, student_name, file)",
-            "analyze": "POST /analyze/{id}?grade=...&student_name=... - DeepSeek AI分析",
-            "generate_practice": "POST /generate-practice/{id}?grade=...&student_name=... - DeepSeek AI生成5道巩固题",
-            "export_pdf": "POST /export-practice-pdf/{id}?grade=...&student_name=... - 导出PDF",
+            "upload": "POST /upload (form-data: grade, student_name, file；请求头 X-Family-Code)",
+            "analyze": "POST /analyze/{id}?grade=...&student_name=...（请求头 X-Family-Code）- DeepSeek AI分析",
+            "generate_practice": "POST /generate-practice/{id}?grade=...&student_name=...（请求头 X-Family-Code）- DeepSeek AI生成5道巩固题",
+            "export_pdf": "POST /export-practice-pdf/{id}?grade=...&student_name=...（请求头 X-Family-Code）- 导出PDF",
             "curriculum_units": "GET /curriculum-units - 单元复习卷筛选数据",
             "generate_unit_worksheet": "POST /generate-unit-worksheet - 生成单元题目卷与答案解析卷",
-            "list": "GET /exams?grade=...&student_name=...",
-            "detail": "GET /exams/{id}?grade=...&student_name=...",
-            "delete": "DELETE /exams/{id}?grade=...&student_name=..."
+            "list": "GET /exams?grade=...&student_name=...（请求头 X-Family-Code）",
+            "detail": "GET /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）",
+            "image": "GET /exams/{id}/image?grade=...&student_name=...（请求头 X-Family-Code）",
+            "delete": "DELETE /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）"
         },
         "status": "OCR已接入百度试卷识别+通用识别，AI分析已接入DeepSeek",
         "database": "PostgreSQL" if "postgresql" in DATABASE_URL else "SQLite"
