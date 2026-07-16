@@ -152,6 +152,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertIn("method: 'PATCH'", HTML)
 
+    def test_history_defaults_to_a_parent_focused_pending_review_queue(self):
+        self.assertIn("let currentMasteryFilter = 'pending'", HTML)
+        self.assertIn('data-mastery-filter="pending"', HTML)
+        self.assertIn('id="masteryCountPending"', HTML)
+        self.assertIn('data-mastery-filter="mastered"', HTML)
+        self.assertIn('id="masteryCountMastered"', HTML)
+        self.assertIn("function recordMasteryStatus(record)", HTML)
+        self.assertIn("function setMasteryFilter(status)", HTML)
+        self.assertIn("function updateMasteryFilterCounts(records)", HTML)
+        self.assertIn("progress.completedCount === progress.total", HTML)
+        self.assertIn("currentMasteryFilter !== 'all'", HTML)
+        self.assertIn("本筛选范围内的错题都已完成三步复习", HTML)
+
     def test_transient_history_request_flags_are_cleared_after_reload(self):
         self.assertIn("detailLoading: false", HTML)
         self.assertIn("progressSaving: false", HTML)
