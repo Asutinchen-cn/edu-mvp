@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -132,6 +133,57 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(payload["subject_archive"], {"all": 1, "math": 1, "english": 0})
         self.assertTrue(payload["exams"][0]["image_available"])
         self.assertNotIn("image_url", payload["exams"][0])
+        self.assertEqual(payload["exams"][0]["review_schedule"]["next_step"], "corrected")
+
+    def test_review_progress_saves_each_step_time_and_enforces_the_retest_day(self):
+        with patch("api.main._utc_now", return_value=datetime(2026, 7, 16, 6, 0, tzinfo=timezone.utc)):
+            response = asyncio.run(update_review_progress(
+                self.first_exam_id,
+                ReviewProgressRequest(completed=["corrected", "practiced"]),
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+            early_retest = asyncio.run(update_review_progress(
+                self.first_exam_id,
+                ReviewProgressRequest(completed=["corrected", "practiced", "retested"]),
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["review_progress"]["completed"], ["corrected", "practiced"])
+        self.assertEqual(
+            payload["review_progress"]["completed_at"],
+            {
+                "corrected": "2026-07-16T06:00:00Z",
+                "practiced": "2026-07-16T06:00:00Z",
+            },
+        )
+        self.assertEqual(payload["review_schedule"], {
+            "next_step": "retested",
+            "due_at": "2026-07-17T06:00:00Z",
+            "status": "upcoming",
+        })
+        self.assertEqual(early_retest.status_code, 409)
+        self.assertIn("隔天回测", json.loads(early_retest.body)["error"])
+
+        with patch("api.main._utc_now", return_value=datetime(2026, 7, 17, 1, 0, tzinfo=timezone.utc)):
+            on_time_retest = asyncio.run(update_review_progress(
+                self.first_exam_id,
+                ReviewProgressRequest(completed=["corrected", "practiced", "retested"]),
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(on_time_retest.status_code, 200)
+        self.assertEqual(
+            json.loads(on_time_retest.body)["review_progress"]["completed_count"],
+            3,
+        )
 
     def test_detail_rejects_a_wrong_or_missing_family_code(self):
         wrong = asyncio.run(get_exam(

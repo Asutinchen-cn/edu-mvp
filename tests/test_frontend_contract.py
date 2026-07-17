@@ -168,10 +168,23 @@ class FrontendCurriculumContractTest(unittest.TestCase):
     def test_parent_dashboard_turns_pending_records_into_actionable_review_tasks(self):
         self.assertIn("今日复习清单", HTML)
         self.assertIn("pendingTasks: pendingTasks", HTML)
-        self.assertIn("pendingTasks.slice(0, 3)", HTML)
+        self.assertIn("todayTasks.slice(0, 3)", HTML)
         self.assertIn("function openReviewTask(id)", HTML)
         self.assertIn("继续复习", HTML)
         self.assertIn("setMasteryFilter('pending')", HTML)
+
+    def test_parent_dashboard_respects_spaced_review_due_dates(self):
+        self.assertIn("function normalizeReviewSchedule", HTML)
+        self.assertIn("function reviewTaskTiming", HTML)
+        self.assertIn("建议优先", HTML)
+        self.assertIn("今天完成", HTML)
+        self.assertIn("明天回测", HTML)
+        self.assertIn("todayTasks", HTML)
+        self.assertIn("upcomingTasks", HTML)
+        self.assertIn("reviewSchedule: normalizeReviewSchedule(exam.review_schedule)", HTML)
+        self.assertIn("REVIEW_STEP_DEFINITIONS.slice(0, stepIndex + 1)", HTML)
+        self.assertIn("const retestLocked", HTML)
+        self.assertIn("到期后自动开放", HTML)
 
     def test_parent_can_export_a_protected_seven_day_review_report(self):
         self.assertIn("function exportFamilyReviewReport()", HTML)

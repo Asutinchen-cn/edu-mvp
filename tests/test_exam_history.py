@@ -1,9 +1,11 @@
 import json
 import unittest
+from datetime import datetime, timezone
 
 from api.main import (
     _analysis_history_detail,
     _analysis_history_summary,
+    _build_review_schedule,
     _normalize_ai_analysis,
     _normalize_review_progress,
     generate_correction_sheet_pdf,
@@ -157,17 +159,25 @@ class AnalysisHistoryDetailTest(unittest.TestCase):
 
 
 class ReviewProgressTest(unittest.TestCase):
-    def test_normalizes_completed_review_stages_in_teaching_order(self):
+    def test_normalizes_only_a_contiguous_teaching_sequence(self):
         progress = _normalize_review_progress(json.dumps({
             "completed": ["retested", "corrected", "unknown", "corrected"],
             "updated_at": "2026-07-15T12:00:00",
+            "completed_at": {
+                "corrected": "2026-07-15T10:00:00Z",
+                "retested": "2026-07-15T12:00:00Z",
+            },
         }))
 
-        self.assertEqual(progress["completed"], ["corrected", "retested"])
-        self.assertEqual(progress["completed_count"], 2)
+        self.assertEqual(progress["completed"], ["corrected"])
+        self.assertEqual(progress["completed_count"], 1)
         self.assertEqual(progress["total"], 3)
         self.assertEqual(progress["next_step"], "practiced")
         self.assertEqual(progress["updated_at"], "2026-07-15T12:00:00")
+        self.assertEqual(
+            progress["completed_at"],
+            {"corrected": "2026-07-15T10:00:00Z"},
+        )
 
     def test_invalid_review_progress_starts_from_correction(self):
         self.assertEqual(
@@ -178,8 +188,62 @@ class ReviewProgressTest(unittest.TestCase):
                 "total": 3,
                 "next_step": "corrected",
                 "updated_at": None,
+                "completed_at": {},
             },
         )
+
+    def test_builds_due_dates_for_the_three_step_review_rhythm(self):
+        created_at = datetime(2026, 7, 15, 4, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 7, 15, 8, 0, tzinfo=timezone.utc)
+
+        correction = _build_review_schedule(created_at, {}, now=now)
+        practice = _build_review_schedule(created_at, {
+            "completed": ["corrected"],
+            "completed_at": {"corrected": "2026-07-15T05:00:00Z"},
+        }, now=now)
+        retest = _build_review_schedule(created_at, {
+            "completed": ["corrected", "practiced"],
+            "completed_at": {
+                "corrected": "2026-07-15T05:00:00Z",
+                "practiced": "2026-07-15T06:00:00Z",
+            },
+        }, now=now)
+        overdue_retest = _build_review_schedule(
+            created_at,
+            {
+                "completed": ["corrected", "practiced"],
+                "completed_at": {
+                    "corrected": "2026-07-15T05:00:00Z",
+                    "practiced": "2026-07-15T06:00:00Z",
+                },
+            },
+            now=datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+        )
+        completed = _build_review_schedule(created_at, {
+            "completed": ["corrected", "practiced", "retested"],
+        }, now=now)
+
+        self.assertEqual(correction, {
+            "next_step": "corrected",
+            "due_at": "2026-07-15T04:00:00Z",
+            "status": "today",
+        })
+        self.assertEqual(practice, {
+            "next_step": "practiced",
+            "due_at": "2026-07-15T05:00:00Z",
+            "status": "today",
+        })
+        self.assertEqual(retest, {
+            "next_step": "retested",
+            "due_at": "2026-07-16T06:00:00Z",
+            "status": "upcoming",
+        })
+        self.assertEqual(overdue_retest["status"], "overdue")
+        self.assertEqual(completed, {
+            "next_step": None,
+            "due_at": None,
+            "status": "completed",
+        })
 
 
 class CorrectionSheetPdfTest(unittest.TestCase):

@@ -829,6 +829,17 @@
             color: var(--brand-blue);
             font-weight: 800;
         }
+        .review-task-due {
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: #e7f8f1;
+            color: #147557;
+            font-weight: 800;
+        }
+        .review-task-due.urgent {
+            background: #fff1f0;
+            color: #b42318;
+        }
         .review-task-action {
             min-width: 104px;
             min-height: 36px;
@@ -848,6 +859,27 @@
             color: var(--muted);
             font-size: 12px;
             line-height: 1.6;
+        }
+        .review-upcoming-row {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+            min-height: 46px;
+            padding: 10px 0;
+            color: var(--muted);
+            font-size: 11px;
+            border-bottom: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .review-upcoming-label {
+            color: var(--brand-orange);
+            font-weight: 900;
+        }
+        .review-upcoming-row strong {
+            min-width: 0;
+            color: var(--ink);
+            font-size: 12px;
+            overflow-wrap: anywhere;
         }
         .review-evidence { margin-top: 14px; }
 
@@ -1065,7 +1097,12 @@
             border-color: var(--success);
             background: #e7f8f1;
         }
+        .review-step.locked {
+            border-style: dashed;
+            background: #f6f8fb;
+        }
         .review-step:disabled { cursor: wait; opacity: 0.65; }
+        .review-step.locked:disabled { cursor: not-allowed; }
         .review-step-title {
             display: flex;
             align-items: center;
@@ -1816,6 +1853,7 @@
             }
             .review-task-row { grid-template-columns: 1fr; gap: 8px; padding: 12px 0; }
             .review-task-action { width: 100%; }
+            .review-upcoming-row { grid-template-columns: 1fr; gap: 3px; }
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
             .history-wrong-row { grid-template-columns: 1fr; gap: 6px; }
             .review-progress-head { flex-direction: column; gap: 4px; }
@@ -2544,9 +2582,10 @@ async function startAnalysis() {
         if (!analysisData) throw new Error('分析结果格式异常，请重新上传清晰试卷后再试');
 
         // Save to history
+        const createdAt = new Date().toISOString();
         const record = {
             id: Date.now(),
-            date: new Date().toISOString(),
+            date: createdAt,
             name: name,
             grade: grade,
             subject: subject,
@@ -2558,7 +2597,12 @@ async function startAnalysis() {
             serverId: analysisData.examIds[0] || null,
             imageAvailable: Boolean(analysisData.examIds[0]),
             serverSynced: Boolean(analysisData.examIds[0]),
-            reviewProgress: normalizeReviewProgress(null)
+            reviewProgress: normalizeReviewProgress(null),
+            reviewSchedule: normalizeReviewSchedule({
+                next_step: 'corrected',
+                due_at: createdAt,
+                status: 'today'
+            })
         };
         historyRecords.unshift(record);
         saveHistoryRecords();
@@ -3132,16 +3176,78 @@ function escapeHtml(value) {
 
 function normalizeReviewProgress(value) {
     const completedValues = Array.isArray(value?.completed) ? value.completed : [];
-    const completed = REVIEW_STEP_DEFINITIONS
-        .map(step => step.id)
-        .filter(step => completedValues.includes(step));
+    const completed = [];
+    for (const step of REVIEW_STEP_DEFINITIONS) {
+        if (!completedValues.includes(step.id)) break;
+        completed.push(step.id);
+    }
+    const rawCompletedAt = value?.completed_at || value?.completedAt || {};
+    const completedAt = Object.fromEntries(completed
+        .filter(step => rawCompletedAt[step])
+        .map(step => [step, rawCompletedAt[step]]));
     return {
         completed: completed,
         completedCount: completed.length,
         total: REVIEW_STEP_DEFINITIONS.length,
         nextStep: REVIEW_STEP_DEFINITIONS.find(step => !completed.includes(step.id))?.id || null,
-        updatedAt: value?.updated_at || value?.updatedAt || null
+        updatedAt: value?.updated_at || value?.updatedAt || null,
+        completedAt: completedAt
     };
+}
+
+function normalizeReviewSchedule(value) {
+    return {
+        nextStep: value?.next_step || value?.nextStep || null,
+        dueAt: value?.due_at || value?.dueAt || null,
+        status: value?.status || null
+    };
+}
+
+function localDayStart(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function reviewTaskTiming(schedule, now = new Date()) {
+    const normalized = normalizeReviewSchedule(schedule);
+    const dueDay = localDayStart(normalized.dueAt);
+    const today = localDayStart(now);
+    if (!dueDay || !today) {
+        return { bucket: 'today', label: '今天完成', rank: 1, dueTime: 0 };
+    }
+
+    const dayDifference = Math.round((dueDay - today) / 86400000);
+    if (dayDifference < 0) {
+        return { bucket: 'today', label: '建议优先', rank: 0, dueTime: dueDay.getTime() };
+    }
+    if (dayDifference === 0) {
+        const label = normalized.nextStep === 'retested' ? '今天回测' : '今天完成';
+        return { bucket: 'today', label: label, rank: 1, dueTime: dueDay.getTime() };
+    }
+    if (dayDifference === 1 && normalized.nextStep === 'retested') {
+        return { bucket: 'upcoming', label: '明天回测', rank: 2, dueTime: dueDay.getTime() };
+    }
+    const dateLabel = `${dueDay.getMonth() + 1}月${dueDay.getDate()}日`;
+    return { bucket: 'upcoming', label: `${dateLabel}安排`, rank: 2, dueTime: dueDay.getTime() };
+}
+
+function recordReviewSchedule(record, progress = normalizeReviewProgress(record?.reviewProgress)) {
+    const saved = normalizeReviewSchedule(record?.reviewSchedule);
+    if (saved.dueAt || (saved.nextStep === null && progress.nextStep === null)) return saved;
+    if (!progress.nextStep) return normalizeReviewSchedule({ status: 'completed' });
+
+    let dueAt = record?.date || new Date().toISOString();
+    if (progress.nextStep === 'practiced') {
+        dueAt = progress.completedAt.corrected || progress.updatedAt || dueAt;
+    } else if (progress.nextStep === 'retested') {
+        const practiceAt = new Date(progress.completedAt.practiced || progress.updatedAt || dueAt);
+        if (!Number.isNaN(practiceAt.getTime())) {
+            practiceAt.setDate(practiceAt.getDate() + 1);
+            dueAt = practiceAt.toISOString();
+        }
+    }
+    return normalizeReviewSchedule({ next_step: progress.nextStep, due_at: dueAt });
 }
 
 function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
@@ -3170,7 +3276,8 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         imageAvailable: Boolean(exam.image_available),
         serverSynced: true,
         correctionExporting: false,
-        reviewProgress: normalizeReviewProgress(exam.review_progress)
+        reviewProgress: normalizeReviewProgress(exam.review_progress),
+        reviewSchedule: normalizeReviewSchedule(exam.review_schedule)
     };
 }
 
@@ -3196,11 +3303,16 @@ function historyAnalysisData(record) {
 function renderReviewProgress(record) {
     if (!record.serverId) return '';
     const progress = normalizeReviewProgress(record.reviewProgress);
+    const schedule = recordReviewSchedule(record, progress);
+    const timing = reviewTaskTiming(schedule);
+    const retestLocked = progress.nextStep === 'retested' && timing.bucket === 'upcoming';
     const percent = Math.round((progress.completedCount / progress.total) * 100);
     const nextDefinition = REVIEW_STEP_DEFINITIONS.find(step => step.id === progress.nextStep);
     const statusText = record.progressSaving
         ? '正在保存...'
-        : (nextDefinition ? `下一步：${nextDefinition.label}` : '本轮复习已完成');
+        : (retestLocked
+            ? `${timing.label}再开始`
+            : (nextDefinition ? `下一步：${nextDefinition.label}` : '本轮复习已完成'));
     const recordId = escapeHtml(JSON.stringify(record.id));
 
     return `
@@ -3215,13 +3327,14 @@ function renderReviewProgress(record) {
             <div class="review-step-list">
                 ${REVIEW_STEP_DEFINITIONS.map(step => {
                     const done = progress.completed.includes(step.id);
+                    const locked = !done && step.id === 'retested' && retestLocked;
                     return `
-                        <button type="button" class="review-step ${done ? 'done' : ''}"
+                        <button type="button" class="review-step ${done ? 'done' : ''} ${locked ? 'locked' : ''}"
                             aria-pressed="${done ? 'true' : 'false'}"
-                            ${record.progressSaving ? 'disabled' : ''}
+                            ${record.progressSaving || locked ? 'disabled' : ''}
                             onclick="toggleReviewStep(${recordId}, '${step.id}')">
                             <span class="review-step-title"><span class="review-step-mark">✓</span>${escapeHtml(step.label)}</span>
-                            <span class="review-step-desc">${escapeHtml(step.description)}</span>
+                            <span class="review-step-desc">${escapeHtml(locked ? `${timing.label}到期后自动开放` : step.description)}</span>
                         </button>`;
                 }).join('')}
             </div>
@@ -3478,10 +3591,6 @@ function buildReviewDashboard(records) {
         .sort((a, b) => new Date(b.date) - new Date(a.date));
     const latestRecord = recordsByLatest[0] || null;
     const latestFocus = latestRecord ? recordWeakPoints(latestRecord)[0] : '';
-    const incompleteRecord = recordsByLatest.find(record => {
-        const progress = normalizeReviewProgress(record.reviewProgress);
-        return record.serverId && progress.completedCount < progress.total;
-    }) || null;
     const pendingTasks = recordsByLatest
         .filter(record => {
             const progress = normalizeReviewProgress(record.reviewProgress);
@@ -3489,6 +3598,8 @@ function buildReviewDashboard(records) {
         })
         .map(record => {
             const progress = normalizeReviewProgress(record.reviewProgress);
+            const schedule = recordReviewSchedule(record, progress);
+            const timing = reviewTaskTiming(schedule);
             const nextStep = REVIEW_STEP_DEFINITIONS.find(step => step.id === progress.nextStep);
             return {
                 id: record.id,
@@ -3497,9 +3608,16 @@ function buildReviewDashboard(records) {
                 completedCount: progress.completedCount,
                 total: progress.total,
                 nextStep: nextStep?.label || '继续复习',
-                date: record.date
+                date: record.date,
+                schedule: schedule,
+                timing: timing
             };
-        });
+        })
+        .sort((a, b) => a.timing.rank - b.timing.rank
+            || a.timing.dueTime - b.timing.dueTime
+            || new Date(b.date) - new Date(a.date));
+    const todayTasks = pendingTasks.filter(task => task.timing.bucket === 'today');
+    const upcomingTasks = pendingTasks.filter(task => task.timing.bucket === 'upcoming');
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
@@ -3511,12 +3629,14 @@ function buildReviewDashboard(records) {
 
     let nextTitle = '上传最近一份试卷';
     let nextAction = '建立第一条可追踪的错题记录，再安排针对性复习。';
-    if (incompleteRecord) {
-        const progress = normalizeReviewProgress(incompleteRecord.reviewProgress);
-        const nextStep = REVIEW_STEP_DEFINITIONS.find(step => step.id === progress.nextStep);
-        const focus = recordWeakPoints(incompleteRecord)[0] || '这份错题';
-        nextTitle = `继续${nextStep?.label || '复习'}`;
-        nextAction = `“${focus}”当前完成 ${progress.completedCount}/${progress.total} 步，完成后在记录中打勾。`;
+    if (todayTasks.length) {
+        const task = todayTasks[0];
+        nextTitle = `${task.timing.label}：${task.nextStep}`;
+        nextAction = `“${task.focus}”当前完成 ${task.completedCount}/${task.total} 步，今天完成后再在记录中打勾。`;
+    } else if (upcomingTasks.length) {
+        const task = upcomingTasks[0];
+        nextTitle = `${task.timing.label}：${task.nextStep}`;
+        nextAction = `“${task.focus}”还没到回测时间，今天先休息，到期后再独立完成。`;
     } else if (repeatedWeakPoint) {
         nextTitle = `优先复练“${repeatedWeakPoint.name}”`;
         nextAction = `这个薄弱点已在 ${repeatedWeakPoint.count} 份记录中出现。先回做代表错题，再做 5 道同类题。`;
@@ -3536,15 +3656,18 @@ function buildReviewDashboard(records) {
             : (topWeakPoint ? '目前每个薄弱点只出现 1 次' : '需要更多分析记录'),
         nextTitle: nextTitle,
         nextAction: nextAction,
-        pendingTasks: pendingTasks
+        pendingTasks: pendingTasks,
+        todayTasks: todayTasks,
+        upcomingTasks: upcomingTasks
     };
 }
 
 function renderReviewDashboard(records) {
     const dashboard = document.getElementById('reviewDashboard');
     const summary = buildReviewDashboard(records);
-    const visibleTasks = summary.pendingTasks.slice(0, 3);
-    const remainingTaskCount = Math.max(0, summary.pendingTasks.length - visibleTasks.length);
+    const visibleTasks = summary.todayTasks.slice(0, 3);
+    const remainingTaskCount = Math.max(0, summary.todayTasks.length - visibleTasks.length);
+    const nextUpcomingTask = summary.upcomingTasks[0] || null;
     const scopeLabel = currentSubjectArchive === 'all'
         ? '当前筛选：全部学科'
         : `当前筛选：${currentSubjectArchive === 'english' ? '英语' : '数学'}`;
@@ -3586,7 +3709,7 @@ function renderReviewDashboard(records) {
         <section class="review-task-list" aria-label="今日复习清单">
             <div class="review-task-head">
                 <h5>今日复习清单</h5>
-                <span class="review-task-count">${summary.pendingTasks.length} 项待完成</span>
+                <span class="review-task-count">${summary.todayTasks.length} 项今日处理</span>
             </div>
             ${visibleTasks.length ? visibleTasks.map(task => `
                 <div class="review-task-row">
@@ -3594,14 +3717,20 @@ function renderReviewDashboard(records) {
                         <div class="review-task-title">${escapeHtml(task.focus)}</div>
                         <div class="review-task-meta">
                             <span class="review-task-subject">${escapeHtml(task.subject)}</span>
+                            <span class="review-task-due ${task.timing.rank === 0 ? 'urgent' : ''}">${escapeHtml(task.timing.label)}</span>
                             <span>下一步：${escapeHtml(task.nextStep)}</span>
                             <span>完成 ${task.completedCount}/${task.total}</span>
-                            <span>${escapeHtml(new Date(task.date).toLocaleDateString('zh-CN'))}</span>
                         </div>
                     </div>
-                    <button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">继续复习 →</button>
-                </div>`).join('') : '<p class="review-task-empty">当前范围内没有待复习任务。</p>'}
-            ${remainingTaskCount ? `<p class="review-task-more">还有 ${remainingTaskCount} 项，可在下方“待复习”列表中继续。</p>` : ''}
+                    <button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">开始${escapeHtml(task.nextStep)} →</button>
+                </div>`).join('') : '<p class="review-task-empty">今天没有到期任务，不用提前做隔天回测。</p>'}
+            ${remainingTaskCount ? `<p class="review-task-more">还有 ${remainingTaskCount} 项今日任务，可在下方“待复习”列表中继续。</p>` : ''}
+            ${nextUpcomingTask ? `
+                <div class="review-upcoming-row">
+                    <span class="review-upcoming-label">下一次安排</span>
+                    <strong>${escapeHtml(nextUpcomingTask.timing.label)} · ${escapeHtml(nextUpcomingTask.focus)}</strong>
+                    <span>${escapeHtml(nextUpcomingTask.nextStep)}</span>
+                </div>` : ''}
         </section>
         <p class="review-evidence">这些数字只反映已保存的分析记录，不代表考试成绩；“反复薄弱点”仅按同名知识点统计。</p>
     `;
@@ -3765,6 +3894,7 @@ async function syncServerWrongBank(options = {}) {
                 weakPoint: record.weakPoint !== '待分析' ? record.weakPoint : existing.weakPoint,
                 weakPoints: record.weakPoints.length ? record.weakPoints : existing.weakPoints,
                 reviewProgress: record.reviewProgress,
+                reviewSchedule: record.reviewSchedule,
                 serverSynced: true
             });
         });
@@ -3889,6 +4019,7 @@ async function loadHistoryDetail(id) {
         record.weakPoint = record.weakPoints[0] || record.weakPoint || '待分析';
         record.imageAvailable = Boolean(detail.image_available);
         record.reviewProgress = normalizeReviewProgress(detail.review_progress);
+        record.reviewSchedule = normalizeReviewSchedule(detail.review_schedule);
         saveHistoryRecords();
     } catch (e) {
         record.detailError = e.message || '服务器暂时不可用';
@@ -3903,9 +4034,10 @@ async function toggleReviewStep(id, step) {
     if (!record?.serverId || record.progressSaving || !REVIEW_STEP_DEFINITIONS.some(item => item.id === step)) return;
 
     const previousProgress = normalizeReviewProgress(record.reviewProgress);
+    const stepIndex = REVIEW_STEP_DEFINITIONS.findIndex(item => item.id === step);
     const completed = previousProgress.completed.includes(step)
-        ? previousProgress.completed.filter(item => item !== step)
-        : [...previousProgress.completed, step];
+        ? REVIEW_STEP_DEFINITIONS.slice(0, stepIndex).map(item => item.id)
+        : REVIEW_STEP_DEFINITIONS.slice(0, stepIndex + 1).map(item => item.id);
     record.progressSaving = true;
     renderHistory();
 
@@ -3917,6 +4049,7 @@ async function toggleReviewStep(id, step) {
             body: JSON.stringify({ completed: completed })
         });
         record.reviewProgress = normalizeReviewProgress(data.review_progress);
+        record.reviewSchedule = normalizeReviewSchedule(data.review_schedule);
         saveHistoryRecords();
         const status = document.getElementById('historySyncStatus');
         if (record.reviewProgress.completedCount === record.reviewProgress.total) {

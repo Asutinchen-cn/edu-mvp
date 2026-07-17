@@ -2356,10 +2356,35 @@ def _analysis_history_detail(
 
 
 REVIEW_STEPS = ("corrected", "practiced", "retested")
+SHANGHAI_TIMEZONE = timezone(timedelta(hours=8))
 
 
 class ReviewProgressRequest(BaseModel):
     completed: list[str] = Field(default_factory=list, max_length=3)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_review_datetime(value) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_utc_datetime(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _normalize_review_progress(raw_value: str | dict | None) -> dict:
@@ -2374,9 +2399,20 @@ def _normalize_review_progress(raw_value: str | dict | None) -> dict:
     raw_completed = value.get("completed", [])
     completed_values = raw_completed if isinstance(raw_completed, list) else []
     completed_set = {str(item).strip() for item in completed_values}
-    completed = [step for step in REVIEW_STEPS if step in completed_set]
-    next_step = next((step for step in REVIEW_STEPS if step not in completed_set), None)
+    completed = []
+    for step in REVIEW_STEPS:
+        if step not in completed_set:
+            break
+        completed.append(step)
+    next_step = REVIEW_STEPS[len(completed)] if len(completed) < len(REVIEW_STEPS) else None
     updated_at = value.get("updated_at")
+    raw_completed_at = value.get("completed_at", {})
+    completed_at_values = raw_completed_at if isinstance(raw_completed_at, dict) else {}
+    completed_at = {
+        step: str(completed_at_values.get(step)).strip()
+        for step in completed
+        if completed_at_values.get(step)
+    }
 
     return {
         "completed": completed,
@@ -2384,6 +2420,50 @@ def _normalize_review_progress(raw_value: str | dict | None) -> dict:
         "total": len(REVIEW_STEPS),
         "next_step": next_step,
         "updated_at": str(updated_at).strip() if updated_at else None,
+        "completed_at": completed_at,
+    }
+
+
+def _build_review_schedule(
+    created_at: datetime | str | None,
+    raw_progress: str | dict | None,
+    *,
+    now: datetime | None = None,
+) -> dict:
+    """根据三步完成时间计算下一个家庭复习节点。"""
+    progress = _normalize_review_progress(raw_progress)
+    next_step = progress["next_step"]
+    if next_step is None:
+        return {"next_step": None, "due_at": None, "status": "completed"}
+
+    current_time = _parse_review_datetime(now) or _utc_now()
+    created_time = _parse_review_datetime(created_at) or current_time
+    completed_at = progress["completed_at"]
+    updated_time = _parse_review_datetime(progress.get("updated_at"))
+
+    if next_step == "corrected":
+        due_time = created_time
+    elif next_step == "practiced":
+        due_time = (
+            _parse_review_datetime(completed_at.get("corrected"))
+            or updated_time
+            or created_time
+        )
+    else:
+        practice_time = (
+            _parse_review_datetime(completed_at.get("practiced"))
+            or updated_time
+            or created_time
+        )
+        due_time = practice_time + timedelta(days=1)
+
+    due_date = due_time.astimezone(SHANGHAI_TIMEZONE).date()
+    today = current_time.astimezone(SHANGHAI_TIMEZONE).date()
+    status = "overdue" if due_date < today else ("today" if due_date == today else "upcoming")
+    return {
+        "next_step": next_step,
+        "due_at": _format_utc_datetime(due_time),
+        "status": status,
     }
 
 
@@ -2434,6 +2514,7 @@ async def list_exams(
     exam_items = []
     for exam in exams:
         summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
+        review_progress = _normalize_review_progress(exam.review_progress)
         exam_items.append({
             "id": exam.id,
             "grade": exam.grade,
@@ -2443,7 +2524,8 @@ async def list_exams(
             "ocr_preview": exam.ocr_text[:50] + "..." if exam.ocr_text else None,
             "wrong_count": summary["wrong_count"],
             "weak_points": summary["weak_points"],
-            "review_progress": _normalize_review_progress(exam.review_progress),
+            "review_progress": review_progress,
+            "review_schedule": _build_review_schedule(exam.created_at, review_progress),
             "created": exam.created_at.isoformat() if exam.created_at else None,
         })
     db.close()
@@ -2494,6 +2576,7 @@ async def get_exam(
         "weak_points": summary["weak_points"],
         "recommendations": _stored_json(exam.recommendations, None),
         "review_progress": _normalize_review_progress(exam.review_progress),
+        "review_schedule": _build_review_schedule(exam.created_at, exam.review_progress),
         "created": exam.created_at.isoformat() if exam.created_at else None
     }
     db.close()
@@ -2560,15 +2643,47 @@ async def update_review_progress(
         db.close()
         return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
+    previous_progress = _normalize_review_progress(exam.review_progress)
+    completed = _normalize_review_progress({"completed": body.completed})["completed"]
+    current_time = _utc_now()
+    now_iso = _format_utc_datetime(current_time)
+    completed_at = {
+        step: previous_progress["completed_at"].get(step) or now_iso
+        for step in completed
+    }
+    if "retested" in completed and "retested" not in previous_progress["completed"]:
+        retest_schedule = _build_review_schedule(
+            exam.created_at,
+            {
+                "completed": ["corrected", "practiced"],
+                "completed_at": completed_at,
+                "updated_at": now_iso,
+            },
+            now=current_time,
+        )
+        if retest_schedule["status"] == "upcoming":
+            db.close()
+            return JSONResponse({
+                "success": False,
+                "error": "隔天回测将在明天自动开放",
+                "review_schedule": retest_schedule,
+            }, status_code=409)
     stored_progress = {
-        "completed": body.completed,
-        "updated_at": datetime.utcnow().isoformat() + "Z",
+        "completed": completed,
+        "updated_at": now_iso,
+        "completed_at": completed_at,
     }
     exam.review_progress = json.dumps(stored_progress, ensure_ascii=False)
     db.commit()
     progress = _normalize_review_progress(exam.review_progress)
+    schedule = _build_review_schedule(exam.created_at, progress)
     db.close()
-    return JSONResponse({"success": True, "exam_id": exam_id, "review_progress": progress})
+    return JSONResponse({
+        "success": True,
+        "exam_id": exam_id,
+        "review_progress": progress,
+        "review_schedule": schedule,
+    })
 
 @app.delete("/exams/{exam_id}")
 async def delete_exam(
