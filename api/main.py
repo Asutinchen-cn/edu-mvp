@@ -1965,6 +1965,7 @@ def _normalize_ai_analysis(raw_analysis, subject: str) -> dict:
             "error_type": str(item.get("error_type") or "待确认").strip(),
             "student_answer": str(item.get("student_answer") or "").strip(),
             "correct_answer": str(item.get("correct_answer") or "").strip(),
+            "knowledge_point": str(item.get("knowledge_point") or "").strip(),
         }
         evidence_text = " ".join(normalized_item.values())
         if not normalized_item["question"] or not _analysis_text_matches_subject(evidence_text, subject):
@@ -2055,8 +2056,8 @@ async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
 {{
     "subject": "{subject}",
     "wrong_questions": [
-        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案"}},
-        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案"}}
+        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案", "knowledge_point": "这道题对应的具体知识点"}},
+        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案", "knowledge_point": "这道题对应的具体知识点"}}
     ],
     "error_types": ["错误类型1", "错误类型2"],
     "weak_points": ["薄弱知识点1", "薄弱知识点2"],
@@ -2322,6 +2323,7 @@ def _analysis_history_detail(
             "error_type": str(item.get("error_type") or "待确认").strip(),
             "student_answer": str(item.get("student_answer") or "").strip(),
             "correct_answer": str(item.get("correct_answer") or "").strip(),
+            "knowledge_point": str(item.get("knowledge_point") or "").strip(),
         })
 
     weak_points = clean_list(analysis.get("weak_points"))
@@ -2533,6 +2535,96 @@ async def list_exams(
     return JSONResponse({
         "subject_archive": archive,
         "exams": exam_items,
+    })
+
+
+@app.get("/wrong-questions")
+async def list_wrong_questions(
+    grade: str = None,
+    student_name: str = None,
+    subject: str = None,
+    limit: int = 100,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """按知识点返回当前家庭可访问的单题错题。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    subject = (subject or "").strip()
+    if subject and subject not in SUBJECT_LABELS:
+        return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
+
+    db = SessionLocal()
+    candidates = (
+        db.query(Exam)
+        .filter(Exam.grade == grade, Exam.student_name == student_name)
+        .order_by(Exam.created_at.desc())
+        .all()
+    )
+    accessible_exams = [
+        exam for exam in candidates
+        if _exam_has_family_access(exam, grade, student_name, family_code)
+    ]
+    if not accessible_exams:
+        db.close()
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
+
+    archive = {"all": 0, "math": 0, "english": 0}
+    questions = []
+    max_questions = max(1, min(limit, 200))
+    for exam in accessible_exams:
+        analysis = _analysis_history_detail(
+            exam.ai_analysis,
+            exam.weak_points,
+            exam.recommendations,
+        )
+        fallback_knowledge_point = next(iter(analysis.get("weak_points", [])), "待归类")
+        review_progress = _normalize_review_progress(exam.review_progress)
+        review_schedule = _build_review_schedule(exam.created_at, review_progress)
+        for index, item in enumerate(analysis.get("wrong_questions", []), start=1):
+            if not item.get("question"):
+                continue
+            exam_subject = exam.subject if exam.subject in SUBJECT_LABELS else "math"
+            archive["all"] += 1
+            archive[exam_subject] += 1
+            if subject and exam_subject != subject:
+                continue
+            questions.append({
+                "id": f"{exam.id}-{index}",
+                "exam_id": exam.id,
+                "subject": exam_subject,
+                "question": item["question"],
+                "error_type": item["error_type"],
+                "student_answer": item["student_answer"],
+                "correct_answer": item["correct_answer"],
+                "knowledge_point": item.get("knowledge_point") or fallback_knowledge_point,
+                "review_progress": review_progress,
+                "review_schedule": review_schedule,
+                "created": exam.created_at.isoformat() if exam.created_at else None,
+            })
+
+    questions = questions[:max_questions]
+
+    knowledge_point_map = {}
+    for question in questions:
+        key = (question["subject"], question["knowledge_point"])
+        summary = knowledge_point_map.setdefault(key, {
+            "name": question["knowledge_point"],
+            "subject": question["subject"],
+            "wrong_count": 0,
+            "latest_created": question["created"],
+        })
+        summary["wrong_count"] += 1
+
+    db.close()
+    return JSONResponse({
+        "question_count": len(questions),
+        "subject_archive": archive,
+        "knowledge_points": list(knowledge_point_map.values()),
+        "questions": questions,
     })
 
 @app.get("/exams/{exam_id}")

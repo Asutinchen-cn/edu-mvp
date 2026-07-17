@@ -112,6 +112,7 @@ class AnalysisHistoryDetailTest(unittest.TestCase):
                 "error_type": "移项符号错误",
                 "student_answer": "x = 6",
                 "correct_answer": "x = 3",
+                "knowledge_point": "一元一次方程",
             }],
             "error_types": ["移项符号错误"],
             "weak_points": ["一元一次方程"],
@@ -120,6 +121,7 @@ class AnalysisHistoryDetailTest(unittest.TestCase):
         }, ensure_ascii=False))
 
         self.assertEqual(detail["wrong_questions"][0]["student_answer"], "x = 6")
+        self.assertEqual(detail["wrong_questions"][0]["knowledge_point"], "一元一次方程")
         self.assertEqual(detail["weak_points"], ["一元一次方程"])
         self.assertEqual(detail["root_cause"], "没有理解移项要改变符号。")
         self.assertEqual(detail["recommendations"], ["先口述等式两边同时运算的理由。"])

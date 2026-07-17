@@ -649,6 +649,32 @@
             line-height: 1.6;
         }
         .history-sync-status.show { display: block; }
+        .history-view-switch {
+            display: inline-grid;
+            grid-template-columns: repeat(2, minmax(110px, 1fr));
+            gap: 2px;
+            margin-bottom: 16px;
+            padding: 3px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #f4f8ff;
+        }
+        .history-view-button {
+            min-height: 34px;
+            padding: 0 14px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .history-view-button.active {
+            background: #fff;
+            color: var(--brand-blue);
+            box-shadow: 0 2px 8px rgba(23, 105, 232, 0.1);
+        }
         .date-range {
             display: flex; align-items: center; gap: 6px;
             margin-left: auto;
@@ -882,6 +908,90 @@
             overflow-wrap: anywhere;
         }
         .review-evidence { margin-top: 14px; }
+
+        .knowledge-bank {
+            border-top: 1px solid var(--line);
+        }
+        .knowledge-group {
+            padding: 18px 0;
+            border-bottom: 1px solid var(--line);
+        }
+        .knowledge-group-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .knowledge-group-title {
+            min-width: 0;
+        }
+        .knowledge-group-title h4 {
+            color: var(--ink);
+            font-size: 16px;
+            overflow-wrap: anywhere;
+        }
+        .knowledge-group-title p {
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+        .knowledge-count {
+            flex: 0 0 auto;
+            color: var(--brand-orange);
+            font-size: 13px;
+            font-weight: 900;
+        }
+        .knowledge-question-row {
+            display: grid;
+            grid-template-columns: 28px minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: start;
+            padding: 14px 0;
+            border-top: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .knowledge-question-row:first-child { margin-top: 12px; }
+        .knowledge-question-index {
+            color: var(--brand-blue);
+            font-size: 13px;
+            font-weight: 900;
+        }
+        .knowledge-question-body { min-width: 0; }
+        .knowledge-question-prompt {
+            color: var(--ink);
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.65;
+            overflow-wrap: anywhere;
+        }
+        .knowledge-question-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.55;
+        }
+        .knowledge-question-answer {
+            margin-top: 7px;
+            color: #176c54;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+        }
+        .knowledge-source-button {
+            min-height: 34px;
+            padding: 0 12px;
+            border: 1px solid rgba(23, 105, 232, 0.24);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .knowledge-source-button:hover { background: #edf5ff; }
 
         /* History items */
         .history-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1855,6 +1965,10 @@
             .review-task-action { width: 100%; }
             .review-upcoming-row { grid-template-columns: 1fr; gap: 3px; }
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
+            .history-view-switch { display: grid; width: 100%; }
+            .knowledge-group-head { gap: 8px; }
+            .knowledge-question-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
+            .knowledge-source-button { grid-column: 2; width: 100%; }
             .history-wrong-row { grid-template-columns: 1fr; gap: 6px; }
             .review-progress-head { flex-direction: column; gap: 4px; }
             .review-step-list { grid-template-columns: 1fr; }
@@ -2119,6 +2233,10 @@
         <h3>🕒 错题库 / 历史分析记录</h3>
         <span class="history-count" id="historyCount">共 0 条记录</span>
     </div>
+    <div class="history-view-switch" role="group" aria-label="错题库查看方式">
+        <button type="button" class="history-view-button active" data-history-view="exams" aria-pressed="true" onclick="setHistoryView('exams')">按试卷</button>
+        <button type="button" class="history-view-button" data-history-view="knowledge" aria-pressed="false" onclick="setHistoryView('knowledge')">按知识点</button>
+    </div>
     <section class="review-dashboard" id="reviewDashboard" aria-live="polite"></section>
     <div class="history-sync-status" id="historySyncStatus" role="status" aria-live="polite"></div>
     <div class="history-subjects">
@@ -2251,6 +2369,15 @@ let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]'
 let currentFilter = 'week';
 let currentSubjectArchive = 'all';
 let currentMasteryFilter = 'pending';
+let currentHistoryView = 'exams';
+let wrongQuestionBank = {
+    loaded: false,
+    loading: false,
+    error: '',
+    questions: [],
+    knowledgePoints: [],
+    subjectArchive: { all: 0, math: 0, english: 0 }
+};
 let familyReportExporting = false;
 let selectedRecordId = null;
 let pendingDeleteId = null;
@@ -2605,6 +2732,7 @@ async function startAnalysis() {
             })
         };
         historyRecords.unshift(record);
+        wrongQuestionBank.loaded = false;
         saveHistoryRecords();
 
         // Show result
@@ -3757,6 +3885,24 @@ function setHistoryFilter(filter) {
     });
 }
 
+async function setHistoryView(view) {
+    if (!['exams', 'knowledge'].includes(view)) return;
+    currentHistoryView = view;
+    document.querySelectorAll('[data-history-view]').forEach(button => {
+        const active = button.dataset.historyView === view;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    renderHistory();
+    if (view === 'knowledge' && !wrongQuestionBank.loaded && !wrongQuestionBank.loading) {
+        try {
+            await loadWrongQuestionBank({ quiet: true });
+        } catch (e) {
+            // The knowledge view renders the actionable query state.
+        }
+    }
+}
+
 function setSubjectArchive(subject) {
     currentSubjectArchive = subject;
     document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(t => {
@@ -3835,6 +3981,7 @@ async function submitWrongBankQuery(event) {
 
     try {
         const result = await syncServerWrongBank({ quiet: true });
+        await setHistoryView('knowledge');
         const historyStatus = document.getElementById('historySyncStatus');
         historyStatus.textContent = result.message;
         historyStatus.classList.add('show');
@@ -3845,6 +3992,57 @@ async function submitWrongBankQuery(event) {
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = '查询错题库';
+    }
+}
+
+async function loadWrongQuestionBank(options = {}) {
+    const quiet = Boolean(options.quiet);
+    const force = Boolean(options.force);
+    const grade = options.grade || document.getElementById('gradeSelect').value;
+    const studentName = options.studentName || (document.getElementById('studentName').value || '').trim();
+    if (!force && wrongQuestionBank.loaded) return wrongQuestionBank;
+    if (!grade || !studentName) {
+        const error = new Error('请先查询家庭错题库');
+        wrongQuestionBank.error = error.message;
+        renderHistory();
+        throw error;
+    }
+
+    let accessHeaders = options.accessHeaders;
+    try {
+        accessHeaders = accessHeaders || familyAccessHeaders();
+    } catch (error) {
+        wrongQuestionBank.error = error.message;
+        renderHistory();
+        throw error;
+    }
+
+    wrongQuestionBank.loading = true;
+    wrongQuestionBank.error = '';
+    renderHistory();
+    const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '200' });
+    try {
+        const data = await requestJson(`/wrong-questions?${params.toString()}`, {
+            method: 'GET',
+            headers: accessHeaders
+        });
+        wrongQuestionBank = {
+            loaded: true,
+            loading: false,
+            error: '',
+            questions: Array.isArray(data.questions) ? data.questions : [],
+            knowledgePoints: Array.isArray(data.knowledge_points) ? data.knowledge_points : [],
+            subjectArchive: data.subject_archive || { all: 0, math: 0, english: 0 }
+        };
+        renderHistory();
+        return wrongQuestionBank;
+    } catch (error) {
+        wrongQuestionBank.loading = false;
+        wrongQuestionBank.loaded = false;
+        wrongQuestionBank.error = error.message || '错题明细加载失败';
+        renderHistory();
+        if (!quiet) alert('加载错题明细失败：' + wrongQuestionBank.error);
+        throw error;
     }
 }
 
@@ -3870,9 +4068,6 @@ async function syncServerWrongBank(options = {}) {
     }
 
     const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '50' });
-    if (currentSubjectArchive !== 'all') {
-        params.set('subject', currentSubjectArchive);
-    }
     try {
         const data = await requestJson(`/exams?${params.toString()}`, {
             method: 'GET',
@@ -3900,14 +4095,27 @@ async function syncServerWrongBank(options = {}) {
         });
         historyRecords = [...recordMap.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
         saveHistoryRecords();
+        const questionBank = await loadWrongQuestionBank({
+            quiet: true,
+            force: true,
+            grade: grade,
+            studentName: studentName,
+            accessHeaders: accessHeaders
+        });
         setHistoryFilter('all');
         renderHistory();
         const subjectText = currentSubjectArchive === 'all' ? '全部学科' : (currentSubjectArchive === 'english' ? '英语' : '数学');
-        const message = serverRecords.length
-            ? `已同步 ${subjectText} ${serverRecords.length} 条家庭错题记录`
+        const visibleRecords = currentSubjectArchive === 'all'
+            ? serverRecords
+            : serverRecords.filter(record => record.subject === currentSubjectArchive);
+        const visibleQuestions = currentSubjectArchive === 'all'
+            ? questionBank.questions
+            : questionBank.questions.filter(item => item.subject === currentSubjectArchive);
+        const message = visibleRecords.length
+            ? `已同步 ${subjectText} ${visibleRecords.length} 份试卷、${visibleQuestions.length} 道错题`
             : `家庭错题库中暂无${subjectText}记录`;
         if (!quiet) alert(message);
-        return { count: serverRecords.length, message: message };
+        return { count: visibleRecords.length, message: message };
     } catch (e) {
         if (quiet) throw e;
         alert('查询家庭错题库失败：' + e.message);
@@ -3915,15 +4123,215 @@ async function syncServerWrongBank(options = {}) {
     }
 }
 
+function getDateFilteredWrongQuestions() {
+    const now = new Date();
+    let questions = [...wrongQuestionBank.questions];
+    if (currentFilter === 'week') {
+        const weekAgo = new Date(now - 7 * 86400000);
+        questions = questions.filter(item => new Date(item.created) >= weekAgo);
+    } else if (currentFilter === 'month') {
+        const monthAgo = new Date(now - 30 * 86400000);
+        questions = questions.filter(item => new Date(item.created) >= monthAgo);
+    }
+
+    const from = document.getElementById('dateFrom').value;
+    const to = document.getElementById('dateTo').value;
+    if (from) questions = questions.filter(item => new Date(item.created) >= new Date(from));
+    if (to) {
+        const toDate = new Date(to);
+        toDate.setHours(23, 59, 59);
+        questions = questions.filter(item => new Date(item.created) <= toDate);
+    }
+    return questions;
+}
+
+function wrongQuestionMasteryStatus(question) {
+    const progress = normalizeReviewProgress(question.review_progress);
+    return progress.completedCount === progress.total ? 'mastered' : 'pending';
+}
+
+function getFilteredWrongQuestions() {
+    let questions = getDateFilteredWrongQuestions();
+    if (currentSubjectArchive !== 'all') {
+        questions = questions.filter(item => item.subject === currentSubjectArchive);
+    }
+    if (currentMasteryFilter !== 'all') {
+        questions = questions.filter(item => wrongQuestionMasteryStatus(item) === currentMasteryFilter);
+    }
+    return questions;
+}
+
+function updateKnowledgeViewCounts() {
+    const datedQuestions = getDateFilteredWrongQuestions();
+    const subjectCounts = datedQuestions.reduce((counts, item) => {
+        const subject = item.subject === 'english' ? 'english' : 'math';
+        counts.all += 1;
+        counts[subject] += 1;
+        return counts;
+    }, { all: 0, math: 0, english: 0 });
+    document.getElementById('subjectCountAll').textContent = subjectCounts.all;
+    document.getElementById('subjectCountMath').textContent = subjectCounts.math;
+    document.getElementById('subjectCountEnglish').textContent = subjectCounts.english;
+
+    const subjectQuestions = currentSubjectArchive === 'all'
+        ? datedQuestions
+        : datedQuestions.filter(item => item.subject === currentSubjectArchive);
+    const masteryCounts = subjectQuestions.reduce((counts, item) => {
+        counts.all += 1;
+        counts[wrongQuestionMasteryStatus(item)] += 1;
+        return counts;
+    }, { all: 0, pending: 0, mastered: 0 });
+    document.getElementById('masteryCountPending').textContent = masteryCounts.pending;
+    document.getElementById('masteryCountMastered').textContent = masteryCounts.mastered;
+    document.getElementById('masteryCountAll').textContent = masteryCounts.all;
+}
+
+function renderKnowledgeQuestionBank() {
+    const list = document.getElementById('historyList');
+    updateKnowledgeViewCounts();
+    if (wrongQuestionBank.loading) {
+        document.getElementById('historyCount').textContent = '正在整理错题明细';
+        list.innerHTML = '<div class="empty-state"><div class="empty-title">正在按知识点归档...</div><div class="empty-desc">请稍候，错题原文和答案正在加载。</div></div>';
+        return;
+    }
+    if (!wrongQuestionBank.loaded) {
+        document.getElementById('historyCount').textContent = '尚未查询家庭错题库';
+        list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-title">先查询家庭错题库</div>
+                <div class="empty-desc">${escapeHtml(wrongQuestionBank.error || '输入孩子资料和家庭访问码后，即可按知识点查看服务器错题。')}</div>
+                <button type="button" class="history-action" onclick="openWrongBankQuery()">查询家庭错题库</button>
+            </div>`;
+        return;
+    }
+
+    const questions = getFilteredWrongQuestions();
+    const groups = new Map();
+    questions.forEach(item => {
+        const knowledgePoint = item.knowledge_point || '待归类';
+        const key = `${item.subject || 'math'}:${knowledgePoint}`;
+        if (!groups.has(key)) {
+            groups.set(key, { name: knowledgePoint, subject: item.subject || 'math', questions: [] });
+        }
+        groups.get(key).questions.push(item);
+    });
+    const groupedQuestions = [...groups.values()].sort((a, b) => {
+        const aDate = new Date(a.questions[0]?.created || 0).getTime();
+        const bDate = new Date(b.questions[0]?.created || 0).getTime();
+        return bDate - aDate;
+    });
+    document.getElementById('historyCount').textContent = `${questions.length} 道错题 · ${groupedQuestions.length} 个知识点`;
+
+    if (!groupedQuestions.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-title">当前筛选下没有错题</div>
+                <div class="empty-desc">可以切换学科、复习状态或日期范围继续查看。</div>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = '<div class="knowledge-bank">' + groupedQuestions.map(group => {
+        const subjectLabel = group.subject === 'english' ? '英语' : '数学';
+        const latestDate = new Date(group.questions[0]?.created).toLocaleDateString('zh-CN');
+        return `
+            <section class="knowledge-group">
+                <div class="knowledge-group-head">
+                    <div class="knowledge-group-title">
+                        <h4>${escapeHtml(group.name)}</h4>
+                        <p>${subjectLabel} · 最近错题 ${escapeHtml(latestDate)}</p>
+                    </div>
+                    <span class="knowledge-count">${group.questions.length} 道</span>
+                </div>
+                <div class="knowledge-questions">
+                    ${group.questions.map((item, index) => {
+                        const reviewStatus = wrongQuestionMasteryStatus(item) === 'mastered' ? '已掌握' : '待复习';
+                        const studentAnswer = item.student_answer
+                            ? `<span>学生答案：${escapeHtml(item.student_answer)}</span>`
+                            : '';
+                        const correctAnswer = item.correct_answer
+                            ? `<div class="knowledge-question-answer">正确答案：${escapeHtml(item.correct_answer)}</div>`
+                            : '';
+                        return `
+                            <div class="knowledge-question-row">
+                                <span class="knowledge-question-index">${index + 1}</span>
+                                <div class="knowledge-question-body">
+                                    <div class="knowledge-question-prompt">${escapeHtml(item.question)}</div>
+                                    <div class="knowledge-question-meta">
+                                        <span>错因：${escapeHtml(item.error_type || '待确认')}</span>
+                                        ${studentAnswer}
+                                        <span>${reviewStatus}</span>
+                                    </div>
+                                    ${correctAnswer}
+                                </div>
+                                <button type="button" class="knowledge-source-button" onclick="openQuestionSourceExam(${Number(item.exam_id)})">查看原记录</button>
+                            </div>`;
+                    }).join('')}
+                </div>
+            </section>`;
+    }).join('') + '</div>';
+}
+
+async function openQuestionSourceExam(examId) {
+    let record = historyRecords.find(item => Number(item.serverId) === Number(examId));
+    if (!record) {
+        const grade = document.getElementById('gradeSelect').value;
+        const studentName = (document.getElementById('studentName').value || '').trim();
+        const params = new URLSearchParams({ grade: grade, student_name: studentName });
+        try {
+            const detail = await requestJson(`/exams/${Number(examId)}?${params.toString()}`, {
+                method: 'GET',
+                headers: familyAccessHeaders()
+            });
+            record = makeServerHistoryRecord(detail, grade, studentName);
+            record.analysis = detail.analysis || detail.ai_analysis || null;
+            record.detailLoaded = true;
+            historyRecords.push(record);
+            historyRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+            saveHistoryRecords();
+        } catch (error) {
+            alert('加载原试卷记录失败：' + error.message);
+            return;
+        }
+    }
+    currentHistoryView = 'exams';
+    document.querySelectorAll('[data-history-view]').forEach(button => {
+        const active = button.dataset.historyView === 'exams';
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    currentMasteryFilter = 'all';
+    document.querySelectorAll('[data-mastery-filter]').forEach(button => {
+        const active = button.dataset.masteryFilter === 'all';
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    currentSubjectArchive = record.subject || 'math';
+    document.querySelectorAll('[data-subject-filter]').forEach(button => {
+        button.classList.toggle('active', button.dataset.subjectFilter === currentSubjectArchive);
+    });
+    setHistoryFilter('all');
+    selectedRecordId = record.id;
+    renderHistory();
+    if (!record.detailLoaded && !record.detailLoading) await loadHistoryDetail(record.id);
+    window.requestAnimationFrame(() => {
+        document.querySelector('.history-item.selected')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+}
+
 function renderHistory() {
     const list = document.getElementById('historyList');
-    updateSubjectArchiveCounts(getDateFilteredRecords());
     const scopeRecords = getHistoryScopeRecords();
+    renderReviewDashboard(scopeRecords);
+    if (currentHistoryView === 'knowledge') {
+        renderKnowledgeQuestionBank();
+        return;
+    }
+    updateSubjectArchiveCounts(getDateFilteredRecords());
     updateMasteryFilterCounts(scopeRecords);
     const records = getFilteredRecords();
     const masteryLabels = { pending: '待复习', mastered: '已掌握', all: '全部' };
     document.getElementById('historyCount').textContent = `${masteryLabels[currentMasteryFilter]} ${records.length} 条 · 当前范围 ${scopeRecords.length} 条`;
-    renderReviewDashboard(scopeRecords);
 
     if (records.length === 0) {
         const emptyContent = scopeRecords.length && currentMasteryFilter === 'pending'

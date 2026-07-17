@@ -27,6 +27,7 @@ from api.main import (
     generate_practice,
     get_exam,
     get_exam_image,
+    list_wrong_questions,
     list_exams,
     update_review_progress,
     upload_exam,
@@ -92,6 +93,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
                         "error_type": "移项符号错误",
                         "student_answer": "x = 6",
                         "correct_answer": "x = 3",
+                        "knowledge_point": "一元一次方程",
                     }],
                     "weak_points": ["一元一次方程"],
                     "root_cause": "没有理解移项要改变符号。",
@@ -134,6 +136,56 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertTrue(payload["exams"][0]["image_available"])
         self.assertNotIn("image_url", payload["exams"][0])
         self.assertEqual(payload["exams"][0]["review_schedule"]["next_step"], "corrected")
+
+    def test_wrong_question_bank_flattens_and_groups_accessible_questions(self):
+        response = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+            limit=50,
+        ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["question_count"], 1)
+        self.assertEqual(payload["subject_archive"], {"all": 1, "math": 1, "english": 0})
+        self.assertEqual(payload["knowledge_points"], [{
+            "name": "一元一次方程",
+            "subject": "math",
+            "wrong_count": 1,
+            "latest_created": payload["questions"][0]["created"],
+        }])
+        self.assertEqual(payload["questions"][0]["id"], f"{self.first_exam_id}-1")
+        self.assertEqual(payload["questions"][0]["exam_id"], self.first_exam_id)
+        self.assertEqual(payload["questions"][0]["knowledge_point"], "一元一次方程")
+        self.assertEqual(payload["questions"][0]["review_schedule"]["next_step"], "corrected")
+
+    def test_wrong_question_bank_rejects_a_wrong_family_code(self):
+        response = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Wrong2026",
+        ))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_wrong_question_bank_uses_saved_weak_point_for_legacy_questions(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        analysis = json.loads(exam.ai_analysis)
+        analysis["wrong_questions"][0].pop("knowledge_point")
+        exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
+        db.commit()
+        db.close()
+
+        response = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(payload["questions"][0]["knowledge_point"], "一元一次方程")
 
     def test_review_progress_saves_each_step_time_and_enforces_the_retest_day(self):
         with patch("api.main._utc_now", return_value=datetime(2026, 7, 16, 6, 0, tzinfo=timezone.utc)):
@@ -312,6 +364,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
 
         self.assertNotIn("location /uploads", nginx_config)
         self.assertIn("family-review-report", nginx_config)
+        self.assertIn("wrong-questions", nginx_config)
         self.assertEqual(compose_config.count("./uploads:/uploads"), 1)
 
 

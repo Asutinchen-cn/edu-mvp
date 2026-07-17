@@ -119,6 +119,16 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("生成巩固练习", HTML)
         self.assertNotIn("<pre>${escapeHtml(r.result)}</pre>", HTML)
 
+    def test_wrong_bank_can_browse_questions_grouped_by_knowledge_point(self):
+        self.assertIn('data-history-view="exams"', HTML)
+        self.assertIn('data-history-view="knowledge"', HTML)
+        self.assertIn("function setHistoryView(view)", HTML)
+        self.assertIn("async function loadWrongQuestionBank", HTML)
+        self.assertIn("/wrong-questions?${params.toString()}", HTML)
+        self.assertIn("function renderKnowledgeQuestionBank()", HTML)
+        self.assertIn("function openQuestionSourceExam(examId)", HTML)
+        self.assertIn("按知识点", HTML)
+
     def test_history_can_export_a_protected_correction_sheet(self):
         self.assertIn("function exportCorrectionSheet(id)", HTML)
         self.assertIn("/correction-sheet?${params.toString()}", HTML)
