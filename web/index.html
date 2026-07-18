@@ -916,6 +916,10 @@
             padding: 18px 0;
             border-bottom: 1px solid var(--line);
         }
+        .knowledge-group.review-target {
+            border-color: var(--brand-blue-2);
+            box-shadow: inset 3px 0 0 var(--brand-blue-2);
+        }
         .knowledge-group-head {
             display: flex;
             align-items: flex-start;
@@ -3770,8 +3774,114 @@ function recordWeakPoints(record) {
     return [...new Set(values.map(value => String(value || '').trim()).filter(value => value && !ignored.has(value)))];
 }
 
+function buildKnowledgeReviewTasks() {
+    if (!wrongQuestionBank.loaded) return null;
+
+    let questions = getDateFilteredWrongQuestions();
+    if (currentSubjectArchive !== 'all') {
+        questions = questions.filter(question => question.subject === currentSubjectArchive);
+    }
+
+    const groups = new Map();
+    questions.forEach(question => {
+        const subjectKey = question.subject === 'english' ? 'english' : 'math';
+        const knowledgePoint = String(question.knowledge_point || '待归类').trim() || '待归类';
+        const key = JSON.stringify([subjectKey, knowledgePoint]);
+        if (!groups.has(key)) {
+            groups.set(key, {
+                subjectKey: subjectKey,
+                subject: subjectKey === 'english' ? '英语' : '数学',
+                focus: knowledgePoint,
+                questions: [],
+                pendingQuestions: [],
+                examIds: new Set(),
+                latestDate: question.created || ''
+            });
+        }
+        const group = groups.get(key);
+        group.questions.push(question);
+        if (Number(question.exam_id) > 0) group.examIds.add(Number(question.exam_id));
+        if (new Date(question.created) > new Date(group.latestDate)) group.latestDate = question.created;
+        if (wrongQuestionMasteryStatus(question) === 'pending') {
+            group.pendingQuestions.push(question);
+        }
+    });
+
+    const groupSummaries = [...groups.values()].map(group => ({
+        ...group,
+        totalCount: group.questions.length,
+        pendingCount: group.pendingQuestions.length,
+        sourceExamCount: group.examIds.size
+    }));
+    const tasks = groupSummaries
+        .filter(group => group.pendingCount > 0)
+        .map(group => {
+            const candidates = group.pendingQuestions.map(question => {
+                const progress = normalizeReviewProgress(question.review_progress);
+                const savedSchedule = normalizeReviewSchedule(question.review_schedule);
+                const reopened = savedSchedule.status === 'completed'
+                    || (!savedSchedule.nextStep && !progress.nextStep);
+                if (reopened) {
+                    return {
+                        nextStep: '重新巩固',
+                        timing: { bucket: 'today', label: '今天重新巩固', rank: 1, dueTime: 0 }
+                    };
+                }
+                const schedule = savedSchedule.dueAt
+                    ? savedSchedule
+                    : recordReviewSchedule({
+                        date: question.created,
+                        reviewProgress: progress,
+                        reviewSchedule: savedSchedule
+                    }, progress);
+                const nextStepId = schedule.nextStep || progress.nextStep;
+                const nextDefinition = REVIEW_STEP_DEFINITIONS.find(step => step.id === nextStepId);
+                return {
+                    nextStep: nextDefinition?.label || '继续复习',
+                    timing: reviewTaskTiming(schedule)
+                };
+            }).sort((a, b) => a.timing.rank - b.timing.rank || a.timing.dueTime - b.timing.dueTime);
+            const next = candidates[0] || {
+                nextStep: '继续复习',
+                timing: { bucket: 'today', label: '今天完成', rank: 1, dueTime: 0 }
+            };
+            return {
+                mode: 'knowledge',
+                subjectKey: group.subjectKey,
+                subject: group.subject,
+                focus: group.focus,
+                pendingCount: group.pendingCount,
+                totalCount: group.totalCount,
+                sourceExamCount: group.sourceExamCount,
+                latestDate: group.latestDate,
+                nextStep: next.nextStep,
+                timing: next.timing
+            };
+        })
+        .sort((a, b) => a.timing.rank - b.timing.rank
+            || a.timing.dueTime - b.timing.dueTime
+            || b.pendingCount - a.pendingCount
+            || new Date(b.latestDate) - new Date(a.latestDate));
+    const rankedGroups = [...groupSummaries]
+        .sort((a, b) => b.sourceExamCount - a.sourceExamCount
+            || b.totalCount - a.totalCount
+            || a.focus.localeCompare(b.focus, 'zh-CN'));
+
+    return {
+        totalCount: questions.length,
+        pendingCount: questions.filter(question => wrongQuestionMasteryStatus(question) === 'pending').length,
+        masteredCount: questions.filter(question => wrongQuestionMasteryStatus(question) === 'mastered').length,
+        tasks: tasks,
+        todayTasks: tasks.filter(task => task.timing.bucket === 'today'),
+        upcomingTasks: tasks.filter(task => task.timing.bucket === 'upcoming'),
+        repeatedWeakPoint: rankedGroups.find(group => group.sourceExamCount >= 2) || null,
+        topWeakPoint: rankedGroups[0] || null
+    };
+}
+
 function buildReviewDashboard(records) {
     const safeRecords = Array.isArray(records) ? records : [];
+    const knowledgeSummary = buildKnowledgeReviewTasks();
     const knownCounts = safeRecords.map(historyWrongCount).filter(count => count !== null);
     const confirmedWrongCount = knownCounts.reduce((sum, count) => sum + count, 0);
     const subjectCounts = safeRecords.reduce((counts, record) => {
@@ -3789,14 +3899,26 @@ function buildReviewDashboard(records) {
     const rankedWeakPoints = [...weakFrequency.entries()]
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'));
-    const topWeakPoint = rankedWeakPoints[0] || null;
-    const repeatedWeakPoint = topWeakPoint?.count >= 2 ? topWeakPoint : null;
+    const recordTopWeakPoint = rankedWeakPoints[0] || null;
+    const recordRepeatedWeakPoint = recordTopWeakPoint?.count >= 2 ? recordTopWeakPoint : null;
+    const topWeakPoint = knowledgeSummary?.topWeakPoint
+        ? { name: knowledgeSummary.topWeakPoint.focus, count: knowledgeSummary.topWeakPoint.sourceExamCount }
+        : recordTopWeakPoint;
+    const repeatedWeakPoint = knowledgeSummary
+        ? (knowledgeSummary.repeatedWeakPoint
+            ? {
+                name: knowledgeSummary.repeatedWeakPoint.focus,
+                count: knowledgeSummary.repeatedWeakPoint.sourceExamCount,
+                pendingCount: knowledgeSummary.repeatedWeakPoint.pendingCount
+            }
+            : null)
+        : recordRepeatedWeakPoint;
     const recordsByLatest = [...safeRecords]
         .filter(record => !Number.isNaN(new Date(record.date).getTime()))
         .sort((a, b) => new Date(b.date) - new Date(a.date));
     const latestRecord = recordsByLatest[0] || null;
     const latestFocus = latestRecord ? recordWeakPoints(latestRecord)[0] : '';
-    const pendingTasks = recordsByLatest
+    const recordPendingTasks = recordsByLatest
         .filter(record => {
             const progress = normalizeReviewProgress(record.reviewProgress);
             return record.serverId && progress.completedCount < progress.total;
@@ -3821,30 +3943,40 @@ function buildReviewDashboard(records) {
         .sort((a, b) => a.timing.rank - b.timing.rank
             || a.timing.dueTime - b.timing.dueTime
             || new Date(b.date) - new Date(a.date));
-    const todayTasks = pendingTasks.filter(task => task.timing.bucket === 'today');
-    const upcomingTasks = pendingTasks.filter(task => task.timing.bucket === 'upcoming');
+    const pendingTasks = knowledgeSummary ? knowledgeSummary.tasks : recordPendingTasks;
+    const todayTasks = knowledgeSummary ? knowledgeSummary.todayTasks : recordPendingTasks.filter(task => task.timing.bucket === 'today');
+    const upcomingTasks = knowledgeSummary ? knowledgeSummary.upcomingTasks : recordPendingTasks.filter(task => task.timing.bucket === 'upcoming');
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
         subjectCounts.english ? `英语 ${subjectCounts.english} 份` : ''
     ].filter(Boolean).join(' · ') || '尚无学科记录';
-    const countNote = knownCounts.length
-        ? `${knownCounts.length === safeRecords.length ? '统计' : '仅统计'} ${knownCounts.length} 份有错题明细的记录`
-        : '旧记录暂无错题数明细';
+    const countNote = knowledgeSummary
+        ? `服务器逐题状态：待复习 ${knowledgeSummary.pendingCount} 道 · 已掌握 ${knowledgeSummary.masteredCount} 道`
+        : (knownCounts.length
+            ? `${knownCounts.length === safeRecords.length ? '统计' : '仅统计'} ${knownCounts.length} 份有错题明细的记录`
+            : '旧记录暂无错题数明细');
 
     let nextTitle = '上传最近一份试卷';
     let nextAction = '建立第一条可追踪的错题记录，再安排针对性复习。';
     if (todayTasks.length) {
         const task = todayTasks[0];
-        nextTitle = `${task.timing.label}：${task.nextStep}`;
-        nextAction = `“${task.focus}”当前完成 ${task.completedCount}/${task.total} 步，今天完成后再在记录中打勾。`;
+        nextTitle = task.mode === 'knowledge'
+            ? `${task.timing.label}“${task.focus}”`
+            : `${task.timing.label}：${task.nextStep}`;
+        nextAction = task.mode === 'knowledge'
+            ? `“${task.focus}”还有 ${task.pendingCount} 道待复习错题，先看原错因，再完成同类练习。`
+            : `“${task.focus}”当前完成 ${task.completedCount}/${task.total} 步，今天完成后再在记录中打勾。`;
     } else if (upcomingTasks.length) {
         const task = upcomingTasks[0];
         nextTitle = `${task.timing.label}：${task.nextStep}`;
         nextAction = `“${task.focus}”还没到回测时间，今天先休息，到期后再独立完成。`;
+    } else if (knowledgeSummary?.totalCount && knowledgeSummary.pendingCount === 0) {
+        nextTitle = '当前错题已全部掌握';
+        nextAction = '今天没有待复习错题，可以上传最近试卷继续更新学情。';
     } else if (repeatedWeakPoint) {
         nextTitle = `优先复练“${repeatedWeakPoint.name}”`;
-        nextAction = `这个薄弱点已在 ${repeatedWeakPoint.count} 份记录中出现。先回做代表错题，再做 5 道同类题。`;
+        nextAction = `这个薄弱点已在 ${repeatedWeakPoint.count} 份试卷中出现。先回做代表错题，再做 5 道同类题。`;
     } else if (latestFocus) {
         nextTitle = `巩固“${latestFocus}”`;
         nextAction = '目前还没有反复薄弱点。建议完成一次同类练习，下次上传时再对比。';
@@ -3853,11 +3985,13 @@ function buildReviewDashboard(records) {
     return {
         analysisCount: safeRecords.length,
         subjectSummary: subjectSummary,
-        confirmedWrongCount: knownCounts.length ? String(confirmedWrongCount) : '待同步',
+        confirmedWrongCount: knowledgeSummary
+            ? String(knowledgeSummary.totalCount)
+            : (knownCounts.length ? String(confirmedWrongCount) : '待同步'),
         countNote: countNote,
         repeatedWeakPoint: repeatedWeakPoint?.name || '暂无重复',
         repeatedNote: repeatedWeakPoint
-            ? `在 ${repeatedWeakPoint.count} 份记录中出现`
+            ? `在 ${repeatedWeakPoint.count} 份试卷中出现${Number.isFinite(repeatedWeakPoint.pendingCount) ? ` · 待复习 ${repeatedWeakPoint.pendingCount} 道` : ''}`
             : (topWeakPoint ? '目前每个薄弱点只出现 1 次' : '需要更多分析记录'),
         nextTitle: nextTitle,
         nextAction: nextAction,
@@ -3923,11 +4057,14 @@ function renderReviewDashboard(records) {
                         <div class="review-task-meta">
                             <span class="review-task-subject">${escapeHtml(task.subject)}</span>
                             <span class="review-task-due ${task.timing.rank === 0 ? 'urgent' : ''}">${escapeHtml(task.timing.label)}</span>
-                            <span>下一步：${escapeHtml(task.nextStep)}</span>
-                            <span>完成 ${task.completedCount}/${task.total}</span>
+                            ${task.mode === 'knowledge'
+                                ? `<span>待复习错题 ${task.pendingCount} 道</span><span>来自 ${task.sourceExamCount} 份试卷</span>`
+                                : `<span>下一步：${escapeHtml(task.nextStep)}</span><span>完成 ${task.completedCount}/${task.total}</span>`}
                         </div>
                     </div>
-                    <button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">开始${escapeHtml(task.nextStep)} →</button>
+                    ${task.mode === 'knowledge'
+                        ? `<button type="button" class="review-task-action" onclick="openKnowledgeReviewTask(${escapeHtml(JSON.stringify(task.subjectKey))}, ${escapeHtml(JSON.stringify(task.focus))})">查看错题 →</button>`
+                        : `<button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">开始${escapeHtml(task.nextStep)} →</button>`}
                 </div>`).join('') : '<p class="review-task-empty">今天没有到期任务，不用提前做隔天回测。</p>'}
             ${remainingTaskCount ? `<p class="review-task-more">还有 ${remainingTaskCount} 项今日任务，可在下方“待复习”列表中继续。</p>` : ''}
             ${nextUpcomingTask ? `
@@ -3937,7 +4074,7 @@ function renderReviewDashboard(records) {
                     <span>${escapeHtml(nextUpcomingTask.nextStep)}</span>
                 </div>` : ''}
         </section>
-        <p class="review-evidence">这些数字只反映已保存的分析记录，不代表考试成绩；“反复薄弱点”仅按同名知识点统计。</p>
+        <p class="review-evidence">数据来自服务器保存的试卷与逐题复习状态，不代表考试成绩；“反复薄弱点”仅按同名知识点统计。</p>
     `;
 }
 
@@ -3952,6 +4089,23 @@ async function openReviewTask(id) {
     }
     window.requestAnimationFrame(() => {
         document.querySelector('.history-item.selected')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+}
+
+async function openKnowledgeReviewTask(subject, knowledgePoint) {
+    setSubjectArchive(subject);
+    setMasteryFilter('pending');
+    await setHistoryView('knowledge');
+    window.requestAnimationFrame(() => {
+        const target = [...document.querySelectorAll('.knowledge-group')].find(group => (
+            group.dataset.subject === subject
+            && group.dataset.knowledgePoint === knowledgePoint
+        ));
+        if (!target) return;
+        target.classList.add('review-target');
+        target.focus({ preventScroll: true });
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.setTimeout(() => target.classList.remove('review-target'), 1800);
     });
 }
 
@@ -4318,7 +4472,7 @@ function renderKnowledgeQuestionBank() {
             ? `<button type="button" class="knowledge-practice-button" onclick="prepareKnowledgePractice(${escapeHtml(JSON.stringify(group.name))}, ${escapeHtml(JSON.stringify(group.subject))})">生成专项练习</button>`
             : '';
         return `
-            <section class="knowledge-group">
+            <section class="knowledge-group" tabindex="-1" data-subject="${escapeHtml(group.subject)}" data-knowledge-point="${escapeHtml(group.name)}">
                 <div class="knowledge-group-head">
                     <div class="knowledge-group-title">
                         <h4>${escapeHtml(group.name)}</h4>

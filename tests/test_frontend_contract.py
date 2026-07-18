@@ -108,7 +108,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("function renderReviewDashboard(records)", HTML)
         self.assertIn("function normalizeWrongCount(value)", HTML)
         self.assertIn("value === null || value === undefined || value === ''", HTML)
-        self.assertIn("只反映已保存的分析记录，不代表考试成绩", HTML)
+        self.assertIn("数据来自服务器保存的试卷与逐题复习状态，不代表考试成绩", HTML)
         self.assertNotIn("进步率", HTML)
 
     def test_history_records_render_readable_diagnosis_and_actions(self):
@@ -218,6 +218,16 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("REVIEW_STEP_DEFINITIONS.slice(0, stepIndex + 1)", HTML)
         self.assertIn("const retestLocked", HTML)
         self.assertIn("到期后自动开放", HTML)
+
+    def test_parent_dashboard_uses_question_mastery_for_knowledge_tasks(self):
+        self.assertIn("function buildKnowledgeReviewTasks()", HTML)
+        self.assertIn("wrongQuestionBank.loaded", HTML)
+        self.assertIn("wrongQuestionMasteryStatus(question) === 'pending'", HTML)
+        self.assertIn("sourceExamCount", HTML)
+        self.assertIn("待复习错题", HTML)
+        self.assertIn("function openKnowledgeReviewTask(subject, knowledgePoint)", HTML)
+        self.assertIn("data-knowledge-point=", HTML)
+        self.assertIn("查看错题", HTML)
 
     def test_parent_can_export_a_protected_seven_day_review_report(self):
         self.assertIn("function exportFamilyReviewReport()", HTML)
