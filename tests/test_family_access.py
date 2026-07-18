@@ -14,6 +14,7 @@ from api.main import (
     Base,
     Exam,
     ReviewProgressRequest,
+    WrongQuestionMasteryRequest,
     app,
     _exam_has_family_access,
     _hash_family_access_code,
@@ -30,6 +31,7 @@ from api.main import (
     list_wrong_questions,
     list_exams,
     update_review_progress,
+    update_wrong_question_mastery,
     upload_exam,
 )
 
@@ -157,8 +159,77 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         }])
         self.assertEqual(payload["questions"][0]["id"], f"{self.first_exam_id}-1")
         self.assertEqual(payload["questions"][0]["exam_id"], self.first_exam_id)
+        self.assertEqual(payload["questions"][0]["question_number"], 1)
         self.assertEqual(payload["questions"][0]["knowledge_point"], "一元一次方程")
+        self.assertFalse(payload["questions"][0]["mastered"])
         self.assertEqual(payload["questions"][0]["review_schedule"]["next_step"], "corrected")
+
+    def test_each_wrong_question_can_be_marked_mastered_independently(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        analysis = json.loads(exam.ai_analysis)
+        analysis["wrong_questions"].append({
+            "question": "解方程 5x - 2 = 13",
+            "error_type": "计算错误",
+            "student_answer": "x = 5",
+            "correct_answer": "x = 3",
+            "knowledge_point": "一元一次方程",
+        })
+        exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
+        db.commit()
+        db.close()
+
+        mastered = asyncio.run(update_wrong_question_mastery(
+            self.first_exam_id,
+            1,
+            WrongQuestionMasteryRequest(mastered=True),
+            "六年级",
+            "小明",
+            family_code="Home2026A",
+        ))
+        listed = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(mastered.status_code, 200)
+        self.assertTrue(json.loads(mastered.body)["mastered"])
+        self.assertEqual(
+            [item["mastered"] for item in json.loads(listed.body)["questions"]],
+            [True, False],
+        )
+
+        pending = asyncio.run(update_wrong_question_mastery(
+            self.first_exam_id,
+            1,
+            WrongQuestionMasteryRequest(mastered=False),
+            "六年级",
+            "小明",
+            family_code="Home2026A",
+        ))
+        relisted = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(pending.status_code, 200)
+        self.assertFalse(json.loads(pending.body)["mastered"])
+        self.assertFalse(json.loads(relisted.body)["questions"][0]["mastered"])
+
+    def test_wrong_question_mastery_rejects_unknown_question_number(self):
+        response = asyncio.run(update_wrong_question_mastery(
+            self.first_exam_id,
+            9,
+            WrongQuestionMasteryRequest(mastered=True),
+            "六年级",
+            "小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("错题不存在", json.loads(response.body)["error"])
 
     def test_wrong_question_bank_rejects_a_wrong_family_code(self):
         response = asyncio.run(list_wrong_questions(
@@ -235,6 +306,28 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("不在这份试卷", json.loads(response.body)["error"])
         generator.assert_not_awaited()
+
+    def test_reanalysis_clears_question_mastery_that_may_no_longer_match(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.wrong_question_mastery = json.dumps({"1": True})
+        saved_analysis = json.loads(exam.ai_analysis)
+        db.commit()
+        db.close()
+
+        with patch("api.main.ai_analyze", AsyncMock(return_value=saved_analysis)):
+            response = asyncio.run(analyze_exam(
+                self.first_exam_id,
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+
+        db = self.session_factory()
+        stored_mastery = db.query(Exam).filter(Exam.id == self.first_exam_id).one().wrong_question_mastery
+        db.close()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(stored_mastery)
 
     def test_review_progress_saves_each_step_time_and_enforces_the_retest_day(self):
         with patch("api.main._utc_now", return_value=datetime(2026, 7, 16, 6, 0, tzinfo=timezone.utc)):
@@ -376,6 +469,14 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             lambda: update_review_progress(
                 self.first_exam_id,
                 ReviewProgressRequest(completed=["corrected"]),
+                "六年级",
+                "小明",
+                family_code="Other2026B",
+            ),
+            lambda: update_wrong_question_mastery(
+                self.first_exam_id,
+                1,
+                WrongQuestionMasteryRequest(mastered=True),
                 "六年级",
                 "小明",
                 family_code="Other2026B",

@@ -992,6 +992,11 @@
             font-size: 12px;
             line-height: 1.55;
         }
+        .knowledge-question-meta .mastery-state {
+            color: var(--brand-orange);
+            font-weight: 800;
+        }
+        .knowledge-question-meta .mastery-state.mastered { color: #176c54; }
         .knowledge-question-answer {
             margin-top: 7px;
             color: #176c54;
@@ -1012,6 +1017,30 @@
             white-space: nowrap;
         }
         .knowledge-source-button:hover { background: #edf5ff; }
+        .knowledge-row-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 7px;
+        }
+        .knowledge-mastery-button {
+            min-height: 34px;
+            padding: 0 12px;
+            border: 1px solid rgba(33, 166, 122, 0.3);
+            border-radius: 8px;
+            background: #eefaf6;
+            color: #176c54;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .knowledge-mastery-button.mastered {
+            border-color: rgba(100, 116, 139, 0.25);
+            background: #f6f8fb;
+            color: var(--muted);
+        }
+        .knowledge-mastery-button:disabled { cursor: wait; opacity: 0.68; }
 
         /* History items */
         .history-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1989,7 +2018,8 @@
             .knowledge-group-head { gap: 8px; }
             .knowledge-group-actions { align-items: flex-end; flex-direction: column; gap: 6px; }
             .knowledge-question-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
-            .knowledge-source-button { grid-column: 2; width: 100%; }
+            .knowledge-row-actions { grid-column: 2; width: 100%; }
+            .knowledge-source-button, .knowledge-mastery-button { width: 100%; }
             .history-wrong-row { grid-template-columns: 1fr; gap: 6px; }
             .review-progress-head { flex-direction: column; gap: 4px; }
             .review-step-list { grid-template-columns: 1fr; }
@@ -4170,6 +4200,9 @@ function getDateFilteredWrongQuestions() {
 }
 
 function wrongQuestionMasteryStatus(question) {
+    if (typeof question.mastered === 'boolean') {
+        return question.mastered ? 'mastered' : 'pending';
+    }
     const progress = normalizeReviewProgress(question.review_progress);
     return progress.completedCount === progress.total ? 'mastered' : 'pending';
 }
@@ -4276,7 +4309,8 @@ function renderKnowledgeQuestionBank() {
                 </div>
                 <div class="knowledge-questions">
                     ${group.questions.map((item, index) => {
-                        const reviewStatus = wrongQuestionMasteryStatus(item) === 'mastered' ? '已掌握' : '待复习';
+                        const mastered = wrongQuestionMasteryStatus(item) === 'mastered';
+                        const reviewStatus = mastered ? '已掌握' : '待复习';
                         const studentAnswer = item.student_answer
                             ? `<span>学生答案：${escapeHtml(item.student_answer)}</span>`
                             : '';
@@ -4291,16 +4325,53 @@ function renderKnowledgeQuestionBank() {
                                     <div class="knowledge-question-meta">
                                         <span>错因：${escapeHtml(item.error_type || '待确认')}</span>
                                         ${studentAnswer}
-                                        <span>${reviewStatus}</span>
+                                        <span class="mastery-state ${mastered ? 'mastered' : ''}">${reviewStatus}</span>
                                     </div>
                                     ${correctAnswer}
                                 </div>
-                                <button type="button" class="knowledge-source-button" onclick="openQuestionSourceExam(${Number(item.exam_id)})">查看原记录</button>
+                                <div class="knowledge-row-actions">
+                                    <button type="button" class="knowledge-mastery-button ${mastered ? 'mastered' : ''}"
+                                        aria-pressed="${mastered ? 'true' : 'false'}"
+                                        ${item.mastery_saving ? 'disabled' : ''}
+                                        onclick="toggleWrongQuestionMastery(${escapeHtml(JSON.stringify(item.id))})">${item.mastery_saving ? '正在保存...' : (mastered ? '重新复习' : '标记已掌握')}</button>
+                                    <button type="button" class="knowledge-source-button" onclick="openQuestionSourceExam(${Number(item.exam_id)})">查看原记录</button>
+                                </div>
                             </div>`;
                     }).join('')}
                 </div>
             </section>`;
     }).join('') + '</div>';
+}
+
+async function toggleWrongQuestionMastery(questionId) {
+    const item = wrongQuestionBank.questions.find(question => question.id === questionId);
+    const questionNumber = Number(item?.question_number);
+    if (!item || item.mastery_saving || !Number.isInteger(questionNumber) || questionNumber < 1) return;
+
+    const mastered = wrongQuestionMasteryStatus(item) !== 'mastered';
+    item.mastery_saving = true;
+    renderHistory();
+    try {
+        const grade = document.getElementById('gradeSelect').value;
+        const studentName = document.getElementById('studentName').value.trim();
+        const params = new URLSearchParams({ grade: grade, student_name: studentName });
+        const data = await requestJson(`/exams/${item.exam_id}/wrong-questions/${questionNumber}/mastery?${params.toString()}`, {
+            method: 'PATCH',
+            headers: familyAccessHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ mastered: mastered })
+        });
+        item.mastered = Boolean(data.mastered);
+        const status = document.getElementById('historySyncStatus');
+        status.textContent = item.mastered
+            ? '这道错题已标记为“已掌握”，可在已掌握筛选中查看。'
+            : '这道错题已重新放回“待复习”。';
+        status.classList.add('show');
+    } catch (error) {
+        alert('保存单题状态失败：' + error.message);
+    } finally {
+        item.mastery_saving = false;
+        renderHistory();
+    }
 }
 
 function prepareKnowledgePractice(knowledgePoint, examId, subject) {

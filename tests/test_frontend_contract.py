@@ -138,6 +138,17 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             HTML,
         )
 
+    def test_each_wrong_question_has_an_independent_server_synced_mastery_status(self):
+        self.assertIn("function wrongQuestionMasteryStatus(question)", HTML)
+        self.assertIn("typeof question.mastered === 'boolean'", HTML)
+        self.assertIn("async function toggleWrongQuestionMastery(questionId)", HTML)
+        self.assertRegex(
+            HTML,
+            r"requestJson\(`/exams/\$\{item\.exam_id\}/wrong-questions/\$\{questionNumber\}/mastery\?\$\{params\.toString\(\)\}`",
+        )
+        self.assertIn("标记已掌握", HTML)
+        self.assertIn("重新复习", HTML)
+
     def test_history_can_export_a_protected_correction_sheet(self):
         self.assertIn("function exportCorrectionSheet(id)", HTML)
         self.assertIn("/correction-sheet?${params.toString()}", HTML)

@@ -369,6 +369,7 @@ class Exam(Base):
     weak_points = Column(Text)
     recommendations = Column(Text)
     review_progress = Column(Text)
+    wrong_question_mastery = Column(Text)
     access_code_salt = Column(String(32))
     access_code_hash = Column(String(64))
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -407,6 +408,11 @@ try:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS review_progress TEXT"))
                 else:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN review_progress TEXT"))
+            if "wrong_question_mastery" not in cols:
+                if "postgresql" in DATABASE_URL:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS wrong_question_mastery TEXT"))
+                else:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN wrong_question_mastery TEXT"))
             if "access_code_salt" not in cols:
                 if "postgresql" in DATABASE_URL:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS access_code_salt VARCHAR(32)"))
@@ -2277,6 +2283,7 @@ async def analyze_exam(
         exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
         exam.weak_points = json.dumps(analysis.get("weak_points", []), ensure_ascii=False)
         exam.recommendations = json.dumps(analysis.get("recommendations", []), ensure_ascii=False)
+        exam.wrong_question_mastery = None
         db.commit()
         db.close()
 
@@ -2429,6 +2436,10 @@ class ReviewProgressRequest(BaseModel):
     completed: list[str] = Field(default_factory=list, max_length=3)
 
 
+class WrongQuestionMasteryRequest(BaseModel):
+    mastered: bool
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -2487,6 +2498,20 @@ def _normalize_review_progress(raw_value: str | dict | None) -> dict:
         "next_step": next_step,
         "updated_at": str(updated_at).strip() if updated_at else None,
         "completed_at": completed_at,
+    }
+
+
+def _normalize_wrong_question_mastery(raw_value: str | dict | None) -> dict[str, bool]:
+    if isinstance(raw_value, dict):
+        value = raw_value
+    else:
+        value = _stored_json(raw_value, {})
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(question_number): mastered
+        for question_number, mastered in value.items()
+        if str(question_number).isdigit() and int(question_number) > 0 and isinstance(mastered, bool)
     }
 
 
@@ -2648,6 +2673,8 @@ async def list_wrong_questions(
         fallback_knowledge_point = next(iter(analysis.get("weak_points", [])), "待归类")
         review_progress = _normalize_review_progress(exam.review_progress)
         review_schedule = _build_review_schedule(exam.created_at, review_progress)
+        question_mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+        exam_mastered = review_progress["completed_count"] == review_progress["total"]
         for index, item in enumerate(analysis.get("wrong_questions", []), start=1):
             if not item.get("question"):
                 continue
@@ -2659,12 +2686,14 @@ async def list_wrong_questions(
             questions.append({
                 "id": f"{exam.id}-{index}",
                 "exam_id": exam.id,
+                "question_number": index,
                 "subject": exam_subject,
                 "question": item["question"],
                 "error_type": item["error_type"],
                 "student_answer": item["student_answer"],
                 "correct_answer": item["correct_answer"],
                 "knowledge_point": item.get("knowledge_point") or fallback_knowledge_point,
+                "mastered": question_mastery.get(str(index), exam_mastered),
                 "review_progress": review_progress,
                 "review_schedule": review_schedule,
                 "created": exam.created_at.isoformat() if exam.created_at else None,
@@ -2689,6 +2718,59 @@ async def list_wrong_questions(
         "subject_archive": archive,
         "knowledge_points": list(knowledge_point_map.values()),
         "questions": questions,
+    })
+
+
+@app.patch("/exams/{exam_id}/wrong-questions/{question_number}/mastery")
+async def update_wrong_question_mastery(
+    exam_id: int,
+    question_number: int,
+    body: WrongQuestionMasteryRequest,
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """独立保存一道错题的掌握状态。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+    db = SessionLocal()
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        db.close()
+        return JSONResponse({"success": False, "error": "试卷不存在"}, status_code=404)
+    if not _exam_has_family_access(exam, grade, student_name, family_code):
+        db.close()
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
+
+    analysis = _analysis_history_detail(
+        exam.ai_analysis,
+        exam.weak_points,
+        exam.recommendations,
+    )
+    wrong_questions = analysis.get("wrong_questions", [])
+    if (
+        question_number < 1
+        or question_number > len(wrong_questions)
+        or not wrong_questions[question_number - 1].get("question")
+    ):
+        db.close()
+        return JSONResponse({"success": False, "error": "错题不存在"}, status_code=404)
+
+    mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+    mastery[str(question_number)] = body.mastered
+    exam.wrong_question_mastery = json.dumps(mastery, ensure_ascii=False)
+    db.commit()
+    db.close()
+    return JSONResponse({
+        "success": True,
+        "exam_id": exam_id,
+        "question_number": question_number,
+        "mastered": body.mastered,
     })
 
 @app.get("/exams/{exam_id}")
@@ -3876,7 +3958,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.6.0",
+        "version": "0.7.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
@@ -3891,6 +3973,7 @@ async def api_info():
             "image": "GET /exams/{id}/image?grade=...&student_name=...（请求头 X-Family-Code）",
             "correction_sheet": "GET /exams/{id}/correction-sheet?grade=...&student_name=...（请求头 X-Family-Code）",
             "family_review_report": "GET /family-review-report?grade=...&student_name=...（请求头 X-Family-Code）",
+            "wrong_question_mastery": "PATCH /exams/{id}/wrong-questions/{question_number}/mastery（请求头 X-Family-Code）",
             "delete": "DELETE /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）"
         },
         "status": "OCR已接入百度试卷识别+通用识别，AI分析已接入DeepSeek",
