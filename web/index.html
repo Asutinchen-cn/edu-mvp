@@ -4535,7 +4535,7 @@ function openWrongBankQuery() {
     const firstEmptyField = document.getElementById('wrongBankStudentName').value.trim()
         ? document.getElementById('wrongBankFamilyCode')
         : document.getElementById('wrongBankStudentName');
-    window.setTimeout(() => firstEmptyField.focus(), 0);
+    firstEmptyField.focus();
 }
 
 function closeWrongBankQuery() {
