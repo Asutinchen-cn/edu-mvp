@@ -1746,6 +1746,37 @@
             background: white; font-size: 12px; color: #666; cursor: pointer;
         }
         .q-action-btn:hover { border-color: #3A8DFF; color: #3A8DFF; }
+        .q-action-btn:disabled { cursor: default; opacity: 0.55; }
+        .q-card.result-correct { border-left: 3px solid var(--success); }
+        .q-card.result-wrong { border-left: 3px solid var(--danger); }
+        .practice-result-panel {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap; margin-top: 16px; padding: 16px 0;
+            border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+        }
+        .practice-result-copy { flex: 1 1 280px; min-width: 0; }
+        .practice-result-head {
+            display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+            color: var(--ink); font-size: 14px;
+        }
+        .practice-result-score { color: var(--brand-blue); font-size: 20px; font-weight: 900; }
+        .practice-result-note { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+        .practice-result-progress {
+            height: 6px; margin-top: 10px; overflow: hidden;
+            border-radius: 3px; background: #e9f0fa;
+        }
+        .practice-result-progress span {
+            display: block; height: 100%; background: var(--brand-blue);
+            transition: width 0.2s ease;
+        }
+        .practice-result-action {
+            min-height: 40px; padding: 0 16px; border: 1px solid var(--brand-blue);
+            border-radius: 8px; background: var(--brand-blue); color: #fff;
+            font-size: 13px; font-weight: 800; cursor: pointer;
+        }
+        .practice-result-action:disabled { cursor: wait; opacity: 0.65; }
+        .practice-result-action.secondary { background: #fff; color: var(--brand-blue); }
+        .practice-result-confirmed { color: var(--success); font-size: 13px; font-weight: 800; }
 
         /* ===== UNIT WORKSHEET ===== */
         .worksheet-card {
@@ -3100,10 +3131,15 @@ function closeResult() {
 // ===== PRACTICE QUESTIONS =====
 let currentAnalysisData = null;
 let currentPracticeQuestions = [];
+let currentPracticeResults = [];
+let currentPracticeScorable = false;
+let practiceMasterySaving = false;
+let practiceMasteryConfirmed = false;
 
 async function generatePractice() {
     if (!currentAnalysisData) return;
     const btn = document.getElementById('generateBtn');
+    if (btn.disabled) return;
     btn.disabled = true;
     btn.textContent = '正在生成...';
 
@@ -3170,8 +3206,19 @@ async function generatePractice() {
 
 function renderPracticeQuestions(questions) {
     currentPracticeQuestions = questions;
+    currentPracticeResults = questions.map(() => null);
+    currentPracticeScorable = questions.length === 5 && questions.every(question => {
+        if (!String(question.answer || '').trim()) return false;
+        if (question.type === '填空题') return true;
+        return question.type === '选择题'
+            && Array.isArray(question.options)
+            && question.options.length === 4
+            && practiceChoiceAnswerIndex(question.answer) >= 0;
+    });
+    practiceMasterySaving = false;
+    practiceMasteryConfirmed = false;
     const container = document.getElementById('practiceList');
-    container.innerHTML = questions.map((q, i) => {
+    const questionCards = questions.map((q, i) => {
         const typeClass = q.type === '选择题' ? 'choice' : 'fill';
         const optionsHtml = Array.isArray(q.options) && q.options.length ? `
             <div class="q-options" id="q-opts-${i}">
@@ -3182,7 +3229,7 @@ function renderPracticeQuestions(questions) {
             </div>` : `
             <div class="q-actions">
                 <input type="text" id="fill-input-${i}" placeholder="请输入答案" style="padding:6px 12px;border:1px solid #dde4f0;border-radius:8px;font-size:13px;width:200px">
-                <button class="q-action-btn" onclick="checkFillAnswer(${i})">确认</button>
+                <button class="q-action-btn" id="fill-check-${i}" onclick="checkFillAnswer(${i})">确认</button>
             </div>`;
         return `
             <div class="q-card" id="q-card-${i}">
@@ -3200,31 +3247,90 @@ function renderPracticeQuestions(questions) {
                 </div>
             </div>`;
     }).join('');
+    container.innerHTML = `${questionCards}<div id="practiceResultPanel"></div>`;
+    renderPracticeResultPanel();
+}
+
+function normalizePracticeAnswer(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^答案[:：]?/, '')
+        .replace(/[。.!！]$/, '')
+        .replace(/\s+/g, '');
+}
+
+function practiceAnswersMatch(givenAnswer, expectedAnswer) {
+    const given = normalizePracticeAnswer(givenAnswer);
+    const expected = normalizePracticeAnswer(expectedAnswer);
+    if (!given || !expected) return false;
+    if (given === expected) return true;
+
+    const expectedTail = expected.includes('=') ? expected.split('=').pop() : expected;
+    if (given === expectedTail) return true;
+    const givenNumber = Number(given);
+    const expectedNumber = Number(expectedTail);
+    return Number.isFinite(givenNumber)
+        && Number.isFinite(expectedNumber)
+        && Math.abs(givenNumber - expectedNumber) < 1e-9;
+}
+
+function practiceChoiceAnswerIndex(answer) {
+    const match = String(answer || '').trim().toUpperCase().match(/^([A-D])(?:[.、:：\s]|$)/);
+    return match ? match[1].charCodeAt(0) - 65 : -1;
+}
+
+function lockPracticeQuestion(questionIndex) {
+    document.querySelectorAll(`#q-opts-${questionIndex} .q-option`).forEach(option => {
+        option.style.pointerEvents = 'none';
+    });
+    const input = document.getElementById(`fill-input-${questionIndex}`);
+    const checkButton = document.getElementById(`fill-check-${questionIndex}`);
+    if (input) input.disabled = true;
+    if (checkButton) checkButton.disabled = true;
+}
+
+function recordPracticeResult(questionIndex, isCorrect) {
+    if (
+        !currentPracticeScorable
+        || questionIndex < 0
+        || questionIndex >= currentPracticeResults.length
+        || currentPracticeResults[questionIndex] !== null
+    ) return;
+    currentPracticeResults[questionIndex] = Boolean(isCorrect);
+    const card = document.getElementById(`q-card-${questionIndex}`);
+    card?.classList.add(isCorrect ? 'result-correct' : 'result-wrong');
+    renderPracticeResultPanel();
 }
 
 function checkAnswer(qIdx, selectedIdx) {
+    if (currentPracticeResults[qIdx] !== null) return;
     const opts = document.querySelectorAll(`#q-opts-${qIdx} .q-option`);
-    const correct = String(currentPracticeQuestions[qIdx]?.answer || '').trim().toUpperCase();
-    const correctIdx = correct.charCodeAt(0) - 65;
+    const correctIdx = practiceChoiceAnswerIndex(currentPracticeQuestions[qIdx]?.answer);
     opts.forEach((opt, i) => {
         opt.style.pointerEvents = 'none';
         if (i === correctIdx) opt.classList.add('correct');
         if (i === selectedIdx && i !== correctIdx) opt.classList.add('wrong');
     });
+    recordPracticeResult(qIdx, selectedIdx === correctIdx);
 }
 
 function checkFillAnswer(qIdx) {
+    if (currentPracticeResults[qIdx] !== null) return;
     const input = document.getElementById(`fill-input-${qIdx}`);
     const answerDiv = document.getElementById(`q-answer-${qIdx}`);
     const correct = String(currentPracticeQuestions[qIdx]?.answer || '').trim();
-    if (input.value.trim() === correct) {
+    const isCorrect = practiceAnswersMatch(input.value, correct);
+    if (isCorrect) {
         input.style.borderColor = '#4DCB9D';
         input.style.background = '#e6faf0';
     } else {
         input.style.borderColor = '#e53935';
         input.style.background = '#ffe8e8';
     }
+    lockPracticeQuestion(qIdx);
     answerDiv.classList.add('show');
+    recordPracticeResult(qIdx, isCorrect);
 }
 
 function showHint(idx) {
@@ -3232,7 +3338,109 @@ function showHint(idx) {
 }
 
 function showAnswer(idx) {
+    if (currentPracticeScorable && currentPracticeResults[idx] === null) {
+        const correctIdx = practiceChoiceAnswerIndex(currentPracticeQuestions[idx]?.answer);
+        document.querySelectorAll(`#q-opts-${idx} .q-option`).forEach((option, optionIndex) => {
+            if (optionIndex === correctIdx) option.classList.add('correct');
+        });
+        lockPracticeQuestion(idx);
+        recordPracticeResult(idx, false);
+    }
     document.getElementById(`q-answer-${idx}`).classList.add('show');
+}
+
+function renderPracticeResultPanel() {
+    const panel = document.getElementById('practiceResultPanel');
+    if (!panel) return;
+    panel.className = 'practice-result-panel';
+    if (!currentPracticeScorable) {
+        panel.innerHTML = `
+            <div class="practice-result-copy">
+                <div class="practice-result-head"><strong>本次暂不计入掌握状态</strong></div>
+                <p class="practice-result-note">只有完整生成 5 道选择题或填空题后，才会记录本轮结果。</p>
+            </div>`;
+        return;
+    }
+
+    const answeredCount = currentPracticeResults.filter(result => result !== null).length;
+    const correctCount = currentPracticeResults.filter(result => result === true).length;
+    const allAnswered = answeredCount === currentPracticeResults.length;
+    const perfectScore = allAnswered && currentPracticeResults.every(result => result === true);
+    const canConfirmMastery = perfectScore
+        && currentAnalysisData?.practiceFromWrongBank
+        && currentAnalysisData?.practiceKnowledgePoint;
+    let note = '每题只记录首次作答；查看答案按未答对记录。';
+    if (allAnswered && perfectScore) {
+        note = canConfirmMastery
+            ? '本轮 5 题全部答对。请家长确认后，再同步更新服务器错题库。'
+            : '本轮 5 题全部答对，可以回到错题库核对原题掌握情况。';
+    } else if (allAnswered) {
+        note = '本轮未满分，原错题继续保留在“待复习”；建议订正后再练一组。';
+    }
+
+    let action = '';
+    if (practiceMasteryConfirmed) {
+        action = '<span class="practice-result-confirmed">已同步到家庭错题库</span>';
+    } else if (canConfirmMastery) {
+        action = `<button type="button" class="practice-result-action" onclick="confirmKnowledgeMastery()" ${practiceMasterySaving ? 'disabled' : ''}>${practiceMasterySaving ? '正在同步...' : '确认本知识点已掌握'}</button>`;
+    } else if (allAnswered && !perfectScore) {
+        action = '<button type="button" class="practice-result-action secondary" onclick="generatePractice()">再练一组</button>';
+    }
+
+    panel.innerHTML = `
+        <div class="practice-result-copy">
+            <div class="practice-result-head">
+                <strong>本轮练习核对</strong>
+                <span class="practice-result-score">本轮答对 ${correctCount}/${currentPracticeResults.length}</span>
+                <span>已作答 ${answeredCount}/${currentPracticeResults.length}</span>
+            </div>
+            <p class="practice-result-note">${escapeHtml(note)}</p>
+            <div class="practice-result-progress" aria-hidden="true"><span style="width:${Math.round(answeredCount / currentPracticeResults.length * 100)}%"></span></div>
+        </div>
+        ${action}`;
+}
+
+async function confirmKnowledgeMastery() {
+    if (
+        practiceMasterySaving
+        || practiceMasteryConfirmed
+        || !currentAnalysisData?.practiceFromWrongBank
+        || !currentAnalysisData?.practiceKnowledgePoint
+        || !currentPracticeResults.length
+        || !currentPracticeResults.every(result => result === true)
+    ) return;
+
+    practiceMasterySaving = true;
+    renderPracticeResultPanel();
+    const params = new URLSearchParams({
+        grade: currentAnalysisData.grade,
+        student_name: currentAnalysisData.studentName,
+        subject: currentAnalysisData.subject,
+        knowledge_point: currentAnalysisData.practiceKnowledgePoint
+    });
+    try {
+        const data = await requestJson(`/wrong-questions/mastery-by-knowledge?${params.toString()}`, {
+            method: 'PATCH',
+            headers: familyAccessHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ mastered: true })
+        });
+        wrongQuestionBank.questions.forEach(question => {
+            if (
+                question.subject === currentAnalysisData.subject
+                && question.knowledge_point === currentAnalysisData.practiceKnowledgePoint
+            ) question.mastered = true;
+        });
+        practiceMasteryConfirmed = true;
+        renderHistory();
+        const status = document.getElementById('historySyncStatus');
+        status.textContent = `已将“${currentAnalysisData.practiceKnowledgePoint}”的 ${Number(data.matched_count || 0)} 道原错题标记为已掌握。`;
+        status.classList.add('show');
+    } catch (error) {
+        alert('同步掌握状态失败：' + error.message);
+    } finally {
+        practiceMasterySaving = false;
+        renderPracticeResultPanel();
+    }
 }
 
 // ===== EXPORT PDF =====

@@ -102,6 +102,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("checkAnswer(${i}, ${j})", HTML)
         self.assertNotIn("checkAnswer(${i}, '${q.answer}'", HTML)
 
+    def test_focused_practice_can_confirm_mastery_only_after_a_perfect_score(self):
+        self.assertIn("let currentPracticeResults = []", HTML)
+        self.assertIn("function practiceAnswersMatch(givenAnswer, expectedAnswer)", HTML)
+        self.assertIn("function recordPracticeResult(questionIndex, isCorrect)", HTML)
+        self.assertIn("function renderPracticeResultPanel()", HTML)
+        self.assertIn("本轮答对", HTML)
+        self.assertIn("查看答案按未答对记录", HTML)
+        self.assertIn("currentPracticeResults.every(result => result === true)", HTML)
+        self.assertIn("async function confirmKnowledgeMastery()", HTML)
+        self.assertRegex(
+            HTML,
+            r"requestJson\(`/wrong-questions/mastery-by-knowledge\?\$\{params\.toString\(\)\}`",
+        )
+        self.assertIn("确认本知识点已掌握", HTML)
+
     def test_history_has_an_evidence_based_parent_dashboard(self):
         self.assertIn('id="reviewDashboard"', HTML)
         self.assertIn("function buildReviewDashboard(records)", HTML)

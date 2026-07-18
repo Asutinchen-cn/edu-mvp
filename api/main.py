@@ -2773,6 +2773,102 @@ async def update_wrong_question_mastery(
         "mastered": body.mastered,
     })
 
+
+@app.patch("/wrong-questions/mastery-by-knowledge")
+async def update_knowledge_point_mastery(
+    body: WrongQuestionMasteryRequest,
+    grade: str = None,
+    student_name: str = None,
+    subject: str = None,
+    knowledge_point: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """批量更新当前家庭同一学科、同一知识点下的原错题掌握状态。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+    subject = str(subject or "").strip()
+    target = str(knowledge_point or "").strip()
+    if subject not in SUBJECT_LABELS:
+        return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
+    if not target or len(target) > 80:
+        return JSONResponse({"success": False, "error": "知识点名称无效"}, status_code=400)
+
+    db = SessionLocal()
+    try:
+        candidates = (
+            db.query(Exam)
+            .filter(
+                Exam.grade == grade,
+                Exam.student_name == student_name,
+                Exam.subject == subject,
+            )
+            .order_by(Exam.created_at.desc())
+            .all()
+        )
+        accessible_exams = [
+            exam for exam in candidates
+            if _exam_has_family_access(exam, grade, student_name, family_code)
+        ]
+        if not accessible_exams:
+            return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
+
+        matched_count = 0
+        updated_count = 0
+        source_exam_ids = []
+        for exam in accessible_exams:
+            analysis = _analysis_history_detail(
+                exam.ai_analysis,
+                exam.weak_points,
+                exam.recommendations,
+            )
+            fallback_point = next(iter(analysis.get("weak_points", [])), "")
+            review_progress = _normalize_review_progress(exam.review_progress)
+            exam_mastered = review_progress["completed_count"] == review_progress["total"]
+            mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+            exam_matched = False
+            for question_number, item in enumerate(analysis.get("wrong_questions", []), start=1):
+                if not item.get("question"):
+                    continue
+                item_point = item.get("knowledge_point") or fallback_point
+                if item_point != target:
+                    continue
+                exam_matched = True
+                matched_count += 1
+                current_value = mastery.get(str(question_number), exam_mastered)
+                if current_value != body.mastered:
+                    updated_count += 1
+                mastery[str(question_number)] = body.mastered
+            if exam_matched:
+                source_exam_ids.append(exam.id)
+                exam.wrong_question_mastery = json.dumps(mastery, ensure_ascii=False)
+
+        if not matched_count:
+            return JSONResponse(
+                {"success": False, "error": "该知识点不在当前家庭错题库中"},
+                status_code=400,
+            )
+
+        db.commit()
+        return JSONResponse({
+            "success": True,
+            "subject": subject,
+            "knowledge_point": target,
+            "mastered": body.mastered,
+            "matched_count": matched_count,
+            "updated_count": updated_count,
+            "source_exam_ids": source_exam_ids,
+        })
+    except Exception as e:
+        db.rollback()
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+    finally:
+        db.close()
+
 @app.get("/exams/{exam_id}")
 async def get_exam(
     exam_id: int,
@@ -4056,7 +4152,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.8.0",
+        "version": "0.9.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
@@ -4073,6 +4169,7 @@ async def api_info():
             "correction_sheet": "GET /exams/{id}/correction-sheet?grade=...&student_name=...（请求头 X-Family-Code）",
             "family_review_report": "GET /family-review-report?grade=...&student_name=...（请求头 X-Family-Code）",
             "wrong_question_mastery": "PATCH /exams/{id}/wrong-questions/{question_number}/mastery（请求头 X-Family-Code）",
+            "knowledge_point_mastery": "PATCH /wrong-questions/mastery-by-knowledge?grade=...&student_name=...&subject=...&knowledge_point=...（请求头 X-Family-Code）",
             "delete": "DELETE /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）"
         },
         "status": "OCR已接入百度试卷识别+通用识别，AI分析已接入DeepSeek",

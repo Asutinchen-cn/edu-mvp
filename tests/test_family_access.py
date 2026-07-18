@@ -31,6 +31,7 @@ from api.main import (
     get_exam_image,
     list_wrong_questions,
     list_exams,
+    update_knowledge_point_mastery,
     update_review_progress,
     update_wrong_question_mastery,
     upload_exam,
@@ -218,6 +219,80 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(pending.status_code, 200)
         self.assertFalse(json.loads(pending.body)["mastered"])
         self.assertFalse(json.loads(relisted.body)["questions"][0]["mastered"])
+
+    def test_knowledge_point_mastery_updates_only_matching_accessible_questions(self):
+        db = self.session_factory()
+        first_exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        second_exam = Exam(
+            grade="六年级",
+            subject="math",
+            student_name="小明",
+            access_code_salt=first_exam.access_code_salt,
+            access_code_hash=first_exam.access_code_hash,
+            ai_analysis=json.dumps({
+                "wrong_questions": [{
+                    "question": "解方程 5x - 2 = 13",
+                    "error_type": "计算错误",
+                    "student_answer": "x = 5",
+                    "correct_answer": "x = 3",
+                    "knowledge_point": "一元一次方程",
+                }, {
+                    "question": "计算 (-2) + 5",
+                    "error_type": "符号错误",
+                    "student_answer": "-7",
+                    "correct_answer": "3",
+                    "knowledge_point": "有理数加法",
+                }],
+                "weak_points": ["一元一次方程", "有理数加法"],
+            }, ensure_ascii=False),
+        )
+        db.add(second_exam)
+        db.commit()
+        second_exam_id = second_exam.id
+        db.close()
+
+        response = asyncio.run(update_knowledge_point_mastery(
+            WrongQuestionMasteryRequest(mastered=True),
+            grade="六年级",
+            student_name="小明",
+            subject="math",
+            knowledge_point="一元一次方程",
+            family_code="Home2026A",
+        ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["matched_count"], 2)
+        self.assertEqual(payload["updated_count"], 2)
+        self.assertEqual(payload["source_exam_ids"], [second_exam_id, self.first_exam_id])
+        db = self.session_factory()
+        first_mastery = json.loads(db.query(Exam).filter(Exam.id == self.first_exam_id).one().wrong_question_mastery)
+        second_mastery = json.loads(db.query(Exam).filter(Exam.id == second_exam_id).one().wrong_question_mastery)
+        db.close()
+        self.assertEqual(first_mastery, {"1": True})
+        self.assertEqual(second_mastery, {"1": True})
+
+    def test_knowledge_point_mastery_rejects_wrong_code_and_unknown_point(self):
+        wrong_code = asyncio.run(update_knowledge_point_mastery(
+            WrongQuestionMasteryRequest(mastered=True),
+            grade="六年级",
+            student_name="小明",
+            subject="math",
+            knowledge_point="一元一次方程",
+            family_code="Other2026B",
+        ))
+        unknown_point = asyncio.run(update_knowledge_point_mastery(
+            WrongQuestionMasteryRequest(mastered=True),
+            grade="六年级",
+            student_name="小明",
+            subject="math",
+            knowledge_point="几何证明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(wrong_code.status_code, 403)
+        self.assertEqual(unknown_point.status_code, 400)
+        self.assertIn("知识点", json.loads(unknown_point.body)["error"])
 
     def test_wrong_question_mastery_rejects_unknown_question_number(self):
         response = asyncio.run(update_wrong_question_mastery(
