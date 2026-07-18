@@ -93,6 +93,15 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("alert('请填写学生姓名，之后查询家庭错题库需要使用同一姓名')", HTML)
         self.assertNotIn("document.getElementById('studentName').value || '同学'", HTML)
 
+    def test_mobile_layout_prioritizes_the_real_upload_tool(self):
+        mobile_css = re.search(r"@media \(max-width: 768px\) \{(?P<body>.*?)\n        \}", HTML, re.S)
+        self.assertIsNotNone(mobile_css)
+        css = mobile_css.group("body")
+        self.assertRegex(css, r"\.hero-card\s*\{[^}]*display:\s*none")
+        self.assertRegex(css, r"\.steps-sidebar\s*\{[^}]*display:\s*none")
+        self.assertRegex(css, r"\.hero-actions\s*\{[^}]*grid-template-columns:\s*repeat\(2,")
+        self.assertRegex(css, r"\.main-card\s*\{[^}]*margin:\s*10px 12px")
+
     def test_family_access_code_has_safe_visibility_and_generation_helpers(self):
         self.assertIn("function toggleFamilyCodeVisibility", HTML)
         self.assertIn("function generateFamilyAccessCode", HTML)
