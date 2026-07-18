@@ -2283,7 +2283,12 @@ async def analyze_exam(
         exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
         exam.weak_points = json.dumps(analysis.get("weak_points", []), ensure_ascii=False)
         exam.recommendations = json.dumps(analysis.get("recommendations", []), ensure_ascii=False)
-        exam.wrong_question_mastery = None
+        initial_mastery = {
+            str(question_number): False
+            for question_number, item in enumerate(analysis.get("wrong_questions", []), start=1)
+            if isinstance(item, dict) and item.get("question")
+        }
+        exam.wrong_question_mastery = json.dumps(initial_mastery, ensure_ascii=False)
         db.commit()
         db.close()
 
@@ -2515,6 +2520,31 @@ def _normalize_wrong_question_mastery(raw_value: str | dict | None) -> dict[str,
     }
 
 
+def _build_question_mastery_summary(exam: Exam, analysis: dict | None = None) -> dict:
+    """汇总一份试卷中有明确题目证据的逐题掌握状态。"""
+    detail = analysis or _analysis_history_detail(
+        exam.ai_analysis,
+        exam.weak_points,
+        exam.recommendations,
+    )
+    progress = _normalize_review_progress(exam.review_progress)
+    exam_mastered = progress["completed_count"] == progress["total"]
+    mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+    total = 0
+    mastered_count = 0
+    for question_number, item in enumerate(detail.get("wrong_questions", []), start=1):
+        if not item.get("question"):
+            continue
+        total += 1
+        if mastery.get(str(question_number), exam_mastered):
+            mastered_count += 1
+    return {
+        "total": total,
+        "mastered": mastered_count,
+        "pending": total - mastered_count,
+    }
+
+
 def _build_review_schedule(
     created_at: datetime | str | None,
     raw_progress: str | dict | None,
@@ -2614,6 +2644,7 @@ async def list_exams(
             "image_available": _stored_upload_exists(exam.image_path),
             "ocr_preview": exam.ocr_text[:50] + "..." if exam.ocr_text else None,
             "wrong_count": summary["wrong_count"],
+            "question_mastery": _build_question_mastery_summary(exam),
             "weak_points": summary["weak_points"],
             "review_progress": review_progress,
             "review_schedule": _build_review_schedule(exam.created_at, review_progress),
@@ -2907,6 +2938,7 @@ async def get_exam(
         "ai_analysis": _stored_json(exam.ai_analysis, None),
         "analysis": analysis,
         "wrong_count": summary["wrong_count"],
+        "question_mastery": _build_question_mastery_summary(exam, analysis),
         "weak_points": summary["weak_points"],
         "recommendations": _stored_json(exam.recommendations, None),
         "review_progress": _normalize_review_progress(exam.review_progress),
@@ -4225,7 +4257,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.9.1",
+        "version": "0.9.2",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {

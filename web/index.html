@@ -2445,6 +2445,7 @@ let uploadedFiles = [];
 let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]').map(record => ({
     ...record,
     result: stripStoredImageLinks(record.result),
+    questionMastery: normalizeQuestionMasterySummary(record.questionMastery),
     imageUrl: '',
     imageAvailable: Boolean(record.imageAvailable || record.serverId),
     detailLoading: false,
@@ -2811,6 +2812,11 @@ async function startAnalysis() {
             imageAvailable: Boolean(analysisData.examIds[0]),
             serverSynced: Boolean(analysisData.examIds[0]),
             reviewProgress: normalizeReviewProgress(null),
+            questionMastery: {
+                total: analysisData.wrongQuestions.length,
+                mastered: 0,
+                pending: analysisData.wrongQuestions.length
+            },
             reviewSchedule: normalizeReviewSchedule({
                 next_step: 'corrected',
                 due_at: createdAt,
@@ -3430,6 +3436,14 @@ async function confirmKnowledgeMastery() {
                 && question.knowledge_point === currentAnalysisData.practiceKnowledgePoint
             ) question.mastered = true;
         });
+        refreshHistoryQuestionMasteryFromBank(new Set(
+            wrongQuestionBank.questions
+                .filter(question => (
+                    question.subject === currentAnalysisData.subject
+                    && question.knowledge_point === currentAnalysisData.practiceKnowledgePoint
+                ))
+                .map(question => question.exam_id)
+        ));
         practiceMasteryConfirmed = true;
         renderHistory();
         const status = document.getElementById('historySyncStatus');
@@ -3565,7 +3579,52 @@ function updateSubjectArchiveCounts(records) {
     document.getElementById('subjectCountEnglish').textContent = counts.english;
 }
 
+function normalizeQuestionMasterySummary(value) {
+    const total = Math.max(0, Math.floor(Number(value?.total) || 0));
+    const mastered = Math.min(total, Math.max(0, Math.floor(Number(value?.mastered) || 0)));
+    return { total: total, mastered: mastered, pending: total - mastered };
+}
+
+function recordQuestionMasterySummary(record) {
+    const stored = normalizeQuestionMasterySummary(record?.questionMastery);
+    if (stored.total > 0 || !wrongQuestionBank.loaded || !record?.serverId) return stored;
+    const questions = wrongQuestionBank.questions.filter(question => (
+        Number(question.exam_id) === Number(record.serverId)
+    ));
+    if (!questions.length) return stored;
+    const mastered = questions.filter(question => wrongQuestionMasteryStatus(question) === 'mastered').length;
+    return {
+        total: questions.length,
+        mastered: mastered,
+        pending: questions.length - mastered
+    };
+}
+
+function refreshHistoryQuestionMasteryFromBank(examIds = null) {
+    if (!wrongQuestionBank.loaded) return;
+    const selectedIds = examIds
+        ? new Set([...examIds].map(value => Number(value)).filter(Number.isFinite))
+        : null;
+    historyRecords.forEach(record => {
+        const examId = Number(record.serverId);
+        if (!Number.isFinite(examId) || (selectedIds && !selectedIds.has(examId))) return;
+        const questions = wrongQuestionBank.questions.filter(question => Number(question.exam_id) === examId);
+        if (!questions.length) return;
+        const mastered = questions.filter(question => wrongQuestionMasteryStatus(question) === 'mastered').length;
+        record.questionMastery = {
+            total: questions.length,
+            mastered: mastered,
+            pending: questions.length - mastered
+        };
+    });
+    saveHistoryRecords();
+}
+
 function recordMasteryStatus(record) {
+    const questionMastery = recordQuestionMasterySummary(record);
+    if (questionMastery.total > 0) {
+        return questionMastery.pending === 0 ? 'mastered' : 'pending';
+    }
     const progress = normalizeReviewProgress(record.reviewProgress);
     return progress.completedCount === progress.total ? 'mastered' : 'pending';
 }
@@ -3693,6 +3752,7 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         imageAvailable: Boolean(exam.image_available),
         serverSynced: true,
         correctionExporting: false,
+        questionMastery: normalizeQuestionMasterySummary(exam.question_mastery),
         reviewProgress: normalizeReviewProgress(exam.review_progress),
         reviewSchedule: normalizeReviewSchedule(exam.review_schedule)
     };
@@ -3733,9 +3793,9 @@ function renderReviewProgress(record) {
     const recordId = escapeHtml(JSON.stringify(record.id));
 
     return `
-        <section class="review-progress-panel" aria-label="三步掌握进度">
+        <section class="review-progress-panel" aria-label="整卷复习流程">
             <div class="review-progress-head">
-                <strong>三步掌握进度</strong>
+                <strong>整卷复习流程</strong>
                 <span>${progress.completedCount}/${progress.total} · ${escapeHtml(statusText)}</span>
             </div>
             <div class="review-progress-track" aria-hidden="true">
@@ -3755,7 +3815,7 @@ function renderReviewProgress(record) {
                         </button>`;
                 }).join('')}
             </div>
-            <p class="review-progress-note">按实际完成情况打勾，进度保存在服务器，换设备查询后仍可继续。</p>
+            <p class="review-progress-note">这里记录订正、练习和隔天回测过程；错题是否掌握，以逐题状态和专项练习结果为准。</p>
         </section>`;
 }
 
@@ -4473,6 +4533,7 @@ async function loadWrongQuestionBank(options = {}) {
             knowledgePoints: Array.isArray(data.knowledge_points) ? data.knowledge_points : [],
             subjectArchive: data.subject_archive || { all: 0, math: 0, english: 0 }
         };
+        refreshHistoryQuestionMasteryFromBank();
         renderHistory();
         return wrongQuestionBank;
     } catch (error) {
@@ -4527,6 +4588,7 @@ async function syncServerWrongBank(options = {}) {
                 wrongCount: record.wrongCount ?? existing.wrongCount,
                 weakPoint: record.weakPoint !== '待分析' ? record.weakPoint : existing.weakPoint,
                 weakPoints: record.weakPoints.length ? record.weakPoints : existing.weakPoints,
+                questionMastery: record.questionMastery,
                 reviewProgress: record.reviewProgress,
                 reviewSchedule: record.reviewSchedule,
                 serverSynced: true
@@ -4745,6 +4807,7 @@ async function toggleWrongQuestionMastery(questionId) {
             body: JSON.stringify({ mastered: mastered })
         });
         item.mastered = Boolean(data.mastered);
+        refreshHistoryQuestionMasteryFromBank(new Set([item.exam_id]));
         const status = document.getElementById('historySyncStatus');
         status.textContent = item.mastered
             ? '这道错题已标记为“已掌握”，可在已掌握筛选中查看。'
@@ -4873,14 +4936,14 @@ function renderHistory() {
     if (records.length === 0) {
         const emptyContent = scopeRecords.length && currentMasteryFilter === 'pending'
             ? {
-                title: '本筛选范围内的错题都已完成三步复习',
-                description: '可以查看“已掌握”记录，回顾孩子已经完成的订正。',
+                title: '本筛选范围内的错题都已逐题掌握',
+                description: '可以查看“已掌握”记录，按知识点回顾孩子已经完成的订正。',
                 action: '<button type="button" class="history-action" onclick="setMasteryFilter(\'mastered\')">查看已掌握</button>'
             }
             : (scopeRecords.length && currentMasteryFilter === 'mastered'
                 ? {
                     title: '暂无已掌握记录',
-                    description: '完成订正原题、同类题和隔天回测后，记录会自动移到这里。',
+                    description: '逐题标记掌握，或完成 5 道专项练习并由家长确认后，记录会显示在这里。',
                     action: '<button type="button" class="history-action" onclick="setMasteryFilter(\'pending\')">查看待复习</button>'
                 }
                 : {
@@ -4906,6 +4969,10 @@ function renderHistory() {
         const wrongCount = historyWrongCount(r);
         const issueText = wrongCount === null ? '已完成分析' : `识别错题 ${wrongCount} 道`;
         const reviewProgress = normalizeReviewProgress(r.reviewProgress);
+        const questionMastery = recordQuestionMasterySummary(r);
+        const masteryText = questionMastery.total > 0
+            ? `错题掌握 ${questionMastery.mastered}/${questionMastery.total}`
+            : `流程 ${reviewProgress.completedCount}/${reviewProgress.total}`;
         return `
             <div class="history-item ${sel}">
                 <div class="history-item-header">
@@ -4917,7 +4984,7 @@ function renderHistory() {
                                 <span class="subject-tag ${subject}">${subjectLabel}</span>
                                 <span class="issue-count">${issueText}</span>
                                 <span class="weak-tag">薄弱: ${escapeHtml(r.weakPoint)}</span>
-                                ${r.serverId ? `<span class="history-source">掌握 ${reviewProgress.completedCount}/${reviewProgress.total}</span>` : ''}
+                                ${r.serverId ? `<span class="history-source">${escapeHtml(masteryText)}</span>` : ''}
                                 ${r.serverSynced ? '<span class="history-source">服务器</span>' : ''}
                             </div>
                         </div>
@@ -4963,6 +5030,7 @@ async function loadHistoryDetail(id) {
         record.weakPoints = Array.isArray(detail.weak_points) ? detail.weak_points : record.weakPoints;
         record.weakPoint = record.weakPoints[0] || record.weakPoint || '待分析';
         record.imageAvailable = Boolean(detail.image_available);
+        record.questionMastery = normalizeQuestionMasterySummary(detail.question_mastery);
         record.reviewProgress = normalizeReviewProgress(detail.review_progress);
         record.reviewSchedule = normalizeReviewSchedule(detail.review_schedule);
         saveHistoryRecords();
@@ -4998,10 +5066,10 @@ async function toggleReviewStep(id, step) {
         saveHistoryRecords();
         const status = document.getElementById('historySyncStatus');
         if (record.reviewProgress.completedCount === record.reviewProgress.total) {
-            status.textContent = '三步复习已完成，这条记录已移入“已掌握”。';
+            status.textContent = '整卷复习流程已完成；错题是否掌握仍以逐题状态为准。';
             status.classList.add('show');
         } else if (previousProgress.completedCount === previousProgress.total) {
-            status.textContent = '复习步骤已更新，这条记录已重新放回“待复习”。';
+            status.textContent = '整卷复习流程已更新；逐题掌握状态没有改变。';
             status.classList.add('show');
         }
     } catch (e) {

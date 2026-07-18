@@ -140,6 +140,11 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertTrue(payload["exams"][0]["image_available"])
         self.assertNotIn("image_url", payload["exams"][0])
         self.assertEqual(payload["exams"][0]["review_schedule"]["next_step"], "corrected")
+        self.assertEqual(payload["exams"][0]["question_mastery"], {
+            "total": 1,
+            "mastered": 0,
+            "pending": 1,
+        })
 
     def test_wrong_question_bank_flattens_and_groups_accessible_questions(self):
         response = asyncio.run(list_wrong_questions(
@@ -194,6 +199,17 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             student_name="小明",
             family_code="Home2026A",
         ))
+        exam_list = asyncio.run(list_exams(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+        exam_detail = asyncio.run(get_exam(
+            self.first_exam_id,
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
 
         self.assertEqual(mastered.status_code, 200)
         self.assertTrue(json.loads(mastered.body)["mastered"])
@@ -201,6 +217,16 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             [item["mastered"] for item in json.loads(listed.body)["questions"]],
             [True, False],
         )
+        self.assertEqual(json.loads(exam_list.body)["exams"][0]["question_mastery"], {
+            "total": 2,
+            "mastered": 1,
+            "pending": 1,
+        })
+        self.assertEqual(json.loads(exam_detail.body)["question_mastery"], {
+            "total": 2,
+            "mastered": 1,
+            "pending": 1,
+        })
 
         pending = asyncio.run(update_wrong_question_mastery(
             self.first_exam_id,
@@ -462,7 +488,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertIn("家庭错题库", json.loads(response.body)["error"])
         generator.assert_not_awaited()
 
-    def test_reanalysis_clears_question_mastery_that_may_no_longer_match(self):
+    def test_reanalysis_resets_each_current_wrong_question_to_pending(self):
         db = self.session_factory()
         exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
         exam.wrong_question_mastery = json.dumps({"1": True})
@@ -482,7 +508,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         stored_mastery = db.query(Exam).filter(Exam.id == self.first_exam_id).one().wrong_question_mastery
         db.close()
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(stored_mastery)
+        self.assertEqual(json.loads(stored_mastery), {"1": False})
 
     def test_review_progress_saves_each_step_time_and_enforces_the_retest_day(self):
         with patch("api.main._utc_now", return_value=datetime(2026, 7, 16, 6, 0, tzinfo=timezone.utc)):

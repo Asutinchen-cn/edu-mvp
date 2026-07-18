@@ -188,8 +188,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("escapeHtml(JSON.stringify(record.id))", HTML)
         self.assertNotIn('onclick="toggleRecord(${JSON.stringify(r.id)})"', HTML)
 
-    def test_history_has_server_synced_three_step_mastery_progress(self):
-        self.assertIn("三步掌握进度", HTML)
+    def test_history_keeps_the_server_synced_review_process_separate_from_mastery(self):
+        self.assertIn("整卷复习流程", HTML)
+        self.assertNotIn("三步掌握进度", HTML)
         self.assertIn("订正原题", HTML)
         self.assertIn("完成同类题", HTML)
         self.assertIn("隔天回测", HTML)
@@ -206,12 +207,15 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('id="masteryCountPending"', HTML)
         self.assertIn('data-mastery-filter="mastered"', HTML)
         self.assertIn('id="masteryCountMastered"', HTML)
+        self.assertIn("function normalizeQuestionMasterySummary(value)", HTML)
+        self.assertIn("function recordQuestionMasterySummary(record)", HTML)
+        self.assertIn("function refreshHistoryQuestionMasteryFromBank(", HTML)
         self.assertIn("function recordMasteryStatus(record)", HTML)
         self.assertIn("function setMasteryFilter(status)", HTML)
         self.assertIn("function updateMasteryFilterCounts(records)", HTML)
-        self.assertIn("progress.completedCount === progress.total", HTML)
+        self.assertIn("questionMastery.pending === 0", HTML)
         self.assertIn("currentMasteryFilter !== 'all'", HTML)
-        self.assertIn("本筛选范围内的错题都已完成三步复习", HTML)
+        self.assertIn("本筛选范围内的错题都已逐题掌握", HTML)
 
     def test_parent_dashboard_turns_pending_records_into_actionable_review_tasks(self):
         self.assertIn("今日复习清单", HTML)
