@@ -5215,7 +5215,7 @@ function askDelete(id) {
     pendingDeleteId = id;
     const record = historyRecords.find(r => r.id === id);
     document.getElementById('confirmMsg').textContent = record?.serverId
-        ? '确定要从服务器错题库删除这条记录吗？'
+        ? '确定要删除这条服务器记录吗？原卷文件和分析结果将一并删除，且无法恢复。'
         : '确定要删除这条本地记录吗？';
     document.getElementById('confirmDialog').classList.add('show');
 }

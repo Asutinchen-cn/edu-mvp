@@ -119,6 +119,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotIn("function safeUploadUrl", HTML)
         self.assertNotIn("href=\"${escapeHtml(imageUrl)}\"", HTML)
 
+    def test_server_record_deletion_explains_that_originals_are_removed(self):
+        self.assertIn("原卷文件和分析结果将一并删除，且无法恢复", HTML)
+
     def test_analysis_result_gives_parents_an_evidence_based_action_plan(self):
         self.assertIn("function buildParentReviewPlan(data)", HTML)
         self.assertIn("7 天复习安排", HTML)

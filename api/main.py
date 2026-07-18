@@ -522,8 +522,15 @@ def _save_upload_file(content: bytes, file: UploadFile) -> str:
         ext = ".jpg" if original_ext == ".jpeg" else original_ext
     stored_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex}{ext}"
     stored_path = os.path.join(UPLOAD_DIR, stored_name)
-    with open(stored_path, "wb") as fh:
-        fh.write(content)
+    try:
+        with open(stored_path, "wb") as fh:
+            fh.write(content)
+    except Exception:
+        try:
+            os.remove(stored_path)
+        except FileNotFoundError:
+            pass
+        raise
     return f"{UPLOAD_URL_PREFIX}/{stored_name}"
 
 
@@ -550,6 +557,20 @@ def _local_upload_path(image_path: str | None) -> str | None:
 def _stored_upload_exists(image_path: str | None) -> bool:
     local_path = _local_upload_path(image_path)
     return bool(local_path and os.path.isfile(local_path))
+
+
+def _delete_stored_upload(image_path: str | None) -> bool:
+    local_path = _local_upload_path(image_path)
+    if not local_path:
+        return False
+    try:
+        os.remove(local_path)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError as e:
+        print(f"Upload file cleanup warning: {e}")
+        return False
 
 # ===== 百度 OCR =====
 
@@ -2189,6 +2210,9 @@ async def upload_exam(
     except ValueError as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
+    db = None
+    stored_image_path = None
+    exam_persisted = False
     try:
         db = SessionLocal()
 
@@ -2196,22 +2220,17 @@ async def upload_exam(
         grade = (grade or "").strip()
         subject = (subject or "math").strip()
         if not student_name:
-            db.close()
             return JSONResponse({"success": False, "error": "student_name 不能为空"}, status_code=400)
         if not grade:
-            db.close()
             return JSONResponse({"success": False, "error": "grade 不能为空"}, status_code=400)
         if subject not in SUBJECT_LABELS:
-            db.close()
             return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
         if file.content_type not in ALLOWED_UPLOAD_TYPES:
-            db.close()
             return JSONResponse({"success": False, "error": "仅支持 JPG、PNG 或 PDF 文件"}, status_code=400)
 
         # 读取文件内容
         content = await file.read()
         if len(content) > 10 * 1024 * 1024:
-            db.close()
             return JSONResponse({"success": False, "error": "文件大小不能超过 10MB"}, status_code=400)
 
         stored_image_path = _save_upload_file(content, file)
@@ -2232,8 +2251,8 @@ async def upload_exam(
         )
         db.add(exam)
         db.commit()
+        exam_persisted = True
         db.refresh(exam)
-        db.close()
 
         return JSONResponse({
             "success": True,
@@ -2247,7 +2266,14 @@ async def upload_exam(
             "next_step": f"POST /analyze/{exam.id}?grade={grade}&student_name={student_name}，并携带 X-Family-Code 请求头"
         })
     except Exception as e:
+        if db is not None:
+            db.rollback()
+        if stored_image_path and not exam_persisted:
+            _delete_stored_upload(stored_image_path)
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+    finally:
+        if db is not None:
+            db.close()
 
 @app.post("/analyze/{exam_id}")
 async def analyze_exam(
@@ -3077,15 +3103,11 @@ async def delete_exam(
         db.close()
         return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
-    stored_file = _local_upload_path(exam.image_path)
+    stored_image_path = exam.image_path
     db.delete(exam)
     db.commit()
     db.close()
-    if stored_file and os.path.exists(stored_file):
-        try:
-            os.remove(stored_file)
-        except OSError as e:
-            print(f"Upload file cleanup warning: {e}")
+    _delete_stored_upload(stored_image_path)
     return JSONResponse({"success": True, "message": "已删除"})
 
 @app.get("/")
@@ -4257,7 +4279,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.9.2",
+        "version": "0.9.3",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
