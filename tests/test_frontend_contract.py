@@ -56,6 +56,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotRegex(HTML, r"URLSearchParams\([^)]*familyAccessCode")
 
     def test_returning_parent_can_query_wrong_bank_without_scrolling_to_upload_form(self):
+        self.assertIn('onclick="openWrongBankQuery()">查看今日复习</button>', HTML)
         self.assertIn('id="wrongBankDialog"', HTML)
         self.assertIn('id="wrongBankGrade"', HTML)
         self.assertIn('id="wrongBankStudentName"', HTML)
@@ -67,6 +68,30 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("wrongBankDialog.showModal()", HTML)
         self.assertIn("wrongBankDialog.addEventListener('cancel'", HTML)
         self.assertIn("historyStatus.classList.remove('show')", HTML)
+
+    def test_returning_parent_can_remember_only_non_secret_family_profile_fields(self):
+        self.assertIn("const FAMILY_PROFILE_STORAGE_KEY = 'xiahunao_family_profile'", HTML)
+        self.assertIn("function loadRememberedFamilyProfile()", HTML)
+        self.assertIn("function rememberFamilyProfile(grade, studentName, enabled)", HTML)
+        self.assertIn("function restoreRememberedFamilyProfile()", HTML)
+        self.assertIn('id="rememberFamilyProfile"', HTML)
+        self.assertIn('id="wrongBankRememberProfile"', HTML)
+        self.assertIn("restoreRememberedFamilyProfile();", HTML)
+        self.assertIn("rememberFamilyProfile(grade, name,", HTML)
+        self.assertIn("rememberFamilyProfile(grade, studentName,", HTML)
+        self.assertNotRegex(
+            HTML,
+            r"localStorage\.setItem\([^\n]*(familyAccessCode|wrongBankFamilyCode|family_code|familyCode)",
+        )
+
+    def test_analysis_requires_a_named_student_for_reliable_wrong_bank_lookup(self):
+        self.assertRegex(
+            HTML,
+            r'<input type="text" id="studentName"[^>]*required[^>]*autocomplete="name"',
+        )
+        self.assertIn("const name = document.getElementById('studentName').value.trim();", HTML)
+        self.assertIn("alert('请填写学生姓名，之后查询家庭错题库需要使用同一姓名')", HTML)
+        self.assertNotIn("document.getElementById('studentName').value || '同学'", HTML)
 
     def test_family_access_code_has_safe_visibility_and_generation_helpers(self):
         self.assertIn("function toggleFamilyCodeVisibility", HTML)
