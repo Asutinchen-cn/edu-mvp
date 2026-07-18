@@ -714,6 +714,49 @@ class FamilyAccessEndpointTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_failed_ocr_removes_the_newly_stored_upload(self):
+        class TestUpload:
+            filename = "exam.png"
+            content_type = "image/png"
+
+            async def read(self):
+                return b"exam-image"
+
+        files_before = {path.name for path in Path(self.upload_dir.name).iterdir()}
+        with patch(
+            "api.main.baidu_ocr",
+            new=AsyncMock(side_effect=RuntimeError("OCR unavailable")),
+        ):
+            response = asyncio.run(upload_exam(
+                student_name="小明",
+                grade="六年级",
+                subject="math",
+                file=TestUpload(),
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            {path.name for path in Path(self.upload_dir.name).iterdir()},
+            files_before,
+        )
+
+    def test_deleting_an_exam_also_deletes_its_original_upload(self):
+        stored_file = Path(self.upload_dir.name) / "protected.png"
+
+        response = asyncio.run(delete_exam(
+            self.first_exam_id,
+            "六年级",
+            "小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(stored_file.exists())
+        db = self.session_factory()
+        self.assertIsNone(db.query(Exam).filter(Exam.id == self.first_exam_id).first())
+        db.close()
+
     def test_upload_directory_is_not_publicly_mounted(self):
         mounted_paths = [getattr(route, "path", None) for route in app.routes]
 
