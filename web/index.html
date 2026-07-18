@@ -207,12 +207,27 @@
             font-size: 14px;
             font-weight: 800;
             box-shadow: 0 12px 26px rgba(255, 122, 26, 0.24);
+            font-family: inherit;
+            border: 0;
+            cursor: pointer;
         }
         .hero-link.secondary {
             color: var(--brand-blue);
             background: #fff;
             border: 1px solid rgba(23, 105, 232, 0.16);
             box-shadow: 0 12px 26px rgba(23, 105, 232, 0.09);
+        }
+        .hero-link.quiet {
+            color: #41516b;
+            background: transparent;
+            box-shadow: none;
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+        .hero-link:hover,
+        .hero-link:focus-visible {
+            transform: translateY(-1px);
+            outline: none;
         }
         .hero-card {
             position: relative;
@@ -413,6 +428,24 @@
             color: var(--muted);
             font-size: 11px;
             line-height: 1.5;
+        }
+        .remember-profile {
+            display: inline-flex;
+            align-items: flex-start;
+            gap: 7px;
+            margin-top: 3px;
+            color: #41516b;
+            font-size: 11px;
+            line-height: 1.45;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .remember-profile input {
+            width: 15px;
+            height: 15px;
+            margin-top: 1px;
+            accent-color: var(--brand-blue);
+            flex: 0 0 auto;
         }
         .access-code-control {
             display: grid;
@@ -2106,7 +2139,8 @@
             <p>上传初中试卷，获得有依据的错因诊断、家长复习摘要和 7 天行动安排；也可以按上海教材单元生成复习卷与答案解析。</p>
             <div class="hero-actions">
                 <a class="hero-link" href="#analysis">开始分析试卷</a>
-                <a class="hero-link secondary" href="#worksheet">生成单元复习卷</a>
+                <button type="button" class="hero-link secondary" onclick="openWrongBankQuery()">查看今日复习</button>
+                <a class="hero-link quiet" href="#worksheet">按教材出卷 →</a>
             </div>
         </div>
         <div class="hero-card" aria-label="虾胡闹品牌与功能概览">
@@ -2174,8 +2208,8 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>学生姓名</label>
-                <input type="text" id="studentName" placeholder="请输入学生姓名">
+                <label for="studentName">学生姓名</label>
+                <input type="text" id="studentName" placeholder="请输入学生姓名" required autocomplete="name" maxlength="30">
             </div>
             <div class="form-group">
                 <label for="familyAccessCode">家庭访问码</label>
@@ -2193,7 +2227,11 @@
                     <button type="button" class="access-code-action" data-family-target="familyAccessCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('familyAccessCode', this)">显示</button>
                     <button type="button" class="access-code-action" aria-label="生成家庭访问码" onclick="generateFamilyAccessCode('familyAccessCode')">生成</button>
                 </div>
-                <span class="field-hint" id="familyAccessHint">上传和查询错题库时使用，本页不会保存</span>
+                <span class="field-hint" id="familyAccessHint">上传和查询错题库时使用，本网站不会保存访问码</span>
+                <label class="remember-profile" for="rememberFamilyProfile">
+                    <input type="checkbox" id="rememberFamilyProfile" checked>
+                    <span>在这台设备记住年级和姓名</span>
+                </label>
             </div>
         </div>
 
@@ -2400,6 +2438,12 @@
                 </div>
                 <span class="field-hint">必须与上传时使用的访问码一致，本次查询后不会保存</span>
             </div>
+            <div class="wrong-bank-field full">
+                <label class="remember-profile" for="wrongBankRememberProfile">
+                    <input type="checkbox" id="wrongBankRememberProfile" checked>
+                    <span>在这台设备记住年级和姓名，访问码仍不会保存</span>
+                </label>
+            </div>
         </div>
         <div class="wrong-bank-status" id="wrongBankStatus" role="alert" aria-live="assertive"></div>
         <div class="wrong-bank-actions">
@@ -2428,6 +2472,8 @@
 
 <script>
 // ===== STATE =====
+const FAMILY_PROFILE_STORAGE_KEY = 'xiahunao_family_profile';
+
 function stripStoredImageLinks(rawResult) {
     try {
         const parsed = JSON.parse(rawResult || '{}');
@@ -2439,6 +2485,46 @@ function stripStoredImageLinks(rawResult) {
     } catch (e) {
         return rawResult;
     }
+}
+
+function loadRememberedFamilyProfile() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(FAMILY_PROFILE_STORAGE_KEY) || 'null');
+        if (!parsed || typeof parsed !== 'object') return null;
+        const supportedGrades = ['六年级', '七年级', '八年级', '九年级'];
+        const grade = supportedGrades.includes(parsed.grade) ? parsed.grade : '';
+        const studentName = String(parsed.studentName || '').trim().slice(0, 30);
+        return grade && studentName ? { grade: grade, studentName: studentName } : null;
+    } catch (e) {
+        localStorage.removeItem(FAMILY_PROFILE_STORAGE_KEY);
+        return null;
+    }
+}
+
+function rememberFamilyProfile(grade, studentName, enabled) {
+    if (!enabled) {
+        localStorage.removeItem(FAMILY_PROFILE_STORAGE_KEY);
+        return;
+    }
+    const supportedGrades = ['六年级', '七年级', '八年级', '九年级'];
+    const normalizedName = String(studentName || '').trim().slice(0, 30);
+    if (!supportedGrades.includes(grade) || !normalizedName) return;
+    localStorage.setItem(FAMILY_PROFILE_STORAGE_KEY, JSON.stringify({
+        grade: grade,
+        studentName: normalizedName
+    }));
+}
+
+function restoreRememberedFamilyProfile() {
+    const profile = loadRememberedFamilyProfile();
+    if (!profile) return;
+    document.getElementById('gradeSelect').value = profile.grade;
+    document.getElementById('studentName').value = profile.studentName;
+    document.getElementById('wrongBankGrade').value = profile.grade;
+    document.getElementById('wrongBankStudentName').value = profile.studentName;
+    document.getElementById('worksheetGrade').value = profile.grade;
+    document.getElementById('rememberFamilyProfile').checked = true;
+    document.getElementById('wrongBankRememberProfile').checked = true;
 }
 
 let uploadedFiles = [];
@@ -2492,6 +2578,7 @@ function saveHistoryRecords() {
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
+    restoreRememberedFamilyProfile();
     renderHistory();
     setupDropzone();
     setupFileInput();
@@ -2749,9 +2836,14 @@ async function startAnalysis() {
 
     const grade = document.getElementById('gradeSelect').value;
     const subject = document.getElementById('analysisSubject').value;
-    const name = document.getElementById('studentName').value || '同学';
+    const name = document.getElementById('studentName').value.trim();
     if (!grade) {
         alert('请先选择年级');
+        return;
+    }
+    if (!name) {
+        alert('请填写学生姓名，之后查询家庭错题库需要使用同一姓名');
+        document.getElementById('studentName').focus();
         return;
     }
 
@@ -2794,6 +2886,7 @@ async function startAnalysis() {
         document.getElementById('loadingText').textContent = '正在整理学习方案...';
         const analysisData = parseApiResponse(mergeApiAnalyses(apiAnalyses, subject), name, grade, subject);
         if (!analysisData) throw new Error('分析结果格式异常，请重新上传清晰试卷后再试');
+        rememberFamilyProfile(grade, name, document.getElementById('rememberFamilyProfile').checked);
 
         // Save to history
         const createdAt = new Date().toISOString();
@@ -3520,7 +3613,7 @@ function loadExample() {
 
 // ===== GUIDE =====
 function showGuide() {
-    alert('使用指南：\n\n1. 选择年级、学科并填写学生姓名\n2. 设置 8-32 位家庭访问码，请妥善记住\n3. 上传试卷照片（支持多张）\n4. 点击“开始分析”\n5. 查看有证据的错题诊断与复习安排\n6. 使用相同访问码查询服务器错题库');
+    alert('使用指南：\n\n1. 选择年级、学科并填写学生姓名\n2. 设置 8-32 位家庭访问码，请妥善记住\n3. 上传试卷照片（支持多张）\n4. 点击“开始分析”\n5. 查看有证据的错题诊断与复习安排\n6. 下次点击“查看今日复习”，使用相同访问码查询\n\n本机可以记住年级和姓名，但不会保存家庭访问码。');
 }
 
 // ===== HISTORY =====
@@ -4430,6 +4523,7 @@ function openWrongBankQuery() {
     document.getElementById('wrongBankSubject').value = currentSubjectArchive;
     document.getElementById('wrongBankStudentName').value = document.getElementById('studentName').value;
     document.getElementById('wrongBankFamilyCode').value = document.getElementById('familyAccessCode').value;
+    document.getElementById('wrongBankRememberProfile').checked = document.getElementById('rememberFamilyProfile').checked;
     document.getElementById('wrongBankStatus').textContent = '';
     if (!wrongBankDialog.open) wrongBankDialog.showModal();
     const firstEmptyField = document.getElementById('wrongBankStudentName').value.trim()
@@ -4480,6 +4574,9 @@ async function submitWrongBankQuery(event) {
 
     try {
         const result = await syncServerWrongBank({ quiet: true });
+        const rememberProfile = document.getElementById('wrongBankRememberProfile').checked;
+        document.getElementById('rememberFamilyProfile').checked = rememberProfile;
+        rememberFamilyProfile(grade, studentName, rememberProfile);
         await setHistoryView('knowledge');
         const historyStatus = document.getElementById('historySyncStatus');
         historyStatus.textContent = result.message;
@@ -4948,8 +5045,8 @@ function renderHistory() {
                 }
                 : {
                     title: '暂无历史记录',
-                    description: '上传试卷并完成分析后，记录将显示在这里。',
-                    action: ''
+                    description: '上传新试卷开始分析，或查询已经保存在服务器上的家庭错题库。',
+                    action: '<button type="button" class="history-action" onclick="openWrongBankQuery()">查询家庭错题库</button>'
                 });
         list.innerHTML = `
             <div class="empty-state">
