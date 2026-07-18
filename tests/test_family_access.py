@@ -35,6 +35,7 @@ from api.main import (
     update_review_progress,
     update_wrong_question_mastery,
     upload_exam,
+    upload_exam_batch,
 )
 
 
@@ -741,8 +742,119 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             files_before,
         )
 
+    def test_multi_page_upload_creates_one_exam_record(self):
+        class TestUpload:
+            content_type = "image/png"
+
+            def __init__(self, filename, content):
+                self.filename = filename
+                self.content = content
+
+            async def read(self):
+                return self.content
+
+        with patch(
+            "api.main.baidu_ocr",
+            new=AsyncMock(side_effect=["第一页文字", "第二页文字"]),
+        ):
+            response = asyncio.run(upload_exam_batch(
+                student_name="小明",
+                grade="六年级",
+                subject="math",
+                files=[
+                    TestUpload("page-1.png", b"page-one"),
+                    TestUpload("page-2.png", b"page-two"),
+                ],
+                family_code="Home2026A",
+            ))
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["image_count"], 2)
+        db = self.session_factory()
+        uploaded = db.query(Exam).filter(Exam.id == payload["id"]).one()
+        self.assertEqual(len(json.loads(uploaded.image_paths)), 2)
+        self.assertIn("第 1 页", uploaded.ocr_text)
+        self.assertIn("第一页文字", uploaded.ocr_text)
+        self.assertIn("第 2 页", uploaded.ocr_text)
+        self.assertIn("第二页文字", uploaded.ocr_text)
+        db.close()
+
+    def test_failed_multi_page_upload_removes_every_new_file_and_record(self):
+        class TestUpload:
+            content_type = "image/png"
+
+            def __init__(self, filename, content):
+                self.filename = filename
+                self.content = content
+
+            async def read(self):
+                return self.content
+
+        files_before = {path.name for path in Path(self.upload_dir.name).iterdir()}
+        db = self.session_factory()
+        exam_count_before = db.query(Exam).count()
+        db.close()
+
+        with patch(
+            "api.main.baidu_ocr",
+            new=AsyncMock(side_effect=["第一页文字", RuntimeError("OCR unavailable")]),
+        ):
+            response = asyncio.run(upload_exam_batch(
+                student_name="小明",
+                grade="六年级",
+                subject="math",
+                files=[
+                    TestUpload("page-1.png", b"page-one"),
+                    TestUpload("page-2.png", b"page-two"),
+                ],
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            {path.name for path in Path(self.upload_dir.name).iterdir()},
+            files_before,
+        )
+        db = self.session_factory()
+        self.assertEqual(db.query(Exam).count(), exam_count_before)
+        db.close()
+
+    def test_protected_original_can_return_a_specific_page(self):
+        second_page = Path(self.upload_dir.name) / "protected-2.png"
+        second_page.write_bytes(b"second-private-image")
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.image_paths = json.dumps([
+            "/uploads/protected.png",
+            "/uploads/protected-2.png",
+        ])
+        db.commit()
+        db.close()
+
+        response = asyncio.run(get_exam_image(
+            self.first_exam_id,
+            grade="六年级",
+            student_name="小明",
+            page=2,
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Path(response.path).name, "protected-2.png")
+
     def test_deleting_an_exam_also_deletes_its_original_upload(self):
         stored_file = Path(self.upload_dir.name) / "protected.png"
+        second_page = Path(self.upload_dir.name) / "protected-2.png"
+        second_page.write_bytes(b"second-private-image")
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.image_paths = json.dumps([
+            "/uploads/protected.png",
+            "/uploads/protected-2.png",
+        ])
+        db.commit()
+        db.close()
 
         response = asyncio.run(delete_exam(
             self.first_exam_id,
@@ -753,6 +865,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(stored_file.exists())
+        self.assertFalse(second_page.exists())
         db = self.session_factory()
         self.assertIsNone(db.query(Exam).filter(Exam.id == self.first_exam_id).first())
         db.close()

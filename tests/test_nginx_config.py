@@ -8,7 +8,7 @@ NGINX_CONFIG = (Path(__file__).parents[1] / "nginx" / "nginx.conf").read_text(en
 
 class NginxUploadAndPrivacyContractTest(unittest.TestCase):
     def test_gateway_accepts_backend_upload_limit_plus_multipart_overhead(self):
-        self.assertRegex(NGINX_CONFIG, r"client_max_body_size\s+12m;")
+        self.assertRegex(NGINX_CONFIG, r"client_max_body_size\s+52m;")
         self.assertRegex(NGINX_CONFIG, r"client_body_timeout\s+120s;")
 
     def test_oversized_upload_returns_a_json_error(self):
@@ -16,7 +16,7 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
         self.assertRegex(
             NGINX_CONFIG,
             r"location @payload_too_large\s*\{[^}]*default_type application/json;"
-            r"[^}]*return 413 '\{\"success\":false,\"error\":\"文件大小不能超过10MB\"\}';",
+            r"[^}]*return 413 '\{\"success\":false,\"error\":\"多页试卷总大小不能超过50MB\"\}';",
         )
 
     def test_parent_data_pages_send_basic_privacy_headers(self):

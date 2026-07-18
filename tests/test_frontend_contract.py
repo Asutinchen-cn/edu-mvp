@@ -115,9 +115,18 @@ class FrontendCurriculumContractTest(unittest.TestCase):
     def test_original_exam_files_use_the_protected_image_endpoint(self):
         self.assertIn("async function openProtectedExamImage(id)", HTML)
         self.assertIn("/image?${params.toString()}", HTML)
+        self.assertIn("params.set('page', String(pageNumber))", HTML)
         self.assertIn("headers: accessHeaders", HTML)
+        self.assertIn("record.imageCount", HTML)
+        self.assertIn("查看原卷（", HTML)
         self.assertNotIn("function safeUploadUrl", HTML)
         self.assertNotIn("href=\"${escapeHtml(imageUrl)}\"", HTML)
+
+    def test_multi_page_exam_is_uploaded_and_analyzed_as_one_record(self):
+        self.assertIn("fd.append('files', current.file, current.name)", HTML)
+        self.assertIn("requestJson('/upload-batch'", HTML)
+        self.assertIn("imageCount: uploadJson.image_count", HTML)
+        self.assertNotIn("mergeApiAnalyses(apiAnalyses, subject)", HTML)
 
     def test_server_record_deletion_explains_that_originals_are_removed(self):
         self.assertIn("原卷文件和分析结果将一并删除，且无法恢复", HTML)
