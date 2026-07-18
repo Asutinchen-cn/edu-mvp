@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -186,6 +186,55 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         payload = json.loads(response.body)
 
         self.assertEqual(payload["questions"][0]["knowledge_point"], "一元一次方程")
+
+    def test_practice_can_target_a_confirmed_knowledge_point(self):
+        generated_questions = [{
+            "id": 1,
+            "type": "填空题",
+            "question": "3x + 4 = 16，x = ___。",
+            "answer": "4",
+            "hint": "等式两边先同时减去 4。",
+        }]
+        generator = AsyncMock(return_value=generated_questions)
+
+        with patch("api.main.ai_generate_questions", generator):
+            response = asyncio.run(generate_practice(
+                self.first_exam_id,
+                "六年级",
+                "小明",
+                knowledge_point="一元一次方程",
+                family_code="Home2026A",
+            ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["weak_points"], ["一元一次方程"])
+        self.assertEqual(payload["practice_mode"], "knowledge_point")
+        self.assertEqual(payload["questions"], generated_questions)
+        generator.assert_awaited_once()
+        self.assertEqual(generator.await_args.args[0], ["一元一次方程"])
+        self.assertEqual(generator.await_args.kwargs["subject"], "math")
+        self.assertEqual(generator.await_args.kwargs["grade"], "六年级")
+        self.assertEqual(
+            generator.await_args.kwargs["wrong_questions"][0]["error_type"],
+            "移项符号错误",
+        )
+
+    def test_practice_rejects_an_unconfirmed_knowledge_point(self):
+        generator = AsyncMock(return_value=[])
+
+        with patch("api.main.ai_generate_questions", generator):
+            response = asyncio.run(generate_practice(
+                self.first_exam_id,
+                "六年级",
+                "小明",
+                knowledge_point="几何证明",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("不在这份试卷", json.loads(response.body)["error"])
+        generator.assert_not_awaited()
 
     def test_review_progress_saves_each_step_time_and_enforces_the_retest_day(self):
         with patch("api.main._utc_now", return_value=datetime(2026, 7, 16, 6, 0, tzinfo=timezone.utc)):

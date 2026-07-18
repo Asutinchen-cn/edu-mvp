@@ -1,6 +1,8 @@
+import asyncio
 import json
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from api.main import (
     _analysis_history_detail,
@@ -8,6 +10,7 @@ from api.main import (
     _build_review_schedule,
     _normalize_ai_analysis,
     _normalize_review_progress,
+    ai_generate_questions,
     generate_correction_sheet_pdf,
     generate_family_review_report_pdf,
 )
@@ -72,6 +75,35 @@ class AiAnalysisNormalizationTest(unittest.TestCase):
         self.assertEqual(analysis["wrong_count"], 0)
         self.assertEqual(analysis["error_type_stats"], [])
         self.assertEqual(analysis["evidence_status"], "insufficient")
+
+    def test_focused_practice_prompt_keeps_grade_subject_and_error_evidence(self):
+        generated = json.dumps([{
+            "id": 1,
+            "type": "填空题",
+            "question": "Yesterday, Tom ___ home early.",
+            "answer": "went",
+            "hint": "Look at the time word.",
+        }])
+        model = AsyncMock(return_value=generated)
+
+        with patch("api.main.call_deepseek", model):
+            asyncio.run(ai_generate_questions(
+                ["一般过去时"],
+                subject="english",
+                grade="六年级",
+                wrong_questions=[{
+                    "question": "Yesterday I go home.",
+                    "error_type": "一般过去时错误",
+                    "student_answer": "go",
+                    "correct_answer": "went",
+                }],
+            ))
+        prompt = model.await_args.args[0]
+
+        self.assertIn("资深六年级英语教师", prompt)
+        self.assertIn("只生成英语题", prompt)
+        self.assertIn("一般过去时错误", prompt)
+        self.assertIn("不得照抄原题", prompt)
 
 
 class AnalysisHistorySummaryTest(unittest.TestCase):

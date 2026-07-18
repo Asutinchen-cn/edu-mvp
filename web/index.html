@@ -941,6 +941,26 @@
             font-size: 13px;
             font-weight: 900;
         }
+        .knowledge-group-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .knowledge-practice-button {
+            min-height: 34px;
+            padding: 0 12px;
+            border: 0;
+            border-radius: 8px;
+            background: var(--brand-blue);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .knowledge-practice-button:hover { background: #0f58c9; }
         .knowledge-question-row {
             display: grid;
             grid-template-columns: 28px minmax(0, 1fr) auto;
@@ -1967,6 +1987,7 @@
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
             .history-view-switch { display: grid; width: 100%; }
             .knowledge-group-head { gap: 8px; }
+            .knowledge-group-actions { align-items: flex-end; flex-direction: column; gap: 6px; }
             .knowledge-question-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
             .knowledge-source-button { grid-column: 2; width: 100%; }
             .history-wrong-row { grid-template-columns: 1fr; gap: 6px; }
@@ -3060,6 +3081,9 @@ async function generatePractice() {
             grade: currentAnalysisData.grade,
             student_name: currentAnalysisData.studentName
         });
+        if (currentAnalysisData.practiceKnowledgePoint) {
+            params.set('knowledge_point', currentAnalysisData.practiceKnowledgePoint);
+        }
         const data = await requestJson(`/generate-practice/${examId}?${params.toString()}`, {
             method: 'POST',
             headers: familyAccessHeaders()
@@ -4234,6 +4258,10 @@ function renderKnowledgeQuestionBank() {
     list.innerHTML = '<div class="knowledge-bank">' + groupedQuestions.map(group => {
         const subjectLabel = group.subject === 'english' ? '英语' : '数学';
         const latestDate = new Date(group.questions[0]?.created).toLocaleDateString('zh-CN');
+        const sourceExamId = Number(group.questions[0]?.exam_id);
+        const practiceButton = group.name !== '待归类' && Number.isFinite(sourceExamId)
+            ? `<button type="button" class="knowledge-practice-button" onclick="prepareKnowledgePractice(${escapeHtml(JSON.stringify(group.name))}, ${sourceExamId}, ${escapeHtml(JSON.stringify(group.subject))})">生成专项练习</button>`
+            : '';
         return `
             <section class="knowledge-group">
                 <div class="knowledge-group-head">
@@ -4241,7 +4269,10 @@ function renderKnowledgeQuestionBank() {
                         <h4>${escapeHtml(group.name)}</h4>
                         <p>${subjectLabel} · 最近错题 ${escapeHtml(latestDate)}</p>
                     </div>
-                    <span class="knowledge-count">${group.questions.length} 道</span>
+                    <div class="knowledge-group-actions">
+                        <span class="knowledge-count">${group.questions.length} 道</span>
+                        ${practiceButton}
+                    </div>
                 </div>
                 <div class="knowledge-questions">
                     ${group.questions.map((item, index) => {
@@ -4270,6 +4301,52 @@ function renderKnowledgeQuestionBank() {
                 </div>
             </section>`;
     }).join('') + '</div>';
+}
+
+function prepareKnowledgePractice(knowledgePoint, examId, subject) {
+    const studentName = (document.getElementById('studentName').value || '').trim();
+    const grade = document.getElementById('gradeSelect').value;
+    const relatedQuestions = wrongQuestionBank.questions.filter(item => (
+        item.knowledge_point === knowledgePoint
+        && item.subject === subject
+    ));
+    if (!studentName || !grade || !relatedQuestions.length || !Number.isFinite(Number(examId))) {
+        alert('请重新查询家庭错题库后再生成专项练习');
+        return;
+    }
+    const subjectLabel = subject === 'english' ? '英语' : '数学';
+    const errorStats = buildErrorTypeStats(relatedQuestions);
+    currentAnalysisData = {
+        studentName: studentName,
+        grade: grade,
+        subject: subject,
+        subjectLabel: subjectLabel,
+        examIds: [Number(examId)],
+        practiceKnowledgePoint: knowledgePoint,
+        weakPoints: [knowledgePoint],
+        evaluation: `这个知识点已记录 ${relatedQuestions.length} 道错题，专项练习将针对实际错因设计变式。`,
+        evidenceStatus: 'confirmed',
+        evidenceNote: '专项范围来自家庭错题库中已确认的题目证据。',
+        errorTypes: errorStats.map((item, index) => ({
+            ...item,
+            color: ['#FFB74D', '#FF7043', '#E53935'][index % 3]
+        })),
+        wrongQuestions: relatedQuestions.map((item, index) => ({
+            num: index + 1,
+            reason: `${item.error_type || '待确认'}: ${item.question}`,
+            correctAnswer: item.correct_answer || '见原记录',
+            tag: item.error_type || '待确认'
+        })),
+        weakDetails: [{
+            name: knowledgePoint,
+            practice: `先订正代表错题，再完成 5 道“${knowledgePoint}”变式题`,
+            resource: `${subjectLabel}教材对应知识点`
+        }]
+    };
+    renderAnalysisResult(currentAnalysisData);
+    document.getElementById('resultSection').classList.add('show');
+    document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    generatePractice();
 }
 
 async function openQuestionSourceExam(examId) {

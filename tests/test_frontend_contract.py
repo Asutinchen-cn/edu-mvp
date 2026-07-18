@@ -129,6 +129,15 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("function openQuestionSourceExam(examId)", HTML)
         self.assertIn("按知识点", HTML)
 
+    def test_knowledge_point_group_can_generate_focused_practice(self):
+        self.assertIn("function prepareKnowledgePractice(knowledgePoint, examId, subject)", HTML)
+        self.assertIn("生成专项练习", HTML)
+        self.assertIn("practiceKnowledgePoint: knowledgePoint", HTML)
+        self.assertIn(
+            "params.set('knowledge_point', currentAnalysisData.practiceKnowledgePoint)",
+            HTML,
+        )
+
     def test_history_can_export_a_protected_correction_sheet(self):
         self.assertIn("function exportCorrectionSheet(id)", HTML)
         self.assertIn("/correction-sheet?${params.toString()}", HTML)
