@@ -10,6 +10,7 @@ from api.main import (
     _build_review_schedule,
     _normalize_ai_analysis,
     _normalize_review_progress,
+    _summarize_family_review_records,
     ai_generate_questions,
     generate_correction_sheet_pdf,
     generate_family_review_report_pdf,
@@ -306,21 +307,73 @@ class CorrectionSheetPdfTest(unittest.TestCase):
 
 
 class FamilyReviewReportPdfTest(unittest.TestCase):
+    def test_weekly_summary_uses_question_mastery_and_groups_by_subject_and_point(self):
+        summary = _summarize_family_review_records([
+            {
+                "exam_id": 11,
+                "subject": "math",
+                "created_at": "2026-07-16T10:00:00",
+                "wrong_questions": [
+                    {"knowledge_point": "一元一次方程", "mastered": True},
+                    {"knowledge_point": "有理数加法", "mastered": False},
+                ],
+            },
+            {
+                "exam_id": 12,
+                "subject": "math",
+                "created_at": "2026-07-17T10:00:00",
+                "wrong_questions": [
+                    {"knowledge_point": "一元一次方程", "mastered": False},
+                ],
+            },
+            {
+                "exam_id": 13,
+                "subject": "english",
+                "created_at": "2026-07-18T10:00:00",
+                "wrong_questions": [
+                    {"knowledge_point": "一般过去时", "mastered": True},
+                ],
+            },
+        ])
+
+        self.assertEqual(summary["exam_count"], 3)
+        self.assertEqual(summary["question_count"], 4)
+        self.assertEqual(summary["mastered_count"], 2)
+        self.assertEqual(summary["pending_count"], 2)
+        self.assertEqual(summary["subject_exam_counts"], {"math": 2, "english": 1})
+        self.assertEqual(summary["knowledge_points"][0], {
+            "name": "一元一次方程",
+            "subject": "math",
+            "wrong_count": 2,
+            "mastered_count": 1,
+            "pending_count": 1,
+            "source_exam_count": 2,
+        })
+        self.assertEqual(
+            [(item["name"], item["pending_count"]) for item in summary["priority_tasks"]],
+            [("一元一次方程", 1), ("有理数加法", 1)],
+        )
+
+        empty_summary = _summarize_family_review_records([{
+            "exam_id": 14,
+            "subject": "math",
+            "wrong_questions": [],
+        }])
+        self.assertEqual(empty_summary["question_count"], 0)
+        self.assertEqual(empty_summary["priority_tasks"], [])
+
     def test_builds_a_weekly_report_from_saved_summary_evidence(self):
         pdf_bytes = generate_family_review_report_pdf(
             student_name="小明",
             grade="六年级",
             records=[{
+                "exam_id": 11,
                 "subject": "math",
                 "created_at": "2026-07-16T10:00:00",
-                "wrong_count": 2,
-                "weak_points": ["一元一次方程"],
-                "review_progress": {
-                    "completed": ["corrected"],
-                    "completed_count": 1,
-                    "total": 3,
-                    "next_step": "practiced",
-                },
+                "wrong_questions": [
+                    {"knowledge_point": "一元一次方程", "mastered": True},
+                    {"knowledge_point": "一元一次方程", "mastered": False},
+                ],
             }],
         )
 

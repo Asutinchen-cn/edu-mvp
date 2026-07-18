@@ -3576,6 +3576,95 @@ def generate_correction_sheet_pdf(
     return bytes(pdf.output())
 
 
+def _summarize_family_review_records(records: list[dict]) -> dict:
+    """按逐题掌握状态整理家庭周报口径。"""
+    safe_records = [record for record in records if isinstance(record, dict)]
+    subject_exam_counts = {"math": 0, "english": 0}
+    grouped_points = {}
+    question_count = 0
+    mastered_count = 0
+
+    for record_index, record in enumerate(safe_records):
+        subject = record.get("subject")
+        if subject not in subject_exam_counts:
+            subject = "math"
+        subject_exam_counts[subject] += 1
+        weak_points = record.get("weak_points", [])
+        fallback_point = next(
+            (
+                str(point).strip()
+                for point in weak_points
+                if str(point or "").strip()
+            ),
+            "待归类",
+        )
+        source_exam = record.get("exam_id") or f"record-{record_index + 1}"
+        raw_questions = record.get("wrong_questions", [])
+        questions = raw_questions if isinstance(raw_questions, list) else []
+
+        for question in questions:
+            if not isinstance(question, dict):
+                continue
+            knowledge_point = str(
+                question.get("knowledge_point") or fallback_point
+            ).strip() or "待归类"
+            mastered = question.get("mastered") is True
+            question_count += 1
+            if mastered:
+                mastered_count += 1
+
+            key = (subject, knowledge_point)
+            group = grouped_points.setdefault(key, {
+                "name": knowledge_point,
+                "subject": subject,
+                "wrong_count": 0,
+                "mastered_count": 0,
+                "pending_count": 0,
+                "source_exam_ids": set(),
+            })
+            group["wrong_count"] += 1
+            group["mastered_count" if mastered else "pending_count"] += 1
+            group["source_exam_ids"].add(str(source_exam))
+
+    knowledge_points = [
+        {
+            "name": group["name"],
+            "subject": group["subject"],
+            "wrong_count": group["wrong_count"],
+            "mastered_count": group["mastered_count"],
+            "pending_count": group["pending_count"],
+            "source_exam_count": len(group["source_exam_ids"]),
+        }
+        for group in grouped_points.values()
+    ]
+    knowledge_points.sort(key=lambda item: (
+        -item["source_exam_count"],
+        -item["wrong_count"],
+        -item["pending_count"],
+        item["subject"],
+        item["name"],
+    ))
+    priority_tasks = sorted(
+        (item for item in knowledge_points if item["pending_count"] > 0),
+        key=lambda item: (
+            -item["pending_count"],
+            -item["source_exam_count"],
+            -item["wrong_count"],
+            item["subject"],
+            item["name"],
+        ),
+    )
+    return {
+        "exam_count": len(safe_records),
+        "question_count": question_count,
+        "mastered_count": mastered_count,
+        "pending_count": question_count - mastered_count,
+        "subject_exam_counts": subject_exam_counts,
+        "knowledge_points": knowledge_points,
+        "priority_tasks": priority_tasks,
+    }
+
+
 def generate_family_review_report_pdf(
     student_name: str,
     grade: str,
@@ -3641,43 +3730,11 @@ def generate_family_review_report_pdf(
         raise RuntimeError("缺少中文字体，暂时无法生成家庭复习报告")
     pdf.document_font = document_font
 
-    safe_records = [record for record in records if isinstance(record, dict)]
-    subject_counts = {"math": 0, "english": 0}
-    weak_frequency: dict[str, int] = {}
-    known_wrong_counts = []
-    mastered_count = 0
-    pending_records = []
-    for record in safe_records:
-        subject = record.get("subject") if record.get("subject") in subject_counts else "math"
-        subject_counts[subject] += 1
-        wrong_count = record.get("wrong_count")
-        if isinstance(wrong_count, int) and wrong_count >= 0:
-            known_wrong_counts.append(wrong_count)
-        for point in {
-            clean(item) for item in record.get("weak_points", []) if clean(item)
-        }:
-            weak_frequency[point] = weak_frequency.get(point, 0) + 1
-        progress = record.get("review_progress", {})
-        completed_count = int(progress.get("completed_count") or 0)
-        total = int(progress.get("total") or 3)
-        if completed_count >= total:
-            mastered_count += 1
-        else:
-            pending_records.append(record)
-
-    ranked_weak_points = sorted(
-        weak_frequency.items(), key=lambda item: (-item[1], item[0])
-    )
-    now = datetime.now()
+    summary = _summarize_family_review_records(records)
+    subject_counts = summary["subject_exam_counts"]
+    now = datetime.now(SHANGHAI_TIMEZONE)
     period_start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
     period_end = now.strftime("%Y-%m-%d")
-    pending_count = len(pending_records)
-    known_wrong_total = sum(known_wrong_counts)
-    wrong_count_label = (
-        str(known_wrong_total)
-        if len(known_wrong_counts) == len(safe_records)
-        else (f"至少 {known_wrong_total}" if known_wrong_total else "待补充")
-    )
 
     def write_text(value, line_height=7, bold=False, color=(21, 34, 58)):
         text_value = clean(value)
@@ -3719,10 +3776,10 @@ def generate_family_review_report_pdf(
 
     section_title("本周概览")
     metrics = [
-        f"试卷 {len(safe_records)} 份",
-        f"错题 {wrong_count_label} 道",
-        f"已掌握 {mastered_count} 份",
-        f"待复习 {pending_count} 份",
+        f"试卷 {summary['exam_count']} 份",
+        f"错题 {summary['question_count']} 道",
+        f"已掌握 {summary['mastered_count']} 道",
+        f"待复习 {summary['pending_count']} 道",
     ]
     metric_width = pdf.epw / len(metrics)
     pdf.set_fill_color(241, 247, 255)
@@ -3747,34 +3804,31 @@ def generate_family_review_report_pdf(
         subject_summary.append(f"英语 {subject_counts['english']} 份")
     write_text("学科分布：" + ("、".join(subject_summary) or "暂无"), 7)
 
-    section_title("反复薄弱点")
-    if ranked_weak_points:
-        for index, (point, count) in enumerate(ranked_weak_points[:5], start=1):
-            write_text(f"{index}. {point}（出现在 {count} 份记录中）", 7)
-    else:
-        write_text("当前记录中还没有可确认的薄弱知识点。", 7, color=(65, 81, 107))
-
-    section_title("接下来优先完成")
-    step_labels = {
-        "corrected": "订正原题",
-        "practiced": "完成同类题",
-        "retested": "隔天回测",
-    }
-    if pending_records:
-        for index, record in enumerate(pending_records[:5], start=1):
-            progress = record.get("review_progress", {})
-            subject_label = SUBJECT_LABELS.get(record.get("subject"), "数学")
-            points = [clean(item) for item in record.get("weak_points", []) if clean(item)]
-            focus = points[0] if points else "这份错题"
-            next_step = step_labels.get(progress.get("next_step"), "继续复习")
-            completed_count = int(progress.get("completed_count") or 0)
-            total = int(progress.get("total") or 3)
+    section_title("知识点掌握情况")
+    if summary["knowledge_points"]:
+        for index, point in enumerate(summary["knowledge_points"][:5], start=1):
+            subject_label = SUBJECT_LABELS.get(point["subject"], "数学")
             write_text(
-                f"{index}. [{subject_label}] {focus}：{next_step}（完成 {completed_count}/{total}）",
+                f"{index}. [{subject_label}] {point['name']}：错题 {point['wrong_count']} 道，"
+                f"待复习 {point['pending_count']} 道（来自 {point['source_exam_count']} 份试卷）",
                 7,
             )
     else:
-        write_text("近 7 天记录均已完成三步复习。", 7, color=(33, 166, 122))
+        write_text("当前记录中还没有可确认的逐题错题证据。", 7, color=(65, 81, 107))
+
+    section_title("接下来优先完成")
+    if summary["priority_tasks"]:
+        for index, task in enumerate(summary["priority_tasks"][:5], start=1):
+            subject_label = SUBJECT_LABELS.get(task["subject"], "数学")
+            write_text(
+                f"{index}. [{subject_label}] {task['name']}：先订正原题，再完成 5 道同类题"
+                f"（待复习 {task['pending_count']} 道，来自 {task['source_exam_count']} 份试卷）",
+                7,
+            )
+    elif summary["question_count"]:
+        write_text("近 7 天记录中的错题均已标记为已掌握。", 7, color=(33, 166, 122))
+    else:
+        write_text("暂无可安排的逐题任务，请先上传清晰试卷并完成错题分析。", 7, color=(65, 81, 107))
 
     section_title("家长本周核对")
     write_text("[ ] 孩子能独立说清主要错因", 8)
@@ -3784,7 +3838,7 @@ def generate_family_review_report_pdf(
 
     pdf.ln(4)
     write_text(
-        "说明：本报告只统计已保存且可确认的分析记录，不代表考试成绩；错题数缺失时不做推算。",
+        "说明：本报告只统计已保存且可确认的逐题错题及掌握状态，不代表考试成绩；没有逐题证据时不做推算。",
         6,
         color=(100, 116, 139),
     )
@@ -4114,12 +4168,31 @@ async def export_family_review_report(
     records = []
     for exam in recent_exams:
         summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
+        analysis = _analysis_history_detail(
+            exam.ai_analysis,
+            exam.weak_points,
+            exam.recommendations,
+        )
+        fallback_point = next(iter(analysis.get("weak_points", [])), "待归类")
+        review_progress = _normalize_review_progress(exam.review_progress)
+        exam_mastered = review_progress["completed_count"] == review_progress["total"]
+        question_mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+        wrong_questions = []
+        for question_number, item in enumerate(analysis.get("wrong_questions", []), start=1):
+            if not item.get("question"):
+                continue
+            wrong_questions.append({
+                "knowledge_point": item.get("knowledge_point") or fallback_point,
+                "mastered": question_mastery.get(str(question_number), exam_mastered),
+            })
         records.append({
+            "exam_id": exam.id,
             "subject": exam.subject,
             "created_at": exam.created_at.isoformat(),
             "wrong_count": summary["wrong_count"],
             "weak_points": summary["weak_points"],
-            "review_progress": _normalize_review_progress(exam.review_progress),
+            "review_progress": review_progress,
+            "wrong_questions": wrong_questions,
         })
     db.close()
 
@@ -4152,7 +4225,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.9.0",
+        "version": "0.9.1",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {

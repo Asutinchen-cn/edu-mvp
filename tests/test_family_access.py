@@ -601,6 +601,30 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(response.media_type, "application/pdf")
         self.assertIn("attachment", response.headers["content-disposition"])
 
+    def test_family_review_report_uses_question_mastery_even_when_exam_progress_is_pending(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.review_progress = json.dumps({"completed": []})
+        exam.wrong_question_mastery = json.dumps({"1": True})
+        db.commit()
+        db.close()
+
+        with patch("api.main.generate_family_review_report_pdf", return_value=b"%PDF-test") as render_pdf:
+            response = asyncio.run(export_family_review_report(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(response.status_code, 200)
+        records = render_pdf.call_args.kwargs["records"]
+        self.assertEqual(records[0]["review_progress"]["completed_count"], 0)
+        self.assertEqual(records[0]["wrong_questions"], [{
+            "knowledge_point": "一元一次方程",
+            "mastered": True,
+        }])
+
     def test_every_record_operation_rejects_the_wrong_family_code(self):
         calls = [
             lambda: analyze_exam(
