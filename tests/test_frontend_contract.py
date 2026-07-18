@@ -68,6 +68,8 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("wrongBankDialog.showModal()", HTML)
         self.assertIn("wrongBankDialog.addEventListener('cancel'", HTML)
         self.assertIn("historyStatus.classList.remove('show')", HTML)
+        self.assertIn("firstEmptyField.focus();", HTML)
+        self.assertNotIn("window.setTimeout(() => firstEmptyField.focus()", HTML)
 
     def test_returning_parent_can_remember_only_non_secret_family_profile_fields(self):
         self.assertIn("const FAMILY_PROFILE_STORAGE_KEY = 'xiahunao_family_profile'", HTML)
