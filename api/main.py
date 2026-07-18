@@ -3037,6 +3037,104 @@ async def generate_practice(
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
+
+@app.post("/generate-knowledge-practice")
+async def generate_knowledge_practice(
+    grade: str = None,
+    student_name: str = None,
+    subject: str = None,
+    knowledge_point: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """汇总家庭错题库中同一知识点的未掌握证据生成专项练习。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+    subject = str(subject or "").strip()
+    target = str(knowledge_point or "").strip()
+    if subject not in SUBJECT_LABELS:
+        return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
+    if not target or len(target) > 80:
+        return JSONResponse({"success": False, "error": "知识点名称无效"}, status_code=400)
+
+    db = SessionLocal()
+    candidates = (
+        db.query(Exam)
+        .filter(
+            Exam.grade == grade,
+            Exam.student_name == student_name,
+            Exam.subject == subject,
+        )
+        .order_by(Exam.created_at.desc())
+        .all()
+    )
+    accessible_exams = [
+        exam for exam in candidates
+        if _exam_has_family_access(exam, grade, student_name, family_code)
+    ]
+    if not accessible_exams:
+        db.close()
+        return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
+
+    matched_evidence = []
+    pending_evidence = []
+    for exam in accessible_exams:
+        analysis = _analysis_history_detail(
+            exam.ai_analysis,
+            exam.weak_points,
+            exam.recommendations,
+        )
+        fallback_point = next(iter(analysis.get("weak_points", [])), "")
+        review_progress = _normalize_review_progress(exam.review_progress)
+        exam_mastered = review_progress["completed_count"] == review_progress["total"]
+        question_mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+        for question_number, item in enumerate(analysis.get("wrong_questions", []), start=1):
+            if not item.get("question"):
+                continue
+            item_point = item.get("knowledge_point") or fallback_point
+            if item_point != target:
+                continue
+            evidence = {**item, "exam_id": exam.id, "question_number": question_number}
+            matched_evidence.append(evidence)
+            if not question_mastery.get(str(question_number), exam_mastered):
+                pending_evidence.append(evidence)
+
+    db.close()
+    if not matched_evidence:
+        return JSONResponse(
+            {"success": False, "error": "该知识点不在当前家庭错题库中"},
+            status_code=400,
+        )
+
+    selected_evidence = pending_evidence or matched_evidence
+    model_evidence = selected_evidence[:3]
+    source_exam_ids = list(dict.fromkeys(item["exam_id"] for item in model_evidence))
+    questions = await ai_generate_questions(
+        [target],
+        subject=subject,
+        grade=grade,
+        wrong_questions=model_evidence,
+    )
+    return JSONResponse({
+        "success": True,
+        "practice_mode": "knowledge_point_bank",
+        "subject": subject,
+        "grade": grade,
+        "student": student_name,
+        "weak_points": [target],
+        "matched_wrong_count": len(matched_evidence),
+        "pending_wrong_count": len(pending_evidence),
+        "evidence_count": len(model_evidence),
+        "source_exam_ids": source_exam_ids,
+        "questions": questions,
+        "total": len(questions),
+        "note": "优先依据家庭错题库中尚未掌握的真实错因生成",
+    })
+
 # ===== PDF 导出 =====
 
 def generate_practice_pdf(student_name: str, weak_points: list, questions: list) -> bytes:
@@ -3958,13 +4056,14 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.7.0",
+        "version": "0.8.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
             "upload": "POST /upload (form-data: grade, student_name, file；请求头 X-Family-Code)",
             "analyze": "POST /analyze/{id}?grade=...&student_name=...（请求头 X-Family-Code）- DeepSeek AI分析",
             "generate_practice": "POST /generate-practice/{id}?grade=...&student_name=...&knowledge_point=...（知识点可选，请求头 X-Family-Code）- DeepSeek AI生成5道巩固题",
+            "generate_knowledge_practice": "POST /generate-knowledge-practice?grade=...&student_name=...&subject=...&knowledge_point=...（请求头 X-Family-Code）- 汇总家庭错题库生成专项练习",
             "export_pdf": "POST /export-practice-pdf/{id}?grade=...&student_name=...（请求头 X-Family-Code）- 导出PDF",
             "curriculum_units": "GET /curriculum-units - 单元复习卷筛选数据",
             "generate_unit_worksheet": "POST /generate-unit-worksheet - 生成单元题目卷与答案解析卷",

@@ -2969,12 +2969,13 @@ function renderAnalysisResult(data) {
         insufficient: '需要补充清晰图片'
     };
     const evidenceStatus = evidenceLabels[data.evidenceStatus] ? data.evidenceStatus : 'insufficient';
+    const wrongCountLabel = data.practiceFromWrongBank ? '本次参考错题' : '本次识别错题';
 
     document.getElementById('summaryCard').innerHTML = `
         <div class="summary-top">
             <div class="analysis-count-display">
                 <div class="analysis-count-number"><strong>${wrongCount}</strong><span>道</span></div>
-                <div class="analysis-count-label">本次识别错题</div>
+                <div class="analysis-count-label">${wrongCountLabel}</div>
             </div>
             <div class="summary-weak">
                 <h4>🏷️ 薄弱知识点 TOP ${data.weakPoints.length}</h4>
@@ -3106,19 +3107,41 @@ async function generatePractice() {
     let generationError = '';
     const examId = currentAnalysisData.examIds?.[0];
     try {
-        if (!examId) throw new Error('这条记录尚未同步到服务器');
         const params = new URLSearchParams({
             grade: currentAnalysisData.grade,
             student_name: currentAnalysisData.studentName
         });
-        if (currentAnalysisData.practiceKnowledgePoint) {
+        let data;
+        if (currentAnalysisData.practiceFromWrongBank) {
+            params.set('subject', currentAnalysisData.subject);
             params.set('knowledge_point', currentAnalysisData.practiceKnowledgePoint);
+            data = await requestJson(`/generate-knowledge-practice?${params.toString()}`, {
+                method: 'POST',
+                headers: familyAccessHeaders()
+            });
+        } else {
+            if (!examId) throw new Error('这条记录尚未同步到服务器');
+            if (currentAnalysisData.practiceKnowledgePoint) {
+                params.set('knowledge_point', currentAnalysisData.practiceKnowledgePoint);
+            }
+            data = await requestJson(`/generate-practice/${examId}?${params.toString()}`, {
+                method: 'POST',
+                headers: familyAccessHeaders()
+            });
         }
-        const data = await requestJson(`/generate-practice/${examId}?${params.toString()}`, {
-            method: 'POST',
-            headers: familyAccessHeaders()
-        });
         questions = data.questions;
+        if (currentAnalysisData.practiceFromWrongBank) {
+            const pendingCount = Number(data.pending_wrong_count || 0);
+            const matchedCount = Number(data.matched_wrong_count || 0);
+            const evidenceCount = Number(data.evidence_count || 0);
+            const sourceExamCount = Array.isArray(data.source_exam_ids) ? data.source_exam_ids.length : 0;
+            currentAnalysisData.examIds = Array.isArray(data.source_exam_ids) ? data.source_exam_ids : [];
+            currentAnalysisData.evaluation = pendingCount
+                ? `家庭错题库中共有 ${matchedCount} 道“${currentAnalysisData.practiceKnowledgePoint}”错题，其中 ${pendingCount} 道仍待复习。`
+                : `“${currentAnalysisData.practiceKnowledgePoint}”目前均已掌握，本次用于回测是否稳定。`;
+            currentAnalysisData.evidenceNote = `本次模型实际参考 ${evidenceCount} 道错题，来自 ${sourceExamCount} 份试卷。`;
+            renderAnalysisResult(currentAnalysisData);
+        }
     } catch(e) {
         generationError = e.message || '生成服务暂时不可用';
     }
@@ -4291,9 +4314,8 @@ function renderKnowledgeQuestionBank() {
     list.innerHTML = '<div class="knowledge-bank">' + groupedQuestions.map(group => {
         const subjectLabel = group.subject === 'english' ? '英语' : '数学';
         const latestDate = new Date(group.questions[0]?.created).toLocaleDateString('zh-CN');
-        const sourceExamId = Number(group.questions[0]?.exam_id);
-        const practiceButton = group.name !== '待归类' && Number.isFinite(sourceExamId)
-            ? `<button type="button" class="knowledge-practice-button" onclick="prepareKnowledgePractice(${escapeHtml(JSON.stringify(group.name))}, ${sourceExamId}, ${escapeHtml(JSON.stringify(group.subject))})">生成专项练习</button>`
+        const practiceButton = group.name !== '待归类'
+            ? `<button type="button" class="knowledge-practice-button" onclick="prepareKnowledgePractice(${escapeHtml(JSON.stringify(group.name))}, ${escapeHtml(JSON.stringify(group.subject))})">生成专项练习</button>`
             : '';
         return `
             <section class="knowledge-group">
@@ -4374,35 +4396,40 @@ async function toggleWrongQuestionMastery(questionId) {
     }
 }
 
-function prepareKnowledgePractice(knowledgePoint, examId, subject) {
+function prepareKnowledgePractice(knowledgePoint, subject) {
     const studentName = (document.getElementById('studentName').value || '').trim();
     const grade = document.getElementById('gradeSelect').value;
     const relatedQuestions = wrongQuestionBank.questions.filter(item => (
         item.knowledge_point === knowledgePoint
         && item.subject === subject
     ));
-    if (!studentName || !grade || !relatedQuestions.length || !Number.isFinite(Number(examId))) {
+    if (!studentName || !grade || !relatedQuestions.length) {
         alert('请重新查询家庭错题库后再生成专项练习');
         return;
     }
+    const pendingQuestions = relatedQuestions.filter(item => wrongQuestionMasteryStatus(item) === 'pending');
+    const practiceEvidence = pendingQuestions.length ? pendingQuestions : relatedQuestions;
     const subjectLabel = subject === 'english' ? '英语' : '数学';
-    const errorStats = buildErrorTypeStats(relatedQuestions);
+    const errorStats = buildErrorTypeStats(practiceEvidence);
     currentAnalysisData = {
         studentName: studentName,
         grade: grade,
         subject: subject,
         subjectLabel: subjectLabel,
-        examIds: [Number(examId)],
+        examIds: [...new Set(practiceEvidence.map(item => Number(item.exam_id)).filter(Number.isFinite))],
         practiceKnowledgePoint: knowledgePoint,
+        practiceFromWrongBank: true,
         weakPoints: [knowledgePoint],
-        evaluation: `这个知识点已记录 ${relatedQuestions.length} 道错题，专项练习将针对实际错因设计变式。`,
+        evaluation: pendingQuestions.length
+            ? `这个知识点已记录 ${relatedQuestions.length} 道错题，其中 ${pendingQuestions.length} 道仍待复习。`
+            : `这个知识点的错题均已掌握，本次安排稳定性回测。`,
         evidenceStatus: 'confirmed',
-        evidenceNote: '专项范围来自家庭错题库中已确认的题目证据。',
+        evidenceNote: '正在从家庭错题库跨试卷核对可用证据。',
         errorTypes: errorStats.map((item, index) => ({
             ...item,
             color: ['#FFB74D', '#FF7043', '#E53935'][index % 3]
         })),
-        wrongQuestions: relatedQuestions.map((item, index) => ({
+        wrongQuestions: practiceEvidence.map((item, index) => ({
             num: index + 1,
             reason: `${item.error_type || '待确认'}: ${item.question}`,
             correctAnswer: item.correct_answer || '见原记录',

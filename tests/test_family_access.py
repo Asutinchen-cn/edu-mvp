@@ -25,6 +25,7 @@ from api.main import (
     export_correction_sheet,
     export_family_review_report,
     export_practice_pdf,
+    generate_knowledge_practice,
     generate_practice,
     get_exam,
     get_exam_image,
@@ -307,6 +308,85 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertIn("不在这份试卷", json.loads(response.body)["error"])
         generator.assert_not_awaited()
 
+    def test_knowledge_practice_combines_exams_and_prefers_pending_evidence(self):
+        db = self.session_factory()
+        first_exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        first_exam.wrong_question_mastery = json.dumps({"1": True})
+        second_exam = Exam(
+            grade="六年级",
+            subject="math",
+            student_name="小明",
+            access_code_salt=first_exam.access_code_salt,
+            access_code_hash=first_exam.access_code_hash,
+            ocr_text="第三份试卷",
+            ai_analysis=json.dumps({
+                "wrong_questions": [{
+                    "question": "解方程 5x - 2 = 13",
+                    "error_type": "计算错误",
+                    "student_answer": "x = 5",
+                    "correct_answer": "x = 3",
+                    "knowledge_point": "一元一次方程",
+                }],
+                "weak_points": ["一元一次方程"],
+                "root_cause": "合并同类项后计算不稳定。",
+                "recommendations": ["每步验算。"],
+            }, ensure_ascii=False),
+        )
+        db.add(second_exam)
+        db.commit()
+        second_exam_id = second_exam.id
+        db.close()
+        generated_questions = [{
+            "id": 1,
+            "type": "填空题",
+            "question": "7x - 3 = 18，x = ___。",
+            "answer": "3",
+            "hint": "先移项。",
+        }]
+        generator = AsyncMock(return_value=generated_questions)
+
+        with patch("api.main.ai_generate_questions", generator):
+            response = asyncio.run(generate_knowledge_practice(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                knowledge_point="一元一次方程",
+                family_code="Home2026A",
+            ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["practice_mode"], "knowledge_point_bank")
+        self.assertEqual(payload["matched_wrong_count"], 2)
+        self.assertEqual(payload["pending_wrong_count"], 1)
+        self.assertEqual(payload["evidence_count"], 1)
+        self.assertEqual(payload["source_exam_ids"], [second_exam_id])
+        self.assertEqual(payload["questions"], generated_questions)
+        generator.assert_awaited_once()
+        self.assertEqual(generator.await_args.args[0], ["一元一次方程"])
+        self.assertEqual(generator.await_args.kwargs["subject"], "math")
+        self.assertEqual(generator.await_args.kwargs["grade"], "六年级")
+        self.assertEqual(
+            [item["question"] for item in generator.await_args.kwargs["wrong_questions"]],
+            ["解方程 5x - 2 = 13"],
+        )
+
+    def test_knowledge_practice_rejects_an_unconfirmed_bank_point(self):
+        generator = AsyncMock(return_value=[])
+
+        with patch("api.main.ai_generate_questions", generator):
+            response = asyncio.run(generate_knowledge_practice(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                knowledge_point="几何证明",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("家庭错题库", json.loads(response.body)["error"])
+        generator.assert_not_awaited()
+
     def test_reanalysis_clears_question_mastery_that_may_no_longer_match(self):
         db = self.session_factory()
         exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
@@ -454,6 +534,13 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             lambda: generate_practice(
                 self.first_exam_id, "六年级", "小明", family_code="Other2026B"
             ),
+            lambda: generate_knowledge_practice(
+                "六年级",
+                "小明",
+                "math",
+                "一元一次方程",
+                family_code="Other2026B",
+            ),
             lambda: export_practice_pdf(
                 self.first_exam_id, "六年级", "小明", family_code="Other2026B"
             ),
@@ -515,6 +602,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertNotIn("location /uploads", nginx_config)
         self.assertIn("family-review-report", nginx_config)
         self.assertIn("wrong-questions", nginx_config)
+        self.assertIn("generate-knowledge-practice", nginx_config)
         self.assertEqual(compose_config.count("./uploads:/uploads"), 1)
 
 

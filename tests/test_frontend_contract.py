@@ -130,13 +130,16 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("按知识点", HTML)
 
     def test_knowledge_point_group_can_generate_focused_practice(self):
-        self.assertIn("function prepareKnowledgePractice(knowledgePoint, examId, subject)", HTML)
+        self.assertIn("function prepareKnowledgePractice(knowledgePoint, subject)", HTML)
         self.assertIn("生成专项练习", HTML)
         self.assertIn("practiceKnowledgePoint: knowledgePoint", HTML)
-        self.assertIn(
-            "params.set('knowledge_point', currentAnalysisData.practiceKnowledgePoint)",
+        self.assertIn("practiceFromWrongBank: true", HTML)
+        self.assertRegex(
             HTML,
+            r"requestJson\(`/generate-knowledge-practice\?\$\{params\.toString\(\)\}`",
         )
+        self.assertIn("params.set('subject', currentAnalysisData.subject)", HTML)
+        self.assertIn("data.pending_wrong_count", HTML)
 
     def test_each_wrong_question_has_an_independent_server_synced_mastery_status(self):
         self.assertIn("function wrongQuestionMasteryStatus(question)", HTML)
