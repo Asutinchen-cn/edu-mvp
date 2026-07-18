@@ -24,7 +24,7 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
             'add_header X-Content-Type-Options "nosniff" always;',
             'add_header X-Frame-Options "DENY" always;',
             'add_header Referrer-Policy "no-referrer" always;',
-            'add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;',
+            'add_header Permissions-Policy "microphone=(), geolocation=(), payment=()" always;',
         )
         for header in expected_headers:
             self.assertIn(header, NGINX_CONFIG)
