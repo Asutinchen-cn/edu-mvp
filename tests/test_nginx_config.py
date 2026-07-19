@@ -10,6 +10,7 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
     def test_gateway_accepts_backend_upload_limit_plus_multipart_overhead(self):
         self.assertRegex(NGINX_CONFIG, r"client_max_body_size\s+52m;")
         self.assertRegex(NGINX_CONFIG, r"client_body_timeout\s+120s;")
+        self.assertIn("upload-batch", NGINX_CONFIG)
 
     def test_oversized_upload_returns_a_json_error(self):
         self.assertIn("error_page 413 = @payload_too_large;", NGINX_CONFIG)

@@ -126,6 +126,8 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("fd.append('files', current.file, current.name)", HTML)
         self.assertIn("requestJson('/upload-batch'", HTML)
         self.assertIn("imageCount: uploadJson.image_count", HTML)
+        self.assertIn("uploadedFiles.length >= 12", HTML)
+        self.assertIn("totalBytes + f.size > 50 * 1024 * 1024", HTML)
         self.assertNotIn("mergeApiAnalyses(apiAnalyses, subject)", HTML)
 
     def test_server_record_deletion_explains_that_originals_are_removed(self):

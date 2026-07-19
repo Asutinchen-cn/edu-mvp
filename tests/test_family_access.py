@@ -31,6 +31,7 @@ from api.main import (
     get_exam_image,
     list_wrong_questions,
     list_exams,
+    serve_logo,
     update_knowledge_point_mastery,
     update_review_progress,
     update_wrong_question_mastery,
@@ -874,6 +875,12 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         mounted_paths = [getattr(route, "path", None) for route in app.routes]
 
         self.assertNotIn("/uploads", mounted_paths)
+
+    def test_local_api_serves_the_brand_logo_used_by_the_frontend(self):
+        response = asyncio.run(serve_logo())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Path(response.path).name, "logo.png")
 
     def test_reverse_proxy_does_not_publish_upload_directory(self):
         project_root = Path(__file__).parents[1]

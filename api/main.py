@@ -55,6 +55,9 @@ ALLOWED_UPLOAD_TYPES = {
     "image/png": ".png",
     "application/pdf": ".pdf",
 }
+MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_BATCH_BYTES = 50 * 1024 * 1024
+MAX_UPLOAD_FILES = 12
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # 单元复习卷：仅保存公开教材目录范围和人工整理知识点，不保存教材原文
@@ -364,6 +367,7 @@ class Exam(Base):
     subject = Column(String(20), index=True, nullable=False, default="math")
     student_name = Column(String(100), index=True)
     image_path = Column(Text)
+    image_paths = Column(Text)
     ocr_text = Column(Text)
     ai_analysis = Column(Text)
     weak_points = Column(Text)
@@ -423,6 +427,11 @@ try:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS access_code_hash VARCHAR(64)"))
                 else:
                     conn.execute(text("ALTER TABLE exams ADD COLUMN access_code_hash VARCHAR(64)"))
+            if "image_paths" not in cols:
+                if "postgresql" in DATABASE_URL:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS image_paths TEXT"))
+                else:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN image_paths TEXT"))
 except Exception as _e:
     print(f"DB migration warning: {_e}")
 
@@ -554,9 +563,45 @@ def _local_upload_path(image_path: str | None) -> str | None:
     return None
 
 
-def _stored_upload_exists(image_path: str | None) -> bool:
-    local_path = _local_upload_path(image_path)
-    return bool(local_path and os.path.isfile(local_path))
+def _stored_upload_exists(image_path: str | None, image_paths: str | None = None) -> bool:
+    return any(
+        local_path and os.path.isfile(local_path)
+        for local_path in (
+            _local_upload_path(item)
+            for item in _stored_upload_urls(image_path, image_paths)
+        )
+    )
+
+
+def _stored_upload_urls(
+    image_path: str | None,
+    image_paths: str | list[str] | None = None,
+) -> list[str]:
+    candidates = []
+    if isinstance(image_paths, str) and image_paths:
+        try:
+            parsed_paths = json.loads(image_paths)
+            if isinstance(parsed_paths, list):
+                candidates.extend(parsed_paths)
+        except (TypeError, ValueError):
+            pass
+    elif isinstance(image_paths, list):
+        candidates.extend(image_paths)
+    if image_path:
+        candidates.insert(0, image_path)
+
+    urls = []
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        public_url = _public_upload_url(candidate)
+        if public_url and public_url not in urls:
+            urls.append(public_url)
+    return urls
+
+
+def _stored_upload_count(image_path: str | None, image_paths: str | None = None) -> int:
+    return len(_stored_upload_urls(image_path, image_paths))
 
 
 def _delete_stored_upload(image_path: str | None) -> bool:
@@ -571,6 +616,17 @@ def _delete_stored_upload(image_path: str | None) -> bool:
     except OSError as e:
         print(f"Upload file cleanup warning: {e}")
         return False
+
+
+def _delete_stored_uploads(
+    image_path: str | None,
+    image_paths: str | list[str] | None = None,
+) -> int:
+    deleted_count = 0
+    for stored_url in _stored_upload_urls(image_path, image_paths):
+        if _delete_stored_upload(stored_url):
+            deleted_count += 1
+    return deleted_count
 
 # ===== 百度 OCR =====
 
@@ -2196,22 +2252,20 @@ async def ai_generate_questions(
 
 # ===== API 路由 =====
 
-@app.post("/upload")
-async def upload_exam(
-    student_name: str = Form(...),
-    grade: str = Form(...),
-    subject: str = Form("math"),
-    file: UploadFile = File(...),
-    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+async def _upload_exam_files(
+    student_name: str,
+    grade: str,
+    subject: str,
+    files: list[UploadFile],
+    family_code: str | None,
 ):
-    """上传试卷图片，并绑定家庭访问码。"""
     try:
         family_code = _validate_family_access_code(family_code)
     except ValueError as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
     db = None
-    stored_image_path = None
+    stored_image_paths = []
     exam_persisted = False
     try:
         db = SessionLocal()
@@ -2225,27 +2279,37 @@ async def upload_exam(
             return JSONResponse({"success": False, "error": "grade 不能为空"}, status_code=400)
         if subject not in SUBJECT_LABELS:
             return JSONResponse({"success": False, "error": "subject 必须是 math 或 english"}, status_code=400)
-        if file.content_type not in ALLOWED_UPLOAD_TYPES:
-            return JSONResponse({"success": False, "error": "仅支持 JPG、PNG 或 PDF 文件"}, status_code=400)
+        if not files:
+            raise ValueError("请至少上传一页试卷")
+        if len(files) > MAX_UPLOAD_FILES:
+            raise ValueError(f"一次最多上传 {MAX_UPLOAD_FILES} 页试卷")
 
-        # 读取文件内容
-        content = await file.read()
-        if len(content) > 10 * 1024 * 1024:
-            return JSONResponse({"success": False, "error": "文件大小不能超过 10MB"}, status_code=400)
+        total_bytes = 0
+        ocr_pages = []
+        for page_number, file in enumerate(files, start=1):
+            if file.content_type not in ALLOWED_UPLOAD_TYPES:
+                raise ValueError(f"第 {page_number} 页仅支持 JPG、PNG 或 PDF 文件")
+            content = await file.read()
+            if len(content) > MAX_UPLOAD_FILE_BYTES:
+                raise ValueError(f"第 {page_number} 页文件大小不能超过 10MB")
+            total_bytes += len(content)
+            if total_bytes > MAX_UPLOAD_BATCH_BYTES:
+                raise ValueError("多页试卷总大小不能超过 50MB")
 
-        stored_image_path = _save_upload_file(content, file)
+            stored_image_paths.append(_save_upload_file(content, file))
+            ocr_result = await baidu_ocr(content)
+            ocr_pages.append(f"--- 第 {page_number} 页 ---\n{ocr_result}")
 
-        # 百度 OCR 识别
-        ocr_result = await baidu_ocr(content)
+        combined_ocr = "\n\n".join(ocr_pages)
 
-        # 创建记录
         access_code_salt, access_code_hash = _hash_family_access_code(family_code)
         exam = Exam(
             grade=grade,
             subject=subject,
             student_name=student_name,
-            image_path=stored_image_path,
-            ocr_text=ocr_result,
+            image_path=stored_image_paths[0],
+            image_paths=json.dumps(stored_image_paths, ensure_ascii=False),
+            ocr_text=combined_ocr,
             access_code_salt=access_code_salt,
             access_code_hash=access_code_hash,
         )
@@ -2262,18 +2326,45 @@ async def upload_exam(
             "subject": subject,
             "student": student_name,
             "image_available": True,
-            "ocr_preview": ocr_result[:200] + "..." if len(ocr_result) > 200 else ocr_result,
+            "image_count": len(stored_image_paths),
+            "ocr_preview": combined_ocr[:200] + "..." if len(combined_ocr) > 200 else combined_ocr,
             "next_step": f"POST /analyze/{exam.id}?grade={grade}&student_name={student_name}，并携带 X-Family-Code 请求头"
         })
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
     except Exception as e:
-        if db is not None:
-            db.rollback()
-        if stored_image_path and not exam_persisted:
-            _delete_stored_upload(stored_image_path)
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
     finally:
         if db is not None:
+            if not exam_persisted:
+                db.rollback()
             db.close()
+        if not exam_persisted:
+            _delete_stored_uploads(None, stored_image_paths)
+
+
+@app.post("/upload")
+async def upload_exam(
+    student_name: str = Form(...),
+    grade: str = Form(...),
+    subject: str = Form("math"),
+    file: UploadFile = File(...),
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """上传单页试卷，兼容已有客户端。"""
+    return await _upload_exam_files(student_name, grade, subject, [file], family_code)
+
+
+@app.post("/upload-batch")
+async def upload_exam_batch(
+    student_name: str = Form(...),
+    grade: str = Form(...),
+    subject: str = Form("math"),
+    files: list[UploadFile] = File(...),
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """将一份试卷的多页文件原子化保存为一条记录。"""
+    return await _upload_exam_files(student_name, grade, subject, files, family_code)
 
 @app.post("/analyze/{exam_id}")
 async def analyze_exam(
@@ -2324,7 +2415,8 @@ async def analyze_exam(
             "grade": exam.grade,
             "subject": exam.subject,
             "student": exam.student_name,
-            "image_available": _stored_upload_exists(exam.image_path),
+            "image_available": _stored_upload_exists(exam.image_path, exam.image_paths),
+            "image_count": _stored_upload_count(exam.image_path, exam.image_paths),
             "analysis": analysis,
             "summary": {
                 "weak_points": analysis.get("weak_points", []),
@@ -2667,7 +2759,8 @@ async def list_exams(
             "grade": exam.grade,
             "subject": exam.subject,
             "student": exam.student_name,
-            "image_available": _stored_upload_exists(exam.image_path),
+            "image_available": _stored_upload_exists(exam.image_path, exam.image_paths),
+            "image_count": _stored_upload_count(exam.image_path, exam.image_paths),
             "ocr_preview": exam.ocr_text[:50] + "..." if exam.ocr_text else None,
             "wrong_count": summary["wrong_count"],
             "question_mastery": _build_question_mastery_summary(exam),
@@ -2959,7 +3052,8 @@ async def get_exam(
         "grade": exam.grade,
         "subject": exam.subject,
         "student": exam.student_name,
-        "image_available": _stored_upload_exists(exam.image_path),
+        "image_available": _stored_upload_exists(exam.image_path, exam.image_paths),
+        "image_count": _stored_upload_count(exam.image_path, exam.image_paths),
         "ocr_text": exam.ocr_text,
         "ai_analysis": _stored_json(exam.ai_analysis, None),
         "analysis": analysis,
@@ -2980,9 +3074,10 @@ async def get_exam_image(
     exam_id: int,
     grade: str = None,
     student_name: str = None,
+    page: int = 1,
     family_code: str | None = Header(default=None, alias="X-Family-Code"),
 ):
-    """读取受家庭访问码保护的原卷文件。"""
+    """按页读取受家庭访问码保护的原卷文件。"""
     try:
         grade, student_name, family_code = _normalize_family_access_request(
             grade, student_name, family_code
@@ -2999,8 +3094,11 @@ async def get_exam_image(
         db.close()
         return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
-    stored_file = _local_upload_path(exam.image_path)
+    stored_urls = _stored_upload_urls(exam.image_path, exam.image_paths)
     db.close()
+    if page < 1 or page > len(stored_urls):
+        return JSONResponse({"success": False, "error": "原卷页码不存在"}, status_code=404)
+    stored_file = _local_upload_path(stored_urls[page - 1])
     if not stored_file or not os.path.isfile(stored_file):
         return JSONResponse({"success": False, "error": "原卷文件不存在"}, status_code=404)
     return FileResponse(stored_file)
@@ -3104,11 +3202,21 @@ async def delete_exam(
         return JSONResponse({"success": False, "error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
     stored_image_path = exam.image_path
+    stored_image_paths = exam.image_paths
     db.delete(exam)
     db.commit()
     db.close()
-    _delete_stored_upload(stored_image_path)
+    _delete_stored_uploads(stored_image_path, stored_image_paths)
     return JSONResponse({"success": True, "message": "已删除"})
+
+@app.get("/logo.png", include_in_schema=False)
+async def serve_logo():
+    """兼容直接通过 FastAPI 启动前端时的品牌图路径。"""
+    logo_path = os.path.join(static_dir, "logo.png")
+    if os.path.isfile(logo_path):
+        return FileResponse(logo_path, media_type="image/png")
+    return JSONResponse({"error": "Logo 文件不存在"}, status_code=404)
+
 
 @app.get("/")
 async def root():
@@ -4279,11 +4387,12 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.9.3",
+        "version": "0.10.0",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
             "upload": "POST /upload (form-data: grade, student_name, file；请求头 X-Family-Code)",
+            "upload_batch": "POST /upload-batch (form-data: grade, student_name, files；最多12页，请求头 X-Family-Code)",
             "analyze": "POST /analyze/{id}?grade=...&student_name=...（请求头 X-Family-Code）- DeepSeek AI分析",
             "generate_practice": "POST /generate-practice/{id}?grade=...&student_name=...&knowledge_point=...（知识点可选，请求头 X-Family-Code）- DeepSeek AI生成5道巩固题",
             "generate_knowledge_practice": "POST /generate-knowledge-practice?grade=...&student_name=...&subject=...&knowledge_point=...（请求头 X-Family-Code）- 汇总家庭错题库生成专项练习",

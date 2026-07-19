@@ -563,6 +563,13 @@
             font-weight: 700;
             font-size: 13px;
         }
+        .file-loading {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            background: #f4f8ff;
+            color: var(--muted);
+            font-size: 12px;
+        }
         .file-thumb .remove-btn {
             position: absolute; top: 2px; right: 2px;
             width: 20px; height: 20px;
@@ -2244,7 +2251,7 @@
         <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
             <div class="dropzone-icon">🖼️</div>
             <div class="dropzone-text">点击上传或拖拽文件到此处</div>
-            <div class="dropzone-hint">支持 JPG / PNG / PDF, 建议拍照时光线充足 📸</div>
+            <div class="dropzone-hint">支持 JPG / PNG / PDF；多页请一次选完，最多 12 页 / 50MB</div>
         </div>
         <input type="file" id="fileInput" accept="image/jpeg,image/png,application/pdf" multiple style="display:none">
 
@@ -2540,6 +2547,7 @@ let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]'
     questionMastery: normalizeQuestionMasterySummary(record.questionMastery),
     imageUrl: '',
     imageAvailable: Boolean(record.imageAvailable || record.serverId),
+    imageCount: Math.max(0, Number(record.imageCount) || (record.imageAvailable || record.serverId ? 1 : 0)),
     detailLoading: false,
     progressSaving: false,
     correctionExporting: false,
@@ -2757,18 +2765,41 @@ function setupFileInput() {
 
 function handleFiles(files) {
     for (let f of files) {
+        if (uploadedFiles.length >= 12) {
+            alert('一份试卷最多上传 12 页');
+            break;
+        }
+        if (!['image/jpeg', 'image/png', 'application/pdf'].includes(f.type)) {
+            alert('仅支持 JPG、PNG 或 PDF 文件');
+            continue;
+        }
         if (f.size > 10 * 1024 * 1024) {
             alert('文件大小不能超过 10MB');
             continue;
         }
+        const totalBytes = uploadedFiles.reduce((sum, item) => sum + item.file.size, 0);
+        if (totalBytes + f.size > 50 * 1024 * 1024) {
+            alert('多页试卷总大小不能超过 50MB');
+            break;
+        }
+        const entry = { name: f.name, data: '', file: f, type: f.type };
+        uploadedFiles.push(entry);
         const reader = new FileReader();
         reader.onload = e => {
-            uploadedFiles.push({ name: f.name, data: e.target.result, file: f, type: f.type });
+            entry.data = e.target.result;
+            renderFilePreview();
+        };
+        reader.onerror = () => {
+            const index = uploadedFiles.indexOf(entry);
+            if (index >= 0) uploadedFiles.splice(index, 1);
             renderFilePreview();
             updateAnalyzeBtn();
+            alert(`无法读取文件：${f.name}`);
         };
         reader.readAsDataURL(f);
     }
+    renderFilePreview();
+    updateAnalyzeBtn();
 }
 
 function renderFilePreview() {
@@ -2779,7 +2810,9 @@ function renderFilePreview() {
         div.className = 'file-thumb';
         const preview = f.type === 'application/pdf'
             ? '<div class="file-pdf">PDF</div>'
-            : `<img src="${f.data}" alt="${f.name}">`;
+            : (f.data
+                ? `<img src="${f.data}" alt="${escapeHtml(f.name)}">`
+                : '<div class="file-loading">读取中</div>');
         div.innerHTML = `${preview}<button class="remove-btn" onclick="removeFile(${i})">✕</button>`;
         container.appendChild(div);
     });
@@ -2866,31 +2899,33 @@ async function startAnalysis() {
     document.getElementById('loadingText').textContent = 'AI 正在识别试卷...';
 
     try {
-        const apiAnalyses = [];
-        for (let i = 0; i < uploadedFiles.length; i++) {
-            const current = uploadedFiles[i];
-            document.getElementById('loadingText').textContent = `正在识别第 ${i + 1}/${uploadedFiles.length} 份试卷...`;
-            const fd = new FormData();
-            fd.append('grade', grade);
-            fd.append('student_name', name);
-            fd.append('subject', subject);
-            fd.append('file', current.file, current.name);
+        const fd = new FormData();
+        fd.append('grade', grade);
+        fd.append('student_name', name);
+        fd.append('subject', subject);
+        uploadedFiles.forEach(current => {
+            fd.append('files', current.file, current.name);
+        });
 
-            const uploadJson = await requestJson('/upload', { method: 'POST', headers: accessHeaders, body: fd });
-            document.getElementById('loadingText').textContent = `正在分析第 ${i + 1}/${uploadedFiles.length} 份试卷...`;
-            const params = new URLSearchParams({ grade: grade, student_name: name });
-            const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, {
-                method: 'POST',
-                headers: accessHeaders
-            });
-            apiAnalyses.push({
-                ...(analysisJson.analysis || {}),
-                exam_id: analysisJson.exam_id || uploadJson.id
-            });
-        }
+        document.getElementById('loadingText').textContent = `正在识别 ${uploadedFiles.length} 页试卷...`;
+        const uploadJson = await requestJson('/upload-batch', {
+            method: 'POST',
+            headers: accessHeaders,
+            body: fd
+        });
+        document.getElementById('loadingText').textContent = '正在分析整份试卷...';
+        const params = new URLSearchParams({ grade: grade, student_name: name });
+        const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, {
+            method: 'POST',
+            headers: accessHeaders
+        });
+        const analysisPayload = {
+            ...(analysisJson.analysis || {}),
+            exam_ids: [analysisJson.exam_id || uploadJson.id]
+        };
 
         document.getElementById('loadingText').textContent = '正在整理学习方案...';
-        const analysisData = parseApiResponse(mergeApiAnalyses(apiAnalyses, subject), name, grade, subject);
+        const analysisData = parseApiResponse(analysisPayload, name, grade, subject);
         if (!analysisData) throw new Error('分析结果格式异常，请重新上传清晰试卷后再试');
         rememberFamilyProfile(grade, name, document.getElementById('rememberFamilyProfile').checked);
 
@@ -2909,6 +2944,7 @@ async function startAnalysis() {
             structured: true,
             serverId: analysisData.examIds[0] || null,
             imageAvailable: Boolean(analysisData.examIds[0]),
+            imageCount: uploadJson.image_count || uploadedFiles.length,
             serverSynced: Boolean(analysisData.examIds[0]),
             reviewProgress: normalizeReviewProgress(null),
             questionMastery: {
@@ -2979,51 +3015,6 @@ function buildErrorTypeStats(wrongQuestions, providedStats = []) {
         remaining -= percent;
         return { name: name, count: count, percent: percent };
     });
-}
-
-function mergeApiAnalyses(analyses, subject) {
-    const merged = {
-        subject: subject,
-        wrong_questions: [],
-        error_types: [],
-        weak_points: [],
-        recommendations: [],
-        exam_ids: [],
-        root_cause: '',
-        evidence_status: 'insufficient',
-        evidence_note: ''
-    };
-    const evidenceStatuses = [];
-    const evidenceNotes = [];
-    const addUnique = (target, values) => {
-        (values || []).forEach(v => {
-            if (v && !target.includes(v)) target.push(v);
-        });
-    };
-    analyses.forEach(item => {
-        const analysis = item.analysis || item || {};
-        if (item.exam_id && !merged.exam_ids.includes(item.exam_id)) merged.exam_ids.push(item.exam_id);
-        merged.wrong_questions.push(...(analysis.wrong_questions || []));
-        addUnique(merged.error_types, analysis.error_types || []);
-        addUnique(merged.weak_points, analysis.weak_points || []);
-        addUnique(merged.recommendations, analysis.recommendations || []);
-        if (analysis.evidence_status) evidenceStatuses.push(analysis.evidence_status);
-        if (analysis.evidence_note && !evidenceNotes.includes(analysis.evidence_note)) {
-            evidenceNotes.push(analysis.evidence_note);
-        }
-        if (analysis.root_cause) {
-            merged.root_cause += (merged.root_cause ? '\n' : '') + analysis.root_cause;
-        }
-    });
-    merged.error_type_stats = buildErrorTypeStats(merged.wrong_questions);
-    merged.wrong_count = merged.wrong_questions.length;
-    merged.evidence_status = evidenceStatuses.includes('filtered')
-        ? 'filtered'
-        : (merged.wrong_questions.length ? 'confirmed' : 'insufficient');
-    merged.evidence_note = evidenceNotes.join(' ') || (merged.wrong_questions.length
-        ? `共识别 ${merged.wrong_questions.length} 道有明确题目证据的错题，错误类型按这些错题实际计数。`
-        : '未识别到具备明确题目证据的错题，请检查图片清晰度与批改痕迹。');
-    return merged;
 }
 
 function parseApiResponse(json, name, grade, subject) {
@@ -3849,6 +3840,7 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         result: JSON.stringify(result, null, 2),
         structured: true,
         imageAvailable: Boolean(exam.image_available),
+        imageCount: Math.max(0, Number(exam.image_count) || (exam.image_available ? 1 : 0)),
         serverSynced: true,
         correctionExporting: false,
         questionMastery: normalizeQuestionMasterySummary(exam.question_mastery),
@@ -3923,7 +3915,7 @@ function renderHistoryDiagnosis(record) {
         <div class="history-actions">
             ${record.serverId && recordWeakPoints(record).length ? `<button type="button" class="history-action primary" onclick="prepareHistoryPractice(${escapeHtml(JSON.stringify(record.id))})">生成巩固练习</button>` : ''}
             ${record.serverId && historyWrongCount(record) > 0 ? `<button type="button" class="history-action" ${record.correctionExporting ? 'disabled' : ''} onclick="exportCorrectionSheet(${escapeHtml(JSON.stringify(record.id))})">${record.correctionExporting ? '正在导出...' : '导出订正单'}</button>` : ''}
-            ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">查看原卷</button>` : ''}
+            ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">${record.imageCount > 1 ? `查看原卷（${record.imageCount}页）` : '查看原卷'}</button>` : ''}
         </div>`;
 
     if (record.detailLoading) {
@@ -4010,6 +4002,7 @@ async function openProtectedExamImage(id) {
     if (!record?.serverId) return;
 
     let previewWindow;
+    const objectUrls = [];
     try {
         const accessHeaders = familyAccessHeaders();
         previewWindow = window.open('about:blank', '_blank');
@@ -4018,19 +4011,53 @@ async function openProtectedExamImage(id) {
         previewWindow.document.title = '正在读取原卷';
         previewWindow.document.body.textContent = '正在安全读取原卷...';
 
+        const pageCount = Math.max(1, Number(record.imageCount) || 1);
         const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
-        const response = await fetch(`/exams/${record.serverId}/image?${params.toString()}`, {
-            headers: accessHeaders
-        });
-        if (!response.ok) {
-            const payload = await response.json().catch(() => ({}));
-            throw new Error(payload.error || `读取原卷失败（${response.status}）`);
+        const pageFiles = [];
+        for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+            params.set('page', String(pageNumber));
+            const response = await fetch(`/exams/${record.serverId}/image?${params.toString()}`, {
+                headers: accessHeaders
+            });
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload.error || `读取原卷第 ${pageNumber} 页失败（${response.status}）`);
+            }
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            objectUrls.push(objectUrl);
+            pageFiles.push({ objectUrl: objectUrl, type: blob.type, pageNumber: pageNumber });
         }
 
-        const objectUrl = URL.createObjectURL(await response.blob());
-        previewWindow.location.replace(objectUrl);
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60 * 1000);
+        if (pageFiles.length === 1) {
+            previewWindow.location.replace(pageFiles[0].objectUrl);
+        } else {
+            const doc = previewWindow.document;
+            doc.title = `${record.name || '学生'}的原卷（${pageFiles.length}页）`;
+            doc.body.replaceChildren();
+            doc.body.style.cssText = 'margin:0;padding:24px;background:#eef4fb;color:#15223a;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;';
+            const heading = doc.createElement('h1');
+            heading.textContent = `原卷共 ${pageFiles.length} 页`;
+            heading.style.cssText = 'max-width:960px;margin:0 auto 18px;font-size:22px;';
+            doc.body.appendChild(heading);
+            pageFiles.forEach(pageFile => {
+                const page = doc.createElement('section');
+                page.style.cssText = 'max-width:960px;margin:0 auto 24px;padding:16px;background:#fff;border:1px solid #dce7f7;border-radius:8px;box-shadow:0 10px 28px rgba(23,105,232,.08);';
+                const label = doc.createElement('div');
+                label.textContent = `第 ${pageFile.pageNumber} 页`;
+                label.style.cssText = 'margin-bottom:12px;font-weight:700;color:#41516b;';
+                const media = doc.createElement(pageFile.type === 'application/pdf' ? 'embed' : 'img');
+                media.src = pageFile.objectUrl;
+                media.style.cssText = pageFile.type === 'application/pdf'
+                    ? 'display:block;width:100%;height:80vh;border:0;'
+                    : 'display:block;max-width:100%;height:auto;margin:0 auto;';
+                page.append(label, media);
+                doc.body.appendChild(page);
+            });
+        }
+        window.setTimeout(() => objectUrls.forEach(url => URL.revokeObjectURL(url)), 15 * 60 * 1000);
     } catch (e) {
+        objectUrls.forEach(url => URL.revokeObjectURL(url));
         if (previewWindow && !previewWindow.closed) previewWindow.close();
         alert(e.message || '读取原卷失败，请稍后重试');
     }
@@ -5133,6 +5160,7 @@ async function loadHistoryDetail(id) {
         record.weakPoints = Array.isArray(detail.weak_points) ? detail.weak_points : record.weakPoints;
         record.weakPoint = record.weakPoints[0] || record.weakPoint || '待分析';
         record.imageAvailable = Boolean(detail.image_available);
+        record.imageCount = Math.max(0, Number(detail.image_count) || (detail.image_available ? 1 : 0));
         record.questionMastery = normalizeQuestionMasterySummary(detail.question_mastery);
         record.reviewProgress = normalizeReviewProgress(detail.review_progress);
         record.reviewSchedule = normalizeReviewSchedule(detail.review_schedule);
