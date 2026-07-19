@@ -2449,7 +2449,7 @@
                     >
                     <button type="button" class="access-code-action" data-family-target="wrongBankFamilyCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('wrongBankFamilyCode', this)">显示</button>
                 </div>
-                <span class="field-hint">必须与上传时使用的访问码一致，本次查询后不会保存</span>
+                <span class="field-hint">错题内容仅在验证访问码后显示；访问码和错题内容不会长期保存在浏览器</span>
             </div>
             <div class="wrong-bank-field full">
                 <label class="remember-profile" for="wrongBankRememberProfile">
@@ -2486,18 +2486,11 @@
 <script>
 // ===== STATE =====
 const FAMILY_PROFILE_STORAGE_KEY = 'xiahunao_family_profile';
-
-function stripStoredImageLinks(rawResult) {
-    try {
-        const parsed = JSON.parse(rawResult || '{}');
-        if (!parsed || typeof parsed !== 'object') return rawResult;
-        delete parsed.imageUrls;
-        delete parsed.image_urls;
-        delete parsed['上传文件'];
-        return JSON.stringify(parsed);
-    } catch (e) {
-        return rawResult;
-    }
+const LEGACY_HISTORY_STORAGE_KEY = 'xiahunao_history';
+try {
+    localStorage.removeItem(LEGACY_HISTORY_STORAGE_KEY);
+} catch (e) {
+    // The app remains usable when browser storage is unavailable.
 }
 
 function loadRememberedFamilyProfile() {
@@ -2541,20 +2534,7 @@ function restoreRememberedFamilyProfile() {
 }
 
 let uploadedFiles = [];
-let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]').map(record => ({
-    ...record,
-    result: stripStoredImageLinks(record.result),
-    questionMastery: normalizeQuestionMasterySummary(record.questionMastery),
-    imageUrl: '',
-    imageAvailable: Boolean(record.imageAvailable || record.serverId),
-    imageCount: Math.max(0, Number(record.imageCount) || (record.imageAvailable || record.serverId ? 1 : 0)),
-    analysisStatus: record.analysisStatus === 'pending' ? 'pending' : 'completed',
-    analysisRetrying: false,
-    detailLoading: false,
-    progressSaving: false,
-    correctionExporting: false,
-    detailError: ''
-}));
+let historyRecords = [];
 let currentFilter = 'week';
 let currentSubjectArchive = 'all';
 let currentMasteryFilter = 'pending';
@@ -2577,21 +2557,6 @@ const REVIEW_STEP_DEFINITIONS = [
     { id: 'practiced', label: '完成同类题', description: '完成同类练习并核对答案' },
     { id: 'retested', label: '隔天回测', description: '隔天不看答案重新完成' }
 ];
-
-function saveHistoryRecords() {
-    const records = historyRecords.map(record => {
-        const persisted = { ...record };
-        delete persisted.detailLoading;
-        delete persisted.progressSaving;
-        delete persisted.correctionExporting;
-        delete persisted.analysisRetrying;
-        delete persisted.detailError;
-        delete persisted.imageUrl;
-        persisted.result = stripStoredImageLinks(persisted.result);
-        return persisted;
-    });
-    localStorage.setItem('xiahunao_history', JSON.stringify(records));
-}
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -2915,7 +2880,6 @@ function savePendingAnalysisRecord(uploadJson, name, grade, subject, errorMessag
         reviewSchedule: normalizeReviewSchedule(null)
     };
     historyRecords = [record, ...historyRecords.filter(item => Number(item.serverId) !== serverId)];
-    saveHistoryRecords();
     return record;
 }
 
@@ -3014,7 +2978,6 @@ async function startAnalysis() {
         };
         historyRecords.unshift(record);
         wrongQuestionBank.loaded = false;
-        saveHistoryRecords();
 
         // Show result
         currentAnalysisData = analysisData;
@@ -3778,7 +3741,6 @@ function refreshHistoryQuestionMasteryFromBank(examIds = null) {
             pending: questions.length - mastered
         };
     });
-    saveHistoryRecords();
 }
 
 function recordMasteryStatus(record) {
@@ -4127,7 +4089,6 @@ async function retryExamAnalysis(id) {
         record.reviewProgress = normalizeReviewProgress(data.review_progress);
         record.reviewSchedule = normalizeReviewSchedule(data.review_schedule);
         wrongQuestionBank.loaded = false;
-        saveHistoryRecords();
 
         currentAnalysisData = parsed;
         renderAnalysisResult(parsed);
@@ -4139,7 +4100,6 @@ async function retryExamAnalysis(id) {
     } catch (error) {
         record.analysisStatus = 'pending';
         record.analysisError = error.message || 'AI 分析服务暂时不可用';
-        saveHistoryRecords();
         alert('重新分析失败：' + record.analysisError + '。原卷仍已保存，可以稍后再试。');
     } finally {
         record.analysisRetrying = false;
@@ -4854,7 +4814,13 @@ async function syncServerWrongBank(options = {}) {
             headers: accessHeaders
         });
         const serverRecords = (data.exams || []).map(exam => makeServerHistoryRecord(exam, grade, studentName));
-        const recordMap = new Map(historyRecords.map(r => [r.serverId ? `server-${r.serverId}` : `local-${r.id}`, r]));
+        const currentProfileRecords = historyRecords.filter(record => (
+            record.grade === grade && record.name === studentName
+        ));
+        const recordMap = new Map(currentProfileRecords.map(record => [
+            record.serverId ? `server-${record.serverId}` : `local-${record.id}`,
+            record
+        ]));
         serverRecords.forEach(record => {
             const key = `server-${record.serverId}`;
             const existing = recordMap.get(key);
@@ -4886,7 +4852,6 @@ async function syncServerWrongBank(options = {}) {
         if (!serverRecords.some(record => record.id === selectedRecordId)) {
             selectedRecordId = serverRecords.find(record => record.analysisStatus === 'pending')?.id || null;
         }
-        saveHistoryRecords();
         const questionBank = await loadWrongQuestionBank({
             quiet: true,
             force: true,
@@ -5179,7 +5144,6 @@ async function openQuestionSourceExam(examId) {
             record.detailLoaded = true;
             historyRecords.push(record);
             historyRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
-            saveHistoryRecords();
         } catch (error) {
             alert('加载原试卷记录失败：' + error.message);
             return;
@@ -5332,7 +5296,6 @@ async function loadHistoryDetail(id) {
         record.questionMastery = normalizeQuestionMasterySummary(detail.question_mastery);
         record.reviewProgress = normalizeReviewProgress(detail.review_progress);
         record.reviewSchedule = normalizeReviewSchedule(detail.review_schedule);
-        saveHistoryRecords();
     } catch (e) {
         record.detailError = e.message || '服务器暂时不可用';
     } finally {
@@ -5362,7 +5325,6 @@ async function toggleReviewStep(id, step) {
         });
         record.reviewProgress = normalizeReviewProgress(data.review_progress);
         record.reviewSchedule = normalizeReviewSchedule(data.review_schedule);
-        saveHistoryRecords();
         const status = document.getElementById('historySyncStatus');
         if (record.reviewProgress.completedCount === record.reviewProgress.total) {
             status.textContent = '整卷复习流程已完成；错题是否掌握仍以逐题状态为准。';
@@ -5437,7 +5399,6 @@ async function confirmAction() {
             }
         }
         historyRecords = historyRecords.filter(r => r.id !== pendingDeleteId);
-        saveHistoryRecords();
         if (selectedRecordId === pendingDeleteId) selectedRecordId = null;
         pendingDeleteId = null;
         document.getElementById('confirmDialog').classList.remove('show');
