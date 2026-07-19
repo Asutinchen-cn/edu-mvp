@@ -73,6 +73,18 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
         self.assertIn("/opt/edu-mvp/deploy/renew-ip-certificate.sh", service)
         self.assertIn("OnCalendar=*-*-* 03,15:00:00", timer)
 
+    def test_http_fallback_keeps_security_controls_while_port_443_is_closed(self):
+        fallback_path = PROJECT_ROOT / "nginx" / "nginx.http-fallback.conf"
+        self.assertTrue(fallback_path.exists(), "missing HTTP fallback gateway")
+        fallback = fallback_path.read_text(encoding="utf-8")
+        self.assertIn("listen 80;", fallback)
+        self.assertNotIn("return 308 https://$host$request_uri;", fallback)
+        self.assertIn("location ^~ /.well-known/acme-challenge/", fallback)
+        self.assertIn("limit_req zone=edu_ai", fallback)
+        self.assertIn("limit_req zone=edu_private", fallback)
+        self.assertIn("Content-Security-Policy", fallback)
+        self.assertNotIn("Strict-Transport-Security", fallback)
+
 
 if __name__ == "__main__":
     unittest.main()
