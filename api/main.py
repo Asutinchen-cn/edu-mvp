@@ -2098,6 +2098,10 @@ def _normalize_ai_analysis(raw_analysis, subject: str) -> dict:
     }
 
 
+class AnalysisServiceUnavailable(RuntimeError):
+    """The uploaded exam is intact, but the AI provider can be retried later."""
+
+
 async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
     """使用 DeepSeek 进行错题分析"""
     subject_label = SUBJECT_LABELS.get(subject, "未知学科")
@@ -2158,14 +2162,7 @@ async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
         return _normalize_ai_analysis(analysis, subject)
     except Exception as e:
         print(f"DeepSeek API error: {e}")
-        return _normalize_ai_analysis({
-            "subject": subject,
-            "wrong_questions": [],
-            "error_types": ["分析服务暂时不可用"],
-            "weak_points": ["请稍后重试"],
-            "root_cause": f"AI分析服务异常: {str(e)[:50]}",
-            "recommendations": ["请稍后重试AI分析"]
-        }, subject)
+        raise AnalysisServiceUnavailable(str(e)) from e
 
 # ===== AI 生成巩固练习题（DeepSeek） =====
 
@@ -2381,16 +2378,14 @@ async def analyze_exam(
     except ValueError as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
+    db = SessionLocal()
     try:
-        db = SessionLocal()
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
 
         if not exam:
-            db.close()
             return JSONResponse({"error": "试卷不存在"}, status_code=404)
 
         if not _exam_has_family_access(exam, grade, student_name, family_code):
-            db.close()
             return JSONResponse({"error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
         # 调用 DeepSeek AI 分析
@@ -2407,7 +2402,7 @@ async def analyze_exam(
         }
         exam.wrong_question_mastery = json.dumps(initial_mastery, ensure_ascii=False)
         db.commit()
-        db.close()
+        review_progress = _normalize_review_progress(exam.review_progress)
 
         return JSONResponse({
             "success": True,
@@ -2417,14 +2412,30 @@ async def analyze_exam(
             "student": exam.student_name,
             "image_available": _stored_upload_exists(exam.image_path, exam.image_paths),
             "image_count": _stored_upload_count(exam.image_path, exam.image_paths),
+            "analysis_status": "completed",
             "analysis": analysis,
+            "question_mastery": _build_question_mastery_summary(exam, analysis),
+            "review_progress": review_progress,
+            "review_schedule": _build_review_schedule(exam.created_at, review_progress),
             "summary": {
                 "weak_points": analysis.get("weak_points", []),
                 "recommendations": analysis.get("recommendations", [])[:3]
             }
         })
+    except AnalysisServiceUnavailable:
+        db.rollback()
+        return JSONResponse({
+            "success": False,
+            "error": "AI 分析服务暂时不可用，原卷已保存，请稍后直接重新分析",
+            "retryable": True,
+            "analysis_status": "pending",
+            "exam_id": exam_id,
+        }, status_code=503, headers={"Retry-After": "15"})
     except Exception as e:
+        db.rollback()
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+    finally:
+        db.close()
 
 
 def _stored_json(raw_value: str | None, fallback):
@@ -2436,8 +2447,48 @@ def _stored_json(raw_value: str | None, fallback):
         return fallback
 
 
+def _analysis_status(
+    raw_analysis: str | None,
+    raw_weak_points: str | None = None,
+    raw_recommendations: str | None = None,
+) -> str:
+    retry_phrases = ("请稍后重试", "分析服务暂时不可用", "AI分析服务异常")
+
+    def has_retry_marker(values) -> bool:
+        return any(
+            phrase in str(value)
+            for value in values
+            for phrase in retry_phrases
+        )
+
+    analysis = _stored_json(raw_analysis, None)
+    if not isinstance(analysis, dict):
+        legacy_weak_points = _stored_json(raw_weak_points, [])
+        legacy_recommendations = _stored_json(raw_recommendations, [])
+        legacy_values = [
+            *(legacy_weak_points if isinstance(legacy_weak_points, list) else []),
+            *(legacy_recommendations if isinstance(legacy_recommendations, list) else []),
+        ]
+        if has_retry_marker(legacy_values):
+            return "pending"
+        return "completed" if legacy_weak_points or legacy_recommendations else "pending"
+    weak_points = analysis.get("weak_points")
+    error_types = analysis.get("error_types")
+    root_cause = str(analysis.get("root_cause") or "")
+    retry_markers = [
+        *(weak_points if isinstance(weak_points, list) else []),
+        *(error_types if isinstance(error_types, list) else []),
+        root_cause,
+    ]
+    if has_retry_marker(retry_markers):
+        return "pending"
+    return "completed"
+
+
 def _analysis_history_summary(raw_analysis: str | None, raw_weak_points: str | None = None) -> dict:
     """从已保存的 AI 分析中提取历史页可以确认的事实。"""
+    if _analysis_status(raw_analysis, raw_weak_points) == "pending":
+        return {"wrong_count": None, "weak_points": []}
     legacy_weak_points = _stored_json(raw_weak_points, [])
     if not isinstance(legacy_weak_points, list):
         legacy_weak_points = []
@@ -2466,6 +2517,17 @@ def _analysis_history_detail(
     raw_recommendations: str | None = None,
 ) -> dict:
     """把新旧分析记录整理成历史页稳定使用的结构。"""
+    if _analysis_status(raw_analysis, raw_weak_points, raw_recommendations) == "pending":
+        return {
+            "wrong_questions": [],
+            "error_types": [],
+            "error_type_stats": [],
+            "weak_points": [],
+            "root_cause": "",
+            "recommendations": [],
+            "evidence_status": "insufficient",
+            "evidence_note": "原卷已保存，等待重新分析。",
+        }
     analysis = _stored_json(raw_analysis, {})
     if not isinstance(analysis, dict):
         analysis = {}
@@ -2761,6 +2823,7 @@ async def list_exams(
             "student": exam.student_name,
             "image_available": _stored_upload_exists(exam.image_path, exam.image_paths),
             "image_count": _stored_upload_count(exam.image_path, exam.image_paths),
+            "analysis_status": _analysis_status(exam.ai_analysis, exam.weak_points, exam.recommendations),
             "ocr_preview": exam.ocr_text[:50] + "..." if exam.ocr_text else None,
             "wrong_count": summary["wrong_count"],
             "question_mastery": _build_question_mastery_summary(exam),
@@ -3045,8 +3108,13 @@ async def get_exam(
         db.close()
         return JSONResponse({"error": FAMILY_ACCESS_DENIED_ERROR}, status_code=403)
 
+    analysis_status = _analysis_status(exam.ai_analysis, exam.weak_points, exam.recommendations)
     summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
-    analysis = _analysis_history_detail(exam.ai_analysis, exam.weak_points, exam.recommendations)
+    analysis = (
+        _analysis_history_detail(exam.ai_analysis, exam.weak_points, exam.recommendations)
+        if analysis_status == "completed"
+        else None
+    )
     response = {
         "id": exam.id,
         "grade": exam.grade,
@@ -3054,8 +3122,9 @@ async def get_exam(
         "student": exam.student_name,
         "image_available": _stored_upload_exists(exam.image_path, exam.image_paths),
         "image_count": _stored_upload_count(exam.image_path, exam.image_paths),
+        "analysis_status": analysis_status,
         "ocr_text": exam.ocr_text,
-        "ai_analysis": _stored_json(exam.ai_analysis, None),
+        "ai_analysis": _stored_json(exam.ai_analysis, None) if analysis_status == "completed" else None,
         "analysis": analysis,
         "wrong_count": summary["wrong_count"],
         "question_mastery": _build_question_mastery_summary(exam, analysis),
@@ -4387,7 +4456,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.10.0",
+        "version": "0.10.1",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {

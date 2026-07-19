@@ -21,6 +21,7 @@ from api.main import (
     _hash_family_access_code,
     _validate_family_access_code,
     _verify_family_access_code,
+    ai_analyze,
     analyze_exam,
     delete_exam,
     export_correction_sheet,
@@ -66,6 +67,14 @@ class FamilyAccessCodeTest(unittest.TestCase):
         self.assertFalse(
             _exam_has_family_access(legacy_exam, "六年级", "小明", "Home2026A")
         )
+
+    def test_ai_provider_errors_are_retryable_instead_of_fake_diagnoses(self):
+        with patch(
+            "api.main.call_deepseek",
+            new=AsyncMock(side_effect=RuntimeError("provider timeout")),
+        ):
+            with self.assertRaises(AnalysisServiceUnavailable):
+                asyncio.run(ai_analyze("第1题批改错误", "math", "六年级"))
 
 
 class FamilyAccessEndpointTest(unittest.TestCase):
@@ -566,6 +575,23 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         payload = json.loads(response.body)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["exams"][0]["analysis_status"], "pending")
+
+    def test_legacy_retry_weak_point_is_also_reported_as_pending(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.ai_analysis = None
+        exam.weak_points = json.dumps(["请稍后重试"], ensure_ascii=False)
+        db.commit()
+        db.close()
+
+        response = asyncio.run(list_exams(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.body)["exams"][0]["analysis_status"], "pending")
 
     def test_review_progress_saves_each_step_time_and_enforces_the_retest_day(self):
         with patch("api.main._utc_now", return_value=datetime(2026, 7, 16, 6, 0, tzinfo=timezone.utc)):

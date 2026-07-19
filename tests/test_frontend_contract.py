@@ -69,6 +69,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("wrongBankDialog.addEventListener('cancel'", HTML)
         self.assertIn("historyStatus.classList.remove('show')", HTML)
         self.assertIn("firstEmptyField.focus();", HTML)
+        self.assertIn("await setHistoryView('exams');", HTML)
         self.assertNotIn("window.setTimeout(() => firstEmptyField.focus()", HTML)
 
     def test_returning_parent_can_remember_only_non_secret_family_profile_fields(self):

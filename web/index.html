@@ -2548,6 +2548,8 @@ let historyRecords = JSON.parse(localStorage.getItem('xiahunao_history') || '[]'
     imageUrl: '',
     imageAvailable: Boolean(record.imageAvailable || record.serverId),
     imageCount: Math.max(0, Number(record.imageCount) || (record.imageAvailable || record.serverId ? 1 : 0)),
+    analysisStatus: record.analysisStatus === 'pending' ? 'pending' : 'completed',
+    analysisRetrying: false,
     detailLoading: false,
     progressSaving: false,
     correctionExporting: false,
@@ -2582,6 +2584,7 @@ function saveHistoryRecords() {
         delete persisted.detailLoading;
         delete persisted.progressSaving;
         delete persisted.correctionExporting;
+        delete persisted.analysisRetrying;
         delete persisted.detailError;
         delete persisted.imageUrl;
         persisted.result = stripStoredImageLinks(persisted.result);
@@ -2869,6 +2872,53 @@ function familyAccessHeaders(headers = {}) {
     return { ...headers, 'X-Family-Code': familyCode };
 }
 
+function clearSelectedUploadFiles() {
+    uploadedFiles = [];
+    document.getElementById('fileInput').value = '';
+    renderFilePreview();
+    updateAnalyzeBtn();
+}
+
+function savePendingAnalysisRecord(uploadJson, name, grade, subject, errorMessage) {
+    const serverId = Number(uploadJson.id);
+    const existing = historyRecords.find(record => Number(record.serverId) === serverId);
+    const record = {
+        ...(existing || {}),
+        id: existing?.id || `server-${serverId}`,
+        serverId: serverId,
+        date: existing?.date || new Date().toISOString(),
+        name: name,
+        grade: grade,
+        subject: subject,
+        wrongCount: null,
+        weakPoint: '等待分析',
+        weakPoints: [],
+        result: JSON.stringify({
+            studentName: name,
+            grade: grade,
+            subject: subject,
+            examIds: [serverId],
+            status: 'pending'
+        }),
+        structured: true,
+        analysis: null,
+        analysisStatus: 'pending',
+        analysisError: errorMessage || 'AI 分析服务暂时不可用',
+        analysisRetrying: false,
+        imageAvailable: uploadJson.image_available !== false,
+        imageCount: Math.max(1, Number(uploadJson.image_count) || 1),
+        serverSynced: true,
+        detailLoaded: true,
+        detailError: '',
+        questionMastery: normalizeQuestionMasterySummary(null),
+        reviewProgress: normalizeReviewProgress(null),
+        reviewSchedule: normalizeReviewSchedule(null)
+    };
+    historyRecords = [record, ...historyRecords.filter(item => Number(item.serverId) !== serverId)];
+    saveHistoryRecords();
+    return record;
+}
+
 // ===== ANALYSIS =====
 async function startAnalysis() {
     if (uploadedFiles.length === 0) return;
@@ -2887,6 +2937,7 @@ async function startAnalysis() {
     }
 
     let accessHeaders;
+    let uploadedExam = null;
     try {
         accessHeaders = familyAccessHeaders();
     } catch (e) {
@@ -2913,6 +2964,7 @@ async function startAnalysis() {
             headers: accessHeaders,
             body: fd
         });
+        uploadedExam = uploadJson;
         document.getElementById('loadingText').textContent = '正在分析整份试卷...';
         const params = new URLSearchParams({ grade: grade, student_name: name });
         const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, {
@@ -2946,6 +2998,8 @@ async function startAnalysis() {
             imageAvailable: Boolean(analysisData.examIds[0]),
             imageCount: uploadJson.image_count || uploadedFiles.length,
             serverSynced: Boolean(analysisData.examIds[0]),
+            analysisStatus: 'completed',
+            analysisRetrying: false,
             reviewProgress: normalizeReviewProgress(null),
             questionMastery: {
                 total: analysisData.wrongQuestions.length,
@@ -2969,12 +3023,29 @@ async function startAnalysis() {
         document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
 
         // Reset upload
-        uploadedFiles = [];
-        renderFilePreview();
-        updateAnalyzeBtn();
+        clearSelectedUploadFiles();
         renderHistory();
     } catch(e) {
-        alert('分析出错：' + e.message);
+        if (uploadedExam?.id) {
+            const pendingRecord = savePendingAnalysisRecord(
+                uploadedExam,
+                name,
+                grade,
+                subject,
+                e.message
+            );
+            rememberFamilyProfile(grade, name, document.getElementById('rememberFamilyProfile').checked);
+            clearSelectedUploadFiles();
+            selectedRecordId = pendingRecord.id;
+            setHistoryFilter('all');
+            renderHistory();
+            const status = document.getElementById('historySyncStatus');
+            status.textContent = '原卷已保存到错题库。AI 暂时未完成，可在这条记录中点击“重新分析”。';
+            status.classList.add('show');
+            document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            alert('上传出错：' + e.message);
+        }
     } finally {
         document.getElementById('loadingOverlay').classList.remove('show');
     }
@@ -3711,6 +3782,7 @@ function refreshHistoryQuestionMasteryFromBank(examIds = null) {
 }
 
 function recordMasteryStatus(record) {
+    if (record?.analysisStatus === 'pending') return 'pending';
     const questionMastery = recordQuestionMasterySummary(record);
     if (questionMastery.total > 0) {
         return questionMastery.pending === 0 ? 'mastered' : 'pending';
@@ -3818,7 +3890,8 @@ function recordReviewSchedule(record, progress = normalizeReviewProgress(record?
 
 function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
     const weakPoints = Array.isArray(exam.weak_points) ? exam.weak_points : [];
-    const weakPoint = weakPoints[0] || '待分析';
+    const analysisStatus = exam.analysis_status === 'pending' ? 'pending' : 'completed';
+    const weakPoint = analysisStatus === 'pending' ? '等待分析' : (weakPoints[0] || '未识别到明确薄弱点');
     const serverId = Number(exam.id);
     const result = {
         来源: '腾讯云错题库',
@@ -3841,6 +3914,9 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         structured: true,
         imageAvailable: Boolean(exam.image_available),
         imageCount: Math.max(0, Number(exam.image_count) || (exam.image_available ? 1 : 0)),
+        analysisStatus: analysisStatus,
+        analysisRetrying: false,
+        detailLoaded: analysisStatus === 'pending',
         serverSynced: true,
         correctionExporting: false,
         questionMastery: normalizeQuestionMasterySummary(exam.question_mastery),
@@ -3850,6 +3926,7 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
 }
 
 function historyAnalysisData(record) {
+    if (record?.analysisStatus === 'pending') return null;
     if (record.analysis && typeof record.analysis === 'object') {
         return parseApiResponse({
             ...record.analysis,
@@ -3869,7 +3946,7 @@ function historyAnalysisData(record) {
 }
 
 function renderReviewProgress(record) {
-    if (!record.serverId) return '';
+    if (!record.serverId || record.analysisStatus === 'pending') return '';
     const progress = normalizeReviewProgress(record.reviewProgress);
     const schedule = recordReviewSchedule(record, progress);
     const timing = reviewTaskTiming(schedule);
@@ -3918,6 +3995,18 @@ function renderHistoryDiagnosis(record) {
             ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">${record.imageCount > 1 ? `查看原卷（${record.imageCount}页）` : '查看原卷'}</button>` : ''}
         </div>`;
 
+    if (record.analysisStatus === 'pending') {
+        return `
+            <div class="history-detail-state">
+                原卷已经保存在服务器，AI 诊断尚未完成。无需重新上传，直接继续分析即可。
+            </div>
+            <div class="history-actions">
+                <button type="button" class="history-action primary"
+                    ${record.analysisRetrying ? 'disabled' : ''}
+                    onclick="retryExamAnalysis(${escapeHtml(JSON.stringify(record.id))})">${record.analysisRetrying ? '正在分析...' : '重新分析'}</button>
+                ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">${record.imageCount > 1 ? `查看原卷（${record.imageCount}页）` : '查看原卷'}</button>` : ''}
+            </div>`;
+    }
     if (record.detailLoading) {
         return `<div class="history-detail-state" role="status">正在读取服务器错题诊断...</div>`;
     }
@@ -3995,6 +4084,67 @@ function renderHistoryDiagnosis(record) {
             ${renderReviewProgress(record)}
             ${actions}
         </div>`;
+}
+
+async function retryExamAnalysis(id) {
+    const record = historyRecords.find(item => item.id === id);
+    if (!record?.serverId || record.analysisRetrying) return;
+
+    record.analysisRetrying = true;
+    record.analysisError = '';
+    renderHistory();
+    try {
+        const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
+        const data = await requestJson(`/analyze/${record.serverId}?${params.toString()}`, {
+            method: 'POST',
+            headers: familyAccessHeaders()
+        });
+        const analysisPayload = {
+            ...(data.analysis || {}),
+            exam_ids: [data.exam_id || record.serverId]
+        };
+        const parsed = parseApiResponse(
+            analysisPayload,
+            record.name,
+            record.grade,
+            record.subject || 'math'
+        );
+        if (!parsed) throw new Error('分析结果格式异常，请稍后重试');
+
+        record.analysis = data.analysis || null;
+        record.result = JSON.stringify(parsed);
+        record.analysisStatus = 'completed';
+        record.analysisError = '';
+        record.detailLoaded = true;
+        record.wrongCount = parsed.wrongQuestions.length;
+        record.weakPoints = parsed.weakPoints;
+        record.weakPoint = parsed.weakPoints[0] || '未识别到明确薄弱点';
+        record.imageAvailable = data.image_available !== false;
+        record.imageCount = Math.max(1, Number(data.image_count) || record.imageCount || 1);
+        record.questionMastery = normalizeQuestionMasterySummary(
+            data.question_mastery || { total: parsed.wrongQuestions.length, mastered: 0 }
+        );
+        record.reviewProgress = normalizeReviewProgress(data.review_progress);
+        record.reviewSchedule = normalizeReviewSchedule(data.review_schedule);
+        wrongQuestionBank.loaded = false;
+        saveHistoryRecords();
+
+        currentAnalysisData = parsed;
+        renderAnalysisResult(parsed);
+        document.getElementById('resultSection').classList.add('show');
+        document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const status = document.getElementById('historySyncStatus');
+        status.textContent = '原卷分析已完成，错题诊断和复习安排已经更新。';
+        status.classList.add('show');
+    } catch (error) {
+        record.analysisStatus = 'pending';
+        record.analysisError = error.message || 'AI 分析服务暂时不可用';
+        saveHistoryRecords();
+        alert('重新分析失败：' + record.analysisError + '。原卷仍已保存，可以稍后再试。');
+    } finally {
+        record.analysisRetrying = false;
+        renderHistory();
+    }
 }
 
 async function openProtectedExamImage(id) {
@@ -4610,7 +4760,7 @@ async function submitWrongBankQuery(event) {
         const rememberProfile = document.getElementById('wrongBankRememberProfile').checked;
         document.getElementById('rememberFamilyProfile').checked = rememberProfile;
         rememberFamilyProfile(grade, studentName, rememberProfile);
-        await setHistoryView('knowledge');
+        await setHistoryView('exams');
         const historyStatus = document.getElementById('historySyncStatus');
         historyStatus.textContent = result.message;
         historyStatus.classList.add('show');
@@ -4712,12 +4862,20 @@ async function syncServerWrongBank(options = {}) {
                 recordMap.set(key, record);
                 return;
             }
+            const analysisStatusChanged = existing.analysisStatus !== record.analysisStatus;
             recordMap.set(key, {
                 ...record,
                 ...existing,
+                analysisStatus: record.analysisStatus,
+                analysis: analysisStatusChanged ? null : existing.analysis,
+                detailLoaded: analysisStatusChanged ? record.detailLoaded : existing.detailLoaded,
                 wrongCount: record.wrongCount ?? existing.wrongCount,
-                weakPoint: record.weakPoint !== '待分析' ? record.weakPoint : existing.weakPoint,
-                weakPoints: record.weakPoints.length ? record.weakPoints : existing.weakPoints,
+                weakPoint: record.analysisStatus === 'pending'
+                    ? record.weakPoint
+                    : (record.weakPoints.length ? record.weakPoint : existing.weakPoint),
+                weakPoints: record.analysisStatus === 'pending'
+                    ? []
+                    : (record.weakPoints.length ? record.weakPoints : existing.weakPoints),
                 questionMastery: record.questionMastery,
                 reviewProgress: record.reviewProgress,
                 reviewSchedule: record.reviewSchedule,
@@ -4725,6 +4883,9 @@ async function syncServerWrongBank(options = {}) {
             });
         });
         historyRecords = [...recordMap.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (!serverRecords.some(record => record.id === selectedRecordId)) {
+            selectedRecordId = serverRecords.find(record => record.analysisStatus === 'pending')?.id || null;
+        }
         saveHistoryRecords();
         const questionBank = await loadWrongQuestionBank({
             quiet: true,
@@ -5097,12 +5258,16 @@ function renderHistory() {
         const subject = r.subject === 'english' ? 'english' : 'math';
         const subjectLabel = subject === 'english' ? '英语' : '数学';
         const wrongCount = historyWrongCount(r);
-        const issueText = wrongCount === null ? '已完成分析' : `识别错题 ${wrongCount} 道`;
+        const issueText = r.analysisStatus === 'pending'
+            ? '等待 AI 分析'
+            : (wrongCount === null ? '已完成分析' : `识别错题 ${wrongCount} 道`);
         const reviewProgress = normalizeReviewProgress(r.reviewProgress);
         const questionMastery = recordQuestionMasterySummary(r);
-        const masteryText = questionMastery.total > 0
-            ? `错题掌握 ${questionMastery.mastered}/${questionMastery.total}`
-            : `流程 ${reviewProgress.completedCount}/${reviewProgress.total}`;
+        const masteryText = r.analysisStatus === 'pending'
+            ? '待分析'
+            : (questionMastery.total > 0
+                ? `错题掌握 ${questionMastery.mastered}/${questionMastery.total}`
+                : `流程 ${reviewProgress.completedCount}/${reviewProgress.total}`);
         return `
             <div class="history-item ${sel}">
                 <div class="history-item-header">
@@ -5155,10 +5320,13 @@ async function loadHistoryDetail(id) {
             headers: familyAccessHeaders()
         });
         record.analysis = detail.analysis || detail.ai_analysis || null;
+        record.analysisStatus = detail.analysis_status === 'pending' ? 'pending' : 'completed';
         record.detailLoaded = true;
         record.wrongCount = normalizeWrongCount(detail.wrong_count);
         record.weakPoints = Array.isArray(detail.weak_points) ? detail.weak_points : record.weakPoints;
-        record.weakPoint = record.weakPoints[0] || record.weakPoint || '待分析';
+        record.weakPoint = record.analysisStatus === 'pending'
+            ? '等待分析'
+            : (record.weakPoints[0] || '未识别到明确薄弱点');
         record.imageAvailable = Boolean(detail.image_available);
         record.imageCount = Math.max(0, Number(detail.image_count) || (detail.image_available ? 1 : 0));
         record.questionMastery = normalizeQuestionMasterySummary(detail.question_mastery);
