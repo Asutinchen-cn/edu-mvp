@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.main import (
+    AnalysisServiceUnavailable,
     Base,
     Exam,
     ReviewProgressRequest,
@@ -510,7 +511,61 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         stored_mastery = db.query(Exam).filter(Exam.id == self.first_exam_id).one().wrong_question_mastery
         db.close()
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.body)["analysis_status"], "completed")
         self.assertEqual(json.loads(stored_mastery), {"1": False})
+
+    def test_unavailable_ai_keeps_the_uploaded_exam_pending_for_retry(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.ai_analysis = None
+        exam.weak_points = None
+        exam.recommendations = None
+        db.commit()
+        db.close()
+
+        with patch(
+            "api.main.ai_analyze",
+            AsyncMock(side_effect=AnalysisServiceUnavailable("provider timeout")),
+        ):
+            response = asyncio.run(analyze_exam(
+                self.first_exam_id,
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(payload["retryable"])
+        self.assertEqual(payload["analysis_status"], "pending")
+        self.assertIn("原卷已保存", payload["error"])
+        db = self.session_factory()
+        stored = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        self.assertIsNone(stored.ai_analysis)
+        self.assertIsNone(stored.weak_points)
+        self.assertIsNone(stored.recommendations)
+        db.close()
+
+    def test_failed_placeholder_analysis_is_reported_as_pending(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.ai_analysis = json.dumps({
+            "wrong_questions": [],
+            "weak_points": ["请稍后重试"],
+            "root_cause": "AI分析服务异常: timeout",
+        }, ensure_ascii=False)
+        db.commit()
+        db.close()
+
+        response = asyncio.run(list_exams(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["exams"][0]["analysis_status"], "pending")
 
     def test_review_progress_saves_each_step_time_and_enforces_the_retest_day(self):
         with patch("api.main._utc_now", return_value=datetime(2026, 7, 16, 6, 0, tzinfo=timezone.utc)):

@@ -130,6 +130,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("totalBytes + f.size > 50 * 1024 * 1024", HTML)
         self.assertNotIn("mergeApiAnalyses(apiAnalyses, subject)", HTML)
 
+    def test_uploaded_exam_can_retry_ai_analysis_without_reuploading_files(self):
+        self.assertIn("let uploadedExam = null", HTML)
+        self.assertIn("function savePendingAnalysisRecord", HTML)
+        self.assertIn("analysisStatus: 'pending'", HTML)
+        self.assertIn("async function retryExamAnalysis(id)", HTML)
+        self.assertIn("重新分析", HTML)
+        self.assertRegex(
+            HTML,
+            r"requestJson\(`/analyze/\$\{record\.serverId\}\?\$\{params\.toString\(\)\}`",
+        )
+        self.assertIn("record.analysisStatus === 'pending'", HTML)
+        self.assertIn("等待 AI 分析", HTML)
+
     def test_server_record_deletion_explains_that_originals_are_removed(self):
         self.assertIn("原卷文件和分析结果将一并删除，且无法恢复", HTML)
 
