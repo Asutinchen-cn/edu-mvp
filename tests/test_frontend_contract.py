@@ -320,10 +320,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("导出近 7 天报告", HTML)
         self.assertIn("let familyReportExporting = false", HTML)
 
-    def test_transient_history_request_flags_are_cleared_after_reload(self):
-        self.assertIn("detailLoading: false", HTML)
-        self.assertIn("progressSaving: false", HTML)
-        self.assertIn("function saveHistoryRecords()", HTML)
+    def test_wrong_bank_records_are_not_persisted_in_browser_storage(self):
+        self.assertIn("const LEGACY_HISTORY_STORAGE_KEY = 'xiahunao_history'", HTML)
+        self.assertIn("localStorage.removeItem(LEGACY_HISTORY_STORAGE_KEY)", HTML)
+        self.assertIn("let historyRecords = []", HTML)
+        self.assertNotIn("localStorage.getItem('xiahunao_history'", HTML)
+        self.assertNotIn("localStorage.setItem('xiahunao_history'", HTML)
+
+    def test_wrong_bank_query_replaces_records_from_another_student(self):
+        self.assertIn(
+            "record.grade === grade && record.name === studentName",
+            HTML,
+        )
+        self.assertIn("错题内容仅在验证访问码后显示", HTML)
 
 
 if __name__ == "__main__":
