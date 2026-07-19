@@ -435,12 +435,34 @@ try:
 except Exception as _e:
     print(f"DB migration warning: {_e}")
 
+def _configured_cors_origins() -> list[str]:
+    raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+    if not raw_origins.strip():
+        return [
+            "http://127.0.0.1:8013",
+            "http://localhost:8013",
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
+        ]
+
+    origins = list(dict.fromkeys(
+        origin.strip().rstrip("/")
+        for origin in raw_origins.split(",")
+        if origin.strip()
+    ))
+    if "*" in origins:
+        raise ValueError("ALLOWED_ORIGINS 不能使用通配符")
+    if any(not origin.startswith(("http://", "https://")) for origin in origins):
+        raise ValueError("ALLOWED_ORIGINS 只能包含 http 或 https 来源")
+    return origins
+
+
 app = FastAPI(title="虾胡闹教育 API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_configured_cors_origins(),
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Family-Code"],
 )
 
 # 挂载静态文件
@@ -4456,7 +4478,7 @@ async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.10.1",
+        "version": "0.10.2",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {

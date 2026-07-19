@@ -20,6 +20,7 @@ ENV/
 .DS_Store
 uploads/
 data/
+certbot/
 *.db
 *.sqlite
 *.sqlite3

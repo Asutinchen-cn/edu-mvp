@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew the edu-mvp short-lived IP certificate
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/edu-mvp/deploy/renew-ip-certificate.sh
