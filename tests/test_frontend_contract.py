@@ -105,6 +105,24 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("alert('请填写学生姓名，之后查询家庭错题库需要使用同一姓名')", HTML)
         self.assertNotIn("document.getElementById('studentName').value || '同学'", HTML)
 
+    def test_upload_access_code_has_a_full_width_row_on_larger_screens(self):
+        self.assertRegex(
+            HTML,
+            r"\.form-row\s*\{[^}]*display:\s*grid;[^}]*"
+            r"grid-template-columns:\s*minmax\(0,\s*0\.8fr\)\s+"
+            r"minmax\(0,\s*0\.8fr\)\s+minmax\(0,\s*1\.4fr\)",
+        )
+        self.assertIn('<div class="form-group family-access-group">', HTML)
+        self.assertIn(".family-access-group { grid-column: 1 / -1; }", HTML)
+
+        tablet_css = re.search(
+            r"@media \(min-width: 769px\) and \(max-width: 1080px\) \{(?P<body>.*?)\n        \}",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(tablet_css)
+        self.assertRegex(tablet_css.group("body"), r"\.steps-sidebar\s*\{[^}]*display:\s*none")
+
     def test_mobile_layout_prioritizes_the_real_upload_tool(self):
         mobile_css = re.search(r"@media \(max-width: 768px\) \{(?P<body>.*?)\n        \}", HTML, re.S)
         self.assertIsNotNone(mobile_css)
