@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up the edu-mvp wrong-question database and uploads
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/edu-mvp/deploy/backup-edu-data.sh
+Nice=10
+IOSchedulingClass=idle
