@@ -398,11 +398,14 @@
             font-size: 13px; color: var(--muted); font-weight: 500; display: block; margin-top: 6px;
         }
         .form-row {
-            display: flex; gap: 12px;
+            display: grid;
+            grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.4fr);
+            gap: 12px;
         }
         .form-group {
             flex: 1; display: flex; flex-direction: column; gap: 4px;
         }
+        .family-access-group { grid-column: 1 / -1; }
         .form-group label {
             font-size: 12px; color: var(--muted); font-weight: 700;
         }
@@ -2118,6 +2121,7 @@
         @media (min-width: 769px) and (max-width: 1080px) {
             .header-nav { display: none; }
             .hero-shell { grid-template-columns: 1fr; }
+            .steps-sidebar { display: none; }
             .main-card { margin-left: 32px; margin-right: 32px; }
             .worksheet-card, .history-card, .result-section { margin-left: 32px; margin-right: 32px; }
         }
@@ -2226,7 +2230,7 @@
                 <label for="studentName">学生姓名</label>
                 <input type="text" id="studentName" placeholder="请输入学生姓名" required autocomplete="name" maxlength="30">
             </div>
-            <div class="form-group">
+            <div class="form-group family-access-group">
                 <label for="familyAccessCode">家庭访问码</label>
                 <div class="access-code-control">
                     <input
