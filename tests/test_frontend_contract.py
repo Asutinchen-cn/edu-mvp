@@ -72,6 +72,15 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("await setHistoryView('exams');", HTML)
         self.assertNotIn("window.setTimeout(() => firstEmptyField.focus()", HTML)
 
+    def test_wrong_bank_remember_profile_stays_inside_the_dialog(self):
+        self.assertIn('.wrong-bank-field input:not([type="checkbox"])', HTML)
+        self.assertNotIn(".wrong-bank-field input {", HTML)
+        self.assertIn(".wrong-bank-field > .remember-profile { width: 100%; }", HTML)
+        self.assertIn(
+            ".wrong-bank-field > .remember-profile span { min-width: 0; overflow-wrap: anywhere; }",
+            HTML,
+        )
+
     def test_returning_parent_can_remember_only_non_secret_family_profile_fields(self):
         self.assertIn("const FAMILY_PROFILE_STORAGE_KEY = 'xiahunao_family_profile'", HTML)
         self.assertIn("function loadRememberedFamilyProfile()", HTML)
