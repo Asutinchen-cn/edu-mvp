@@ -1936,7 +1936,7 @@
         .wrong-bank-field.full { grid-column: 1 / -1; }
         .wrong-bank-field label { color: var(--muted); font-size: 12px; font-weight: 800; }
         .wrong-bank-field select,
-        .wrong-bank-field input {
+        .wrong-bank-field input:not([type="checkbox"]) {
             width: 100%;
             min-width: 0;
             min-height: 42px;
@@ -1949,10 +1949,12 @@
             outline: none;
         }
         .wrong-bank-field select:focus,
-        .wrong-bank-field input:focus {
+        .wrong-bank-field input:not([type="checkbox"]):focus {
             border-color: var(--brand-blue);
             box-shadow: 0 0 0 4px rgba(23, 105, 232, 0.09);
         }
+        .wrong-bank-field > .remember-profile { width: 100%; }
+        .wrong-bank-field > .remember-profile span { min-width: 0; overflow-wrap: anywhere; }
         .wrong-bank-status {
             min-height: 20px;
             margin-top: 14px;
