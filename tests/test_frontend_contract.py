@@ -116,8 +116,36 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             r'<input type="text" id="studentName"[^>]*required[^>]*autocomplete="name"',
         )
         self.assertIn("const name = document.getElementById('studentName').value.trim();", HTML)
-        self.assertIn("alert('请填写学生姓名，之后查询家庭错题库需要使用同一姓名')", HTML)
+        self.assertIn(
+            "setAnalysisStatus('error', '请填写学生姓名，之后查询家庭错题库需要使用同一姓名。')",
+            HTML,
+        )
+        self.assertNotIn("alert('请填写学生姓名，之后查询家庭错题库需要使用同一姓名')", HTML)
         self.assertNotIn("document.getElementById('studentName').value || '同学'", HTML)
+
+    def test_exam_upload_has_recoverable_inline_status(self):
+        self.assertIn(
+            'id="analysisStatus" role="status" aria-live="polite" hidden',
+            HTML,
+        )
+        self.assertRegex(
+            HTML,
+            r'id="analyzeBtn"[^>]*disabled[^>]*aria-busy="false"',
+        )
+        self.assertIn("function setAnalysisStatus(type, message)", HTML)
+        self.assertIn("function setAnalysisBusy(busy)", HTML)
+        self.assertIn("btn.disabled = analysisBusy || uploadedFiles.length === 0", HTML)
+        self.assertIn("setAnalysisStatus('loading'", HTML)
+        self.assertIn("setAnalysisStatus('success'", HTML)
+        self.assertIn("setAnalysisStatus('error'", HTML)
+        self.assertNotIn("alert('上传出错：' + e.message)", HTML)
+        for message in (
+            "一份试卷最多上传 12 页",
+            "仅支持 JPG、PNG 或 PDF 文件",
+            "文件大小不能超过 10MB",
+            "多页试卷总大小不能超过 50MB",
+        ):
+            self.assertNotIn(f"alert('{message}')", HTML)
 
     def test_upload_access_code_has_a_full_width_row_on_larger_screens(self):
         self.assertRegex(

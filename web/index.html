@@ -539,6 +539,34 @@
             box-shadow: 0 12px 24px rgba(255, 122, 26, 0.24);
             transform: translateY(-1px);
         }
+        .analyze-btn:disabled {
+            background: #e8eaef;
+            color: #999;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+        .analysis-status {
+            padding: 11px 14px;
+            border-left: 3px solid var(--brand-blue);
+            border-radius: 6px;
+            background: #edf5ff;
+            color: #315578;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .analysis-status[hidden] { display: none; }
+        .analysis-status.ready,
+        .analysis-status.success {
+            border-left-color: var(--success);
+            background: #edf9f5;
+            color: #176c54;
+        }
+        .analysis-status.error {
+            border-left-color: var(--danger);
+            background: #fff3f1;
+            color: #a5392e;
+        }
 
         /* ===== FILE PREVIEW ===== */
         .file-preview {
@@ -2321,7 +2349,9 @@
 
         <div class="example-link" onclick="loadExample()">示例：点击查看上传示例</div>
 
-        <button class="analyze-btn" id="analyzeBtn" onclick="startAnalysis()">
+        <div class="analysis-status" id="analysisStatus" role="status" aria-live="polite" hidden></div>
+
+        <button class="analyze-btn" id="analyzeBtn" disabled aria-busy="false" onclick="startAnalysis()">
             🚀 开始分析
         </button>
     </div>
@@ -2526,7 +2556,7 @@
 </dialog>
 
 <!-- LOADING OVERLAY -->
-<div class="loading-overlay" id="loadingOverlay">
+<div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite" aria-atomic="true">
     <div class="loader"></div>
     <div class="loading-text" id="loadingText">AI 正在分析试卷...</div>
 </div>
@@ -2593,6 +2623,7 @@ function restoreRememberedFamilyProfile() {
 }
 
 let uploadedFiles = [];
+let analysisBusy = false;
 let historyRecords = [];
 let currentFilter = 'week';
 let currentSubjectArchive = 'all';
@@ -2808,6 +2839,28 @@ async function generateUnitWorksheet() {
 }
 
 // ===== DROPZONE =====
+function setAnalysisStatus(type, message) {
+    const status = document.getElementById('analysisStatus');
+    status.className = `analysis-status${type ? ` ${type}` : ''}`;
+    status.textContent = message || '';
+    status.hidden = !message;
+}
+
+function selectedUploadSummary() {
+    const totalBytes = uploadedFiles.reduce((sum, item) => sum + item.file.size, 0);
+    const sizeMb = Math.max(0.1, totalBytes / 1024 / 1024).toFixed(1);
+    return `已选择 ${uploadedFiles.length} 页试卷，共 ${sizeMb}MB。确认姓名和访问码后即可开始分析。`;
+}
+
+function setAnalysisBusy(busy) {
+    analysisBusy = busy;
+    const btn = document.getElementById('analyzeBtn');
+    btn.setAttribute('aria-busy', busy ? 'true' : 'false');
+    btn.textContent = busy ? '⏳ 正在分析...' : '🚀 开始分析';
+    document.getElementById('analysis').setAttribute('aria-busy', busy ? 'true' : 'false');
+    updateAnalyzeBtn();
+}
+
 function setupDropzone() {
     const dz = document.getElementById('dropzone');
     ['dragenter','dragover'].forEach(e => {
@@ -2829,26 +2882,29 @@ function setupFileInput() {
 }
 
 function handleFiles(files) {
+    const errors = [];
+    let acceptedCount = 0;
     for (let f of files) {
         if (uploadedFiles.length >= 12) {
-            alert('一份试卷最多上传 12 页');
+            errors.push('一份试卷最多上传 12 页');
             break;
         }
         if (!['image/jpeg', 'image/png', 'application/pdf'].includes(f.type)) {
-            alert('仅支持 JPG、PNG 或 PDF 文件');
+            errors.push(`${f.name} 不是 JPG、PNG 或 PDF 文件`);
             continue;
         }
         if (f.size > 10 * 1024 * 1024) {
-            alert('文件大小不能超过 10MB');
+            errors.push(`${f.name} 超过单页 10MB 限制`);
             continue;
         }
         const totalBytes = uploadedFiles.reduce((sum, item) => sum + item.file.size, 0);
         if (totalBytes + f.size > 50 * 1024 * 1024) {
-            alert('多页试卷总大小不能超过 50MB');
+            errors.push('多页试卷总大小不能超过 50MB');
             break;
         }
         const entry = { name: f.name, data: '', file: f, type: f.type };
         uploadedFiles.push(entry);
+        acceptedCount += 1;
         const reader = new FileReader();
         reader.onload = e => {
             entry.data = e.target.result;
@@ -2859,12 +2915,17 @@ function handleFiles(files) {
             if (index >= 0) uploadedFiles.splice(index, 1);
             renderFilePreview();
             updateAnalyzeBtn();
-            alert(`无法读取文件：${f.name}`);
+            setAnalysisStatus('error', `无法读取文件：${f.name}。请重新选择。`);
         };
         reader.readAsDataURL(f);
     }
     renderFilePreview();
     updateAnalyzeBtn();
+    if (errors.length) {
+        setAnalysisStatus('error', [...new Set(errors)].join('；') + '。');
+    } else if (acceptedCount > 0) {
+        setAnalysisStatus('ready', selectedUploadSummary());
+    }
 }
 
 function renderFilePreview() {
@@ -2888,11 +2949,14 @@ function removeFile(index) {
     uploadedFiles.splice(index, 1);
     renderFilePreview();
     updateAnalyzeBtn();
+    setAnalysisStatus(uploadedFiles.length ? 'ready' : '', uploadedFiles.length ? selectedUploadSummary() : '');
 }
 
 function updateAnalyzeBtn() {
     const btn = document.getElementById('analyzeBtn');
-    btn.classList.toggle('active', uploadedFiles.length > 0);
+    const canAnalyze = uploadedFiles.length > 0 && !analysisBusy;
+    btn.classList.toggle('active', canAnalyze);
+    btn.disabled = analysisBusy || uploadedFiles.length === 0;
 }
 
 function toggleFamilyCodeVisibility(inputId, button) {
@@ -3026,17 +3090,20 @@ function savePendingAnalysisRecord(uploadJson, name, grade, subject, errorMessag
 
 // ===== ANALYSIS =====
 async function startAnalysis() {
-    if (uploadedFiles.length === 0) return;
+    if (uploadedFiles.length === 0) {
+        setAnalysisStatus('error', '请先选择试卷照片或 PDF。');
+        return;
+    }
 
     const grade = document.getElementById('gradeSelect').value;
     const subject = document.getElementById('analysisSubject').value;
     const name = document.getElementById('studentName').value.trim();
     if (!grade) {
-        alert('请先选择年级');
+        setAnalysisStatus('error', '请先选择年级。');
         return;
     }
     if (!name) {
-        alert('请填写学生姓名，之后查询家庭错题库需要使用同一姓名');
+        setAnalysisStatus('error', '请填写学生姓名，之后查询家庭错题库需要使用同一姓名。');
         document.getElementById('studentName').focus();
         return;
     }
@@ -3046,11 +3113,14 @@ async function startAnalysis() {
     try {
         accessHeaders = familyAccessHeaders();
     } catch (e) {
-        alert(e.message);
+        setAnalysisStatus('error', `${e.message}。`);
         document.getElementById('familyAccessCode').focus();
         return;
     }
 
+    setAnalysisBusy(true);
+    setAnalysisStatus('loading', '正在上传并识别整份试卷，请不要关闭页面。');
+    document.getElementById('resultSection').classList.remove('show');
     document.getElementById('loadingOverlay').classList.add('show');
     document.getElementById('loadingText').textContent = 'AI 正在识别试卷...';
 
@@ -3128,6 +3198,7 @@ async function startAnalysis() {
 
         // Reset upload
         clearSelectedUploadFiles();
+        setAnalysisStatus('success', `分析完成，已识别 ${analysisData.wrongQuestions.length} 道错题并保存到家庭错题库。`);
         renderHistory();
     } catch(e) {
         if (uploadedExam?.id) {
@@ -3146,12 +3217,15 @@ async function startAnalysis() {
             const status = document.getElementById('historySyncStatus');
             status.textContent = '原卷已保存到错题库。AI 暂时未完成，可在这条记录中点击“重新分析”。';
             status.classList.add('show');
+            setAnalysisStatus('ready', '原卷已保存到错题库。AI 暂时未完成，稍后可在历史记录中重新分析。');
             document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
-            alert('上传出错：' + e.message);
+            const detail = String(e.message || '服务器暂时不可用').replace(/[。.!?！？]+$/, '');
+            setAnalysisStatus('error', `上传失败：${detail}。已选文件仍保留，可直接重试。`);
         }
     } finally {
         document.getElementById('loadingOverlay').classList.remove('show');
+        setAnalysisBusy(false);
     }
 }
 
