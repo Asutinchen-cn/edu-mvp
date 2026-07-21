@@ -247,6 +247,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("function buildParentReviewPlan(data)", HTML)
         self.assertIn("7 天复习安排", HTML)
         self.assertIn("本次识别错题", HTML)
+        self.assertIn('id="summaryGenerateBtn"', HTML)
+        self.assertIn("function startPracticeFromSummary()", HTML)
+        self.assertIn("function setPracticeGenerationState", HTML)
         self.assertNotIn("总错误率", HTML)
 
     def test_analysis_distribution_uses_real_wrong_question_counts(self):

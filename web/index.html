@@ -1632,6 +1632,33 @@
             font-size: 13px;
             line-height: 1.7;
         }
+        .parent-practice-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            margin-top: 12px;
+            padding: 0 16px;
+            border: 0;
+            border-radius: 8px;
+            background: var(--brand-blue);
+            color: #fff;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 9px 20px rgba(23, 105, 232, 0.18);
+        }
+        .parent-practice-button:hover,
+        .parent-practice-button:focus-visible {
+            background: #0e57c6;
+            outline: none;
+        }
+        .parent-practice-button:disabled {
+            opacity: 0.62;
+            cursor: wait;
+            box-shadow: none;
+        }
         .seven-day-plan {
             margin-top: 18px;
         }
@@ -2158,6 +2185,7 @@
                 border-left: 0;
                 border-top: 1px solid rgba(23, 105, 232, 0.1);
             }
+            .parent-practice-button { width: 100%; }
             .plan-step { margin-bottom: 14px; }
             .priority-label { white-space: normal; }
             .history-filters { align-items: flex-start; }
@@ -3383,7 +3411,11 @@ function renderAnalysisResult(data) {
                 <span class="priority-label">本周优先：${escapeHtml(plan.focus)}</span>
             </div>
             <div class="parent-actions">
-                <div class="parent-action"><strong>今天做什么</strong><span>${escapeHtml(plan.today)}</span></div>
+                <div class="parent-action">
+                    <strong>今天做什么</strong>
+                    <span>${escapeHtml(plan.today)}</span>
+                    <button type="button" class="parent-practice-button" id="summaryGenerateBtn" onclick="startPracticeFromSummary()">开始本次巩固</button>
+                </div>
                 <div class="parent-action"><strong>本周怎么练</strong><span>${escapeHtml(plan.thisWeek)}</span></div>
                 <div class="parent-action"><strong>家长怎么检查</strong><span>${escapeHtml(plan.parentCheck)}</span></div>
             </div>
@@ -3486,12 +3518,29 @@ let currentPracticeScorable = false;
 let practiceMasterySaving = false;
 let practiceMasteryConfirmed = false;
 
+function setPracticeGenerationState(busy, completed = false) {
+    const mainButton = document.getElementById('generateBtn');
+    const summaryButton = document.getElementById('summaryGenerateBtn');
+    if (mainButton) {
+        mainButton.disabled = busy;
+        mainButton.textContent = busy ? '正在生成...' : (completed ? '🎯 重新生成' : '🎯 生成 5 道巩固题');
+    }
+    if (summaryButton) {
+        summaryButton.disabled = busy;
+        summaryButton.textContent = busy ? '正在生成巩固题...' : (completed ? '重新生成本次巩固' : '开始本次巩固');
+    }
+}
+
+function startPracticeFromSummary() {
+    document.getElementById('practiceSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    generatePractice();
+}
+
 async function generatePractice() {
     if (!currentAnalysisData) return;
     const btn = document.getElementById('generateBtn');
     if (btn.disabled) return;
-    btn.disabled = true;
-    btn.textContent = '正在生成...';
+    setPracticeGenerationState(true);
 
     let questions;
     let generationError = '';
@@ -3549,8 +3598,7 @@ async function generatePractice() {
     }
 
     renderPracticeQuestions(questions);
-    btn.disabled = false;
-    btn.textContent = '🎯 重新生成';
+    setPracticeGenerationState(false, true);
     document.getElementById('exportPdfBtn').style.display = 'inline-block';
 }
 
