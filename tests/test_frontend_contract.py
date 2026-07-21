@@ -81,7 +81,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("function submitWrongBankQuery(event)", HTML)
         self.assertIn("wrongBankDialog.showModal()", HTML)
         self.assertIn("wrongBankDialog.addEventListener('cancel'", HTML)
-        self.assertIn("historyStatus.classList.remove('show')", HTML)
+        self.assertIn("setHistorySyncStatus('', '')", HTML)
         self.assertIn("firstEmptyField.focus();", HTML)
         self.assertIn("await setHistoryView('exams');", HTML)
         self.assertNotIn("window.setTimeout(() => firstEmptyField.focus()", HTML)
@@ -225,6 +225,20 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertIn("record.analysisStatus === 'pending'", HTML)
         self.assertIn("等待 AI 分析", HTML)
+
+    def test_retry_analysis_failure_stays_visible_on_the_saved_record(self):
+        self.assertIn("function renderPendingAnalysisState(record)", HTML)
+        self.assertIn("正在重新分析已保存的原卷", HTML)
+        self.assertIn("上次重新分析未完成", HTML)
+        self.assertIn("原卷仍安全保存在错题库", HTML)
+        self.assertIn('role="status" aria-live="polite"', HTML)
+        self.assertIn("function setHistorySyncStatus(type, message)", HTML)
+        self.assertIn("setHistorySyncStatus('error'", HTML)
+        self.assertIn("record.analysisError = error.message", HTML)
+        self.assertNotIn(
+            "alert('重新分析失败：' + record.analysisError + '。原卷仍已保存，可以稍后再试。')",
+            HTML,
+        )
 
     def test_server_record_deletion_explains_that_originals_are_removed(self):
         self.assertIn("原卷文件和分析结果将一并删除，且无法恢复", HTML)

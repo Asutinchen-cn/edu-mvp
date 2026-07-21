@@ -720,6 +720,11 @@
             line-height: 1.6;
         }
         .history-sync-status.show { display: block; }
+        .history-sync-status.error {
+            border-left-color: var(--danger);
+            background: #fff3f1;
+            color: #a5392e;
+        }
         .history-view-switch {
             display: inline-grid;
             grid-template-columns: repeat(2, minmax(110px, 1fr));
@@ -1440,7 +1445,9 @@
             padding: 14px 0;
             color: var(--muted);
             font-size: 13px;
+            line-height: 1.7;
         }
+        .history-detail-state.error { color: #a5392e; }
 
         /* Empty state */
         .empty-state {
@@ -3214,9 +3221,7 @@ async function startAnalysis() {
             selectedRecordId = pendingRecord.id;
             setHistoryFilter('all');
             renderHistory();
-            const status = document.getElementById('historySyncStatus');
-            status.textContent = '原卷已保存到错题库。AI 暂时未完成，可在这条记录中点击“重新分析”。';
-            status.classList.add('show');
+            setHistorySyncStatus('success', '原卷已保存到错题库。AI 暂时未完成，可在这条记录中点击“重新分析”。');
             setAnalysisStatus('ready', '原卷已保存到错题库。AI 暂时未完成，稍后可在历史记录中重新分析。');
             document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
@@ -3785,9 +3790,7 @@ async function confirmKnowledgeMastery() {
         ));
         practiceMasteryConfirmed = true;
         renderHistory();
-        const status = document.getElementById('historySyncStatus');
-        status.textContent = `已将“${currentAnalysisData.practiceKnowledgePoint}”的 ${Number(data.matched_count || 0)} 道原错题标记为已掌握。`;
-        status.classList.add('show');
+        setHistorySyncStatus('success', `已将“${currentAnalysisData.practiceKnowledgePoint}”的 ${Number(data.matched_count || 0)} 道原错题标记为已掌握。`);
     } catch (error) {
         alert('同步掌握状态失败：' + error.message);
     } finally {
@@ -4164,6 +4167,32 @@ function renderReviewProgress(record) {
         </section>`;
 }
 
+function setHistorySyncStatus(type, message) {
+    const status = document.getElementById('historySyncStatus');
+    status.textContent = message || '';
+    status.classList.toggle('show', Boolean(message));
+    status.classList.toggle('error', type === 'error');
+}
+
+function renderPendingAnalysisState(record) {
+    if (record.analysisRetrying) {
+        return `
+            <div class="history-detail-state" role="status" aria-live="polite">
+                正在重新分析已保存的原卷，请稍候。分析期间无需再次上传。
+            </div>`;
+    }
+    if (record.analysisError) {
+        return `
+            <div class="history-detail-state error" role="status" aria-live="polite">
+                上次重新分析未完成：${escapeHtml(record.analysisError)}。原卷仍安全保存在错题库，可以稍后直接重试。
+            </div>`;
+    }
+    return `
+        <div class="history-detail-state" role="status" aria-live="polite">
+            原卷已经保存在服务器，AI 诊断尚未完成。无需重新上传，直接继续分析即可。
+        </div>`;
+}
+
 function renderHistoryDiagnosis(record) {
     const actions = `
         <div class="history-actions">
@@ -4174,9 +4203,7 @@ function renderHistoryDiagnosis(record) {
 
     if (record.analysisStatus === 'pending') {
         return `
-            <div class="history-detail-state">
-                原卷已经保存在服务器，AI 诊断尚未完成。无需重新上传，直接继续分析即可。
-            </div>
+            ${renderPendingAnalysisState(record)}
             <div class="history-actions">
                 <button type="button" class="history-action primary"
                     ${record.analysisRetrying ? 'disabled' : ''}
@@ -4269,6 +4296,7 @@ async function retryExamAnalysis(id) {
 
     record.analysisRetrying = true;
     record.analysisError = '';
+    setHistorySyncStatus('', '');
     renderHistory();
     try {
         const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
@@ -4309,13 +4337,11 @@ async function retryExamAnalysis(id) {
         renderAnalysisResult(parsed);
         document.getElementById('resultSection').classList.add('show');
         document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        const status = document.getElementById('historySyncStatus');
-        status.textContent = '原卷分析已完成，错题诊断和复习安排已经更新。';
-        status.classList.add('show');
+        setHistorySyncStatus('success', '原卷分析已完成，错题诊断和复习安排已经更新。');
     } catch (error) {
         record.analysisStatus = 'pending';
         record.analysisError = error.message || 'AI 分析服务暂时不可用';
-        alert('重新分析失败：' + record.analysisError + '。原卷仍已保存，可以稍后再试。');
+        setHistorySyncStatus('error', '重新分析暂未完成，原卷仍安全保存在错题库，可以稍后再试。');
     } finally {
         record.analysisRetrying = false;
         renderHistory();
@@ -4886,9 +4912,7 @@ function setMasteryFilter(status) {
 
 function openWrongBankQuery() {
     const wrongBankDialog = document.getElementById('wrongBankDialog');
-    const historyStatus = document.getElementById('historySyncStatus');
-    historyStatus.textContent = '';
-    historyStatus.classList.remove('show');
+    setHistorySyncStatus('', '');
     document.getElementById('wrongBankGrade').value = document.getElementById('gradeSelect').value;
     document.getElementById('wrongBankSubject').value = currentSubjectArchive;
     document.getElementById('wrongBankStudentName').value = document.getElementById('studentName').value;
@@ -4948,9 +4972,7 @@ async function submitWrongBankQuery(event) {
         document.getElementById('rememberFamilyProfile').checked = rememberProfile;
         rememberFamilyProfile(grade, studentName, rememberProfile);
         await setHistoryView('exams');
-        const historyStatus = document.getElementById('historySyncStatus');
-        historyStatus.textContent = result.message;
-        historyStatus.classList.add('show');
+        setHistorySyncStatus('success', result.message);
         closeWrongBankQuery();
         document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (error) {
@@ -5291,11 +5313,9 @@ async function toggleWrongQuestionMastery(questionId) {
         });
         item.mastered = Boolean(data.mastered);
         refreshHistoryQuestionMasteryFromBank(new Set([item.exam_id]));
-        const status = document.getElementById('historySyncStatus');
-        status.textContent = item.mastered
+        setHistorySyncStatus('success', item.mastered
             ? '这道错题已标记为“已掌握”，可在已掌握筛选中查看。'
-            : '这道错题已重新放回“待复习”。';
-        status.classList.add('show');
+            : '这道错题已重新放回“待复习”。');
     } catch (error) {
         alert('保存单题状态失败：' + error.message);
     } finally {
@@ -5554,13 +5574,10 @@ async function toggleReviewStep(id, step) {
         });
         record.reviewProgress = normalizeReviewProgress(data.review_progress);
         record.reviewSchedule = normalizeReviewSchedule(data.review_schedule);
-        const status = document.getElementById('historySyncStatus');
         if (record.reviewProgress.completedCount === record.reviewProgress.total) {
-            status.textContent = '整卷复习流程已完成；错题是否掌握仍以逐题状态为准。';
-            status.classList.add('show');
+            setHistorySyncStatus('success', '整卷复习流程已完成；错题是否掌握仍以逐题状态为准。');
         } else if (previousProgress.completedCount === previousProgress.total) {
-            status.textContent = '整卷复习流程已更新；逐题掌握状态没有改变。';
-            status.classList.add('show');
+            setHistorySyncStatus('success', '整卷复习流程已更新；逐题掌握状态没有改变。');
         }
     } catch (e) {
         alert('保存复习进度失败：' + e.message);
