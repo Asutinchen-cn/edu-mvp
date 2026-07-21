@@ -250,6 +250,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('id="summaryGenerateBtn"', HTML)
         self.assertIn("function startPracticeFromSummary()", HTML)
         self.assertIn("function setPracticeGenerationState", HTML)
+        self.assertIn(".parent-plan-header { flex-direction: column; }", HTML)
         self.assertNotIn("总错误率", HTML)
 
     def test_analysis_distribution_uses_real_wrong_question_counts(self):
