@@ -1880,6 +1880,27 @@
             color: var(--brand-blue);
         }
         .worksheet-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+        .worksheet-status {
+            margin-top: 12px;
+            padding: 11px 14px;
+            border-left: 3px solid var(--brand-blue);
+            border-radius: 6px;
+            background: #edf5ff;
+            color: #315578;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .worksheet-status[hidden] { display: none; }
+        .worksheet-status.success {
+            border-left-color: var(--success);
+            background: #edf9f5;
+            color: #176c54;
+        }
+        .worksheet-status.error {
+            border-left-color: var(--danger);
+            background: #fff3f1;
+            color: #a5392e;
+        }
         .worksheet-result {
             display: none; margin-top: 18px; padding-top: 18px; border-top: 1px solid #eef0f5;
         }
@@ -2393,8 +2414,9 @@
         </div>
     </div>
     <div class="worksheet-actions">
-        <button class="generate-btn" id="worksheetGenerateBtn" onclick="generateUnitWorksheet()">✨ 生成题目卷和答案卷</button>
+        <button class="generate-btn" id="worksheetGenerateBtn" aria-busy="false" onclick="generateUnitWorksheet()">✨ 生成题目卷和答案卷</button>
     </div>
+    <div class="worksheet-status" id="worksheetStatus" role="status" aria-live="polite" hidden></div>
     <div class="worksheet-result" id="worksheetResult">
         <div class="worksheet-downloads" id="worksheetDownloads"></div>
         <div class="worksheet-preview" id="worksheetPreview"></div>
@@ -2602,6 +2624,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDropzone();
     setupFileInput();
     setupDateFilters();
+    setupWorksheetOutputInvalidation();
     loadWorksheetUnits();
     const wrongBankDialog = document.getElementById('wrongBankDialog');
     wrongBankDialog.addEventListener('click', event => {
@@ -2692,15 +2715,47 @@ function renderWorksheetKnowledge() {
         </label>`).join('') || '请先选择单元';
 }
 
+function setWorksheetStatus(type, message) {
+    const status = document.getElementById('worksheetStatus');
+    status.className = `worksheet-status${type ? ` ${type}` : ''}`;
+    status.textContent = message || '';
+    status.hidden = !message;
+}
+
+function clearWorksheetOutput() {
+    document.getElementById('worksheetDownloads').innerHTML = '';
+    document.getElementById('worksheetPreview').innerHTML = '';
+    document.getElementById('worksheetResult').classList.remove('show');
+    setWorksheetStatus('', '');
+}
+
+function setupWorksheetOutputInvalidation() {
+    document.getElementById('worksheet').addEventListener('input', event => {
+        if (event.target.matches('select, input')) clearWorksheetOutput();
+    });
+}
+
+function setWorksheetFormBusy(busy) {
+    document.querySelectorAll('#worksheet select, #worksheet input').forEach(control => {
+        control.disabled = busy;
+    });
+    const button = document.getElementById('worksheetGenerateBtn');
+    const hasUnits = Boolean(document.querySelector('input[name="worksheetUnit"]'));
+    button.disabled = busy || !hasUnits;
+    button.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+
 async function generateUnitWorksheet() {
     const unitIds = [...document.querySelectorAll('input[name="worksheetUnit"]:checked')].map(el => el.value);
     const knowledgePoints = [...document.querySelectorAll('input[name="worksheetKnowledge"]:checked')].map(el => el.value);
     if (!unitIds.length || !knowledgePoints.length) {
-        alert('请至少选择一个单元和一个知识点');
+        setWorksheetStatus('error', '请至少选择一个单元和一个知识点后再生成。');
         return;
     }
     const btn = document.getElementById('worksheetGenerateBtn');
-    btn.disabled = true;
+    clearWorksheetOutput();
+    setWorksheetFormBusy(true);
+    setWorksheetStatus('loading', '正在根据考点组卷并生成两份 PDF，这通常需要几十秒，请不要重复点击。');
     btn.textContent = '⏳ 正在生成...';
     try {
         const resp = await fetch('/generate-unit-worksheet', {
@@ -2739,10 +2794,15 @@ async function generateUnitWorksheet() {
                 ${q.teaching_intent ? `<div class="worksheet-meta">命题意图：${escapeHtml(q.teaching_intent)}</div>` : ''}
             </div>`).join('');
         document.getElementById('worksheetResult').classList.add('show');
+        setWorksheetStatus('success', `生成完成，共 ${data.questions.length} 题。请分别下载题目卷和答案解析卷。`);
+        document.getElementById('worksheetResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) {
-        alert('生成复习卷失败：' + e.message);
+        const detail = String(e.message || '服务器暂时不可用')
+            .replace(/^生成失败[：:]\s*/, '')
+            .replace(/[。.!?！？]+$/, '');
+        setWorksheetStatus('error', `生成失败：${detail}。请检查设置后重试。`);
     } finally {
-        btn.disabled = !document.querySelector('input[name="worksheetUnit"]');
+        setWorksheetFormBusy(false);
         btn.textContent = '✨ 生成题目卷和答案卷';
     }
 }

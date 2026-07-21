@@ -40,6 +40,20 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("grade === '九年级' && subject === 'english'", HTML)
         self.assertIn(".worksheet-field[hidden]", HTML)
 
+    def test_worksheet_generation_has_recoverable_inline_status(self):
+        self.assertIn(
+            'id="worksheetStatus" role="status" aria-live="polite" hidden',
+            HTML,
+        )
+        self.assertIn("function setWorksheetStatus(type, message)", HTML)
+        self.assertIn("function setWorksheetFormBusy(busy)", HTML)
+        self.assertIn("正在根据考点组卷并生成两份 PDF", HTML)
+        self.assertIn("document.getElementById('worksheetDownloads').innerHTML = ''", HTML)
+        self.assertIn("document.getElementById('worksheetPreview').innerHTML = ''", HTML)
+        self.assertIn("setWorksheetStatus('success'", HTML)
+        self.assertIn("setWorksheetStatus('error'", HTML)
+        self.assertNotIn("alert('生成复习卷失败：' + e.message)", HTML)
+
     def test_analysis_grade_selector_is_focused_on_junior_middle_school(self):
         for grade in ("六年级", "七年级", "八年级", "九年级"):
             self.assertIn(f'<option value="{grade}"', HTML)
