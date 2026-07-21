@@ -140,6 +140,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('aria-label="生成家庭访问码"', HTML)
         self.assertNotIn("localStorage.setItem('familyAccessCode'", HTML)
 
+    def test_family_access_code_can_be_copied_without_browser_persistence(self):
+        self.assertIn('aria-label="复制家庭访问码"', HTML)
+        self.assertIn("onclick=\"copyFamilyAccessCode('familyAccessCode', this)\"", HTML)
+        self.assertIn("async function copyFamilyAccessCode(inputId, button)", HTML)
+        self.assertIn("navigator.clipboard.writeText(familyCode)", HTML)
+        self.assertIn("document.execCommand('copy')", HTML)
+        self.assertIn("访问码已复制，请妥善保存", HTML)
+        self.assertIn('id="familyAccessHint" role="status" aria-live="polite"', HTML)
+        self.assertNotRegex(
+            HTML,
+            r"localStorage\.setItem\([^\n]*(familyAccessCode|family_code|familyCode)",
+        )
+
     def test_original_exam_files_use_the_protected_image_endpoint(self):
         self.assertIn("async function openProtectedExamImage(id)", HTML)
         self.assertIn("/image?${params.toString()}", HTML)

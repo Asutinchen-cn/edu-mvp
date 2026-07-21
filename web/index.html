@@ -452,7 +452,7 @@
         }
         .access-code-control {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) auto auto;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
             gap: 6px;
             align-items: stretch;
         }
@@ -2245,8 +2245,9 @@
                     >
                     <button type="button" class="access-code-action" data-family-target="familyAccessCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('familyAccessCode', this)">显示</button>
                     <button type="button" class="access-code-action" aria-label="生成家庭访问码" onclick="generateFamilyAccessCode('familyAccessCode')">生成</button>
+                    <button type="button" class="access-code-action" aria-label="复制家庭访问码" onclick="copyFamilyAccessCode('familyAccessCode', this)">复制</button>
                 </div>
-                <span class="field-hint" id="familyAccessHint">上传和查询错题库时使用，本网站不会保存访问码</span>
+                <span class="field-hint" id="familyAccessHint" role="status" aria-live="polite">上传和查询错题库时使用，本网站不会保存访问码</span>
                 <label class="remember-profile" for="rememberFamilyProfile">
                     <input type="checkbox" id="rememberFamilyProfile" checked>
                     <span>在这台设备记住年级和姓名</span>
@@ -2825,9 +2826,53 @@ function generateFamilyAccessCode(inputId) {
         toggle.setAttribute('aria-label', '隐藏家庭访问码');
     }
     if (inputId === 'familyAccessCode') {
-        document.getElementById('familyAccessHint').textContent = '已生成安全访问码，请妥善记住；刷新页面后不会保留';
+        document.getElementById('familyAccessHint').textContent = '已生成安全访问码，请点击“复制”并妥善保存；刷新页面后不会保留';
     }
     input.focus();
+}
+
+async function copyFamilyAccessCode(inputId, button) {
+    const input = document.getElementById(inputId);
+    const familyCode = (input.value || '').trim();
+    const hint = inputId === 'familyAccessCode' ? document.getElementById('familyAccessHint') : null;
+    if (!/^[A-Za-z0-9]{8,32}$/.test(familyCode)) {
+        if (hint) hint.textContent = '请先输入或生成 8-32 位字母或数字组成的家庭访问码';
+        input.focus();
+        return;
+    }
+
+    let copied = false;
+    try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+        await navigator.clipboard.writeText(familyCode);
+        copied = true;
+    } catch (error) {
+        const originalType = input.type;
+        try {
+            input.type = 'text';
+            input.focus();
+            input.select();
+            copied = document.execCommand('copy');
+            input.setSelectionRange(familyCode.length, familyCode.length);
+        } catch (fallbackError) {
+            copied = false;
+        } finally {
+            input.type = originalType;
+        }
+    }
+
+    if (!copied) {
+        if (hint) hint.textContent = '复制失败，请显示访问码后手动复制';
+        return;
+    }
+
+    button.textContent = '已复制';
+    button.setAttribute('aria-label', '家庭访问码已复制');
+    if (hint) hint.textContent = '访问码已复制，请妥善保存；刷新页面后不会保留';
+    window.setTimeout(() => {
+        button.textContent = '复制';
+        button.setAttribute('aria-label', '复制家庭访问码');
+    }, 1600);
 }
 
 function getFamilyAccessCode() {
