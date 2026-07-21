@@ -738,6 +738,34 @@
             border-top: 1px solid rgba(23, 105, 232, 0.12);
             border-bottom: 1px solid rgba(23, 105, 232, 0.12);
         }
+        .review-dashboard-gate {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 4px 0 4px 16px;
+            border-left: 3px solid var(--brand-blue);
+        }
+        .review-dashboard-gate-copy { min-width: 0; }
+        .review-dashboard-gate-label {
+            display: block;
+            color: var(--brand-blue);
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 5px;
+        }
+        .review-dashboard-gate h4 {
+            color: var(--ink);
+            font-size: 17px;
+            line-height: 1.5;
+            margin-bottom: 4px;
+        }
+        .review-dashboard-gate p {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.65;
+        }
+        .review-dashboard-gate .history-action { flex: 0 0 auto; }
         .review-dashboard-head {
             display: flex;
             align-items: flex-start;
@@ -2084,6 +2112,8 @@
             .review-dashboard-head { flex-direction: column; gap: 6px; }
             .review-dashboard-actions { width: 100%; justify-content: space-between; }
             .review-report-btn { flex: 1 1 160px; }
+            .review-dashboard-gate { align-items: flex-start; flex-direction: column; gap: 12px; }
+            .review-dashboard-gate .history-action { width: 100%; }
             .review-dashboard-body { grid-template-columns: 1fr; }
             .review-metrics { grid-template-columns: 1fr; }
             .review-metric { padding: 12px 0; }
@@ -4558,6 +4588,18 @@ function buildReviewDashboard(records) {
 
 function renderReviewDashboard(records) {
     const dashboard = document.getElementById('reviewDashboard');
+    if (!wrongQuestionBank.loaded && historyRecords.length === 0) {
+        dashboard.innerHTML = `
+            <div class="review-dashboard-gate">
+                <div class="review-dashboard-gate-copy">
+                    <span class="review-dashboard-gate-label">当前尚未读取服务器错题库</span>
+                    <h4>查看孩子今天真正需要复习的内容</h4>
+                    <p>先使用家庭访问码查询；当前空白不代表没有历史记录。</p>
+                </div>
+                <button type="button" class="history-action primary" onclick="openWrongBankQuery()">输入访问码查看今日复习</button>
+            </div>`;
+        return;
+    }
     const summary = buildReviewDashboard(records);
     const visibleTasks = summary.todayTasks.slice(0, 3);
     const remainingTaskCount = Math.max(0, summary.todayTasks.length - visibleTasks.length);
@@ -5237,7 +5279,9 @@ function renderHistory() {
     updateMasteryFilterCounts(scopeRecords);
     const records = getFilteredRecords();
     const masteryLabels = { pending: '待复习', mastered: '已掌握', all: '全部' };
-    document.getElementById('historyCount').textContent = `${masteryLabels[currentMasteryFilter]} ${records.length} 条 · 当前范围 ${scopeRecords.length} 条`;
+    document.getElementById('historyCount').textContent = !wrongQuestionBank.loaded && historyRecords.length === 0
+        ? '尚未查询家庭错题库'
+        : `${masteryLabels[currentMasteryFilter]} ${records.length} 条 · 当前范围 ${scopeRecords.length} 条`;
 
     if (records.length === 0) {
         const emptyContent = scopeRecords.length && currentMasteryFilter === 'pending'

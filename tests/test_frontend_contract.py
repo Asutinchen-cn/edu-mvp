@@ -230,6 +230,16 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("数据来自服务器保存的试卷与逐题复习状态，不代表考试成绩", HTML)
         self.assertNotIn("进步率", HTML)
 
+    def test_unqueried_wrong_bank_is_not_presented_as_zero_history(self):
+        self.assertIn(
+            "if (!wrongQuestionBank.loaded && historyRecords.length === 0)",
+            HTML,
+        )
+        self.assertIn("当前尚未读取服务器错题库", HTML)
+        self.assertIn("空白不代表没有历史记录", HTML)
+        self.assertIn("输入访问码查看今日复习", HTML)
+        self.assertIn("尚未查询家庭错题库", HTML)
+
     def test_history_records_render_readable_diagnosis_and_actions(self):
         self.assertIn("function renderHistoryDiagnosis(record)", HTML)
         self.assertIn("async function loadHistoryDetail(id)", HTML)
