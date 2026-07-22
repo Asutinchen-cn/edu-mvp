@@ -242,6 +242,11 @@ class FrontendCurriculumContractTest(unittest.TestCase):
 
     def test_server_record_deletion_explains_that_originals_are_removed(self):
         self.assertIn("原卷文件和分析结果将一并删除，且无法恢复", HTML)
+        self.assertIn('id="confirmStatus" role="alert" aria-live="assertive"', HTML)
+        self.assertIn("let deleteSaving = false", HTML)
+        self.assertIn("正在删除...", HTML)
+        self.assertIn("原记录仍保留，可以重试", HTML)
+        self.assertNotIn("alert('删除服务器记录失败：' + e.message)", HTML)
 
     def test_analysis_result_gives_parents_an_evidence_based_action_plan(self):
         self.assertIn("function buildParentReviewPlan(data)", HTML)

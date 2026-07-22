@@ -2120,7 +2120,20 @@
             max-width: 360px; width: 90%; text-align: center;
             box-shadow: 0 20px 60px rgba(0,0,0,0.2);
         }
-        .confirm-box p { margin-bottom: 20px; font-size: 15px; color: #333; }
+        .confirm-box p { margin-bottom: 16px; font-size: 15px; color: #333; }
+        .confirm-status {
+            display: none;
+            margin-bottom: 16px;
+            padding: 9px 11px;
+            border-left: 3px solid var(--danger);
+            border-radius: 6px;
+            background: #fff2f0;
+            color: #a5392e;
+            font-size: 12px;
+            line-height: 1.6;
+            text-align: left;
+        }
+        .confirm-status.show { display: block; }
         .confirm-actions { display: flex; gap: 12px; justify-content: center; }
         .confirm-actions button {
             padding: 8px 24px; border-radius: 10px; border: none;
@@ -2129,6 +2142,7 @@
         .btn-cancel { background: #f0f0f0; color: #666; }
         .btn-confirm { background: #e53935; color: white; }
         .btn-confirm:hover { background: #c62828; }
+        .confirm-actions button:disabled { cursor: wait; opacity: 0.62; }
 
         /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
@@ -2611,9 +2625,10 @@
 <div class="confirm-dialog" id="confirmDialog">
     <div class="confirm-box">
         <p id="confirmMsg">确定要删除这条记录吗？</p>
+        <div class="confirm-status" id="confirmStatus" role="alert" aria-live="assertive"></div>
         <div class="confirm-actions">
-            <button class="btn-cancel" onclick="closeConfirm()">取消</button>
-            <button class="btn-confirm" id="confirmBtn" onclick="confirmAction()">删除</button>
+            <button type="button" class="btn-cancel" id="confirmCancel" onclick="closeConfirm()">取消</button>
+            <button type="button" class="btn-confirm" id="confirmBtn" onclick="confirmAction()">删除</button>
         </div>
     </div>
 </div>
@@ -2686,6 +2701,7 @@ let wrongQuestionBank = {
 let familyReportExporting = false;
 let selectedRecordId = null;
 let pendingDeleteId = null;
+let deleteSaving = false;
 let worksheetUnits = [];
 let worksheetMeta = null;
 const REVIEW_STEP_DEFINITIONS = [
@@ -5680,41 +5696,65 @@ function setupDateFilters() {
 }
 
 // ===== DELETE =====
+function setDeleteDialogState(busy, message = '') {
+    const status = document.getElementById('confirmStatus');
+    const confirmButton = document.getElementById('confirmBtn');
+    const cancelButton = document.getElementById('confirmCancel');
+    status.textContent = message;
+    status.classList.toggle('show', Boolean(message));
+    confirmButton.disabled = busy;
+    confirmButton.textContent = busy ? '正在删除...' : '删除';
+    cancelButton.disabled = busy;
+}
+
 function askDelete(id) {
     pendingDeleteId = id;
     const record = historyRecords.find(r => r.id === id);
     document.getElementById('confirmMsg').textContent = record?.serverId
         ? '确定要删除这条服务器记录吗？原卷文件和分析结果将一并删除，且无法恢复。'
         : '确定要删除这条本地记录吗？';
+    setDeleteDialogState(false, '');
     document.getElementById('confirmDialog').classList.add('show');
 }
 
 function closeConfirm() {
+    if (deleteSaving) return;
     pendingDeleteId = null;
+    setDeleteDialogState(false, '');
     document.getElementById('confirmDialog').classList.remove('show');
 }
 
 async function confirmAction() {
-    if (pendingDeleteId) {
-        const record = historyRecords.find(r => r.id === pendingDeleteId);
-        if (record?.serverId) {
-            const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
-            try {
-                await requestJson(`/exams/${record.serverId}?${params.toString()}`, {
-                    method: 'DELETE',
-                    headers: familyAccessHeaders()
-                });
-            } catch (e) {
-                alert('删除服务器记录失败：' + e.message);
-                return;
-            }
+    if (!pendingDeleteId || deleteSaving) return;
+    const deleteId = pendingDeleteId;
+    const record = historyRecords.find(r => r.id === deleteId);
+    deleteSaving = true;
+    setDeleteDialogState(true, '');
+
+    if (record?.serverId) {
+        const params = new URLSearchParams({ grade: record.grade, student_name: record.name });
+        try {
+            await requestJson(`/exams/${record.serverId}?${params.toString()}`, {
+                method: 'DELETE',
+                headers: familyAccessHeaders()
+            });
+        } catch (e) {
+            deleteSaving = false;
+            setDeleteDialogState(false, `删除服务器记录失败：${e.message || '服务器暂时不可用'}。原记录仍保留，可以重试。`);
+            return;
         }
-        historyRecords = historyRecords.filter(r => r.id !== pendingDeleteId);
-        if (selectedRecordId === pendingDeleteId) selectedRecordId = null;
-        pendingDeleteId = null;
-        document.getElementById('confirmDialog').classList.remove('show');
-        renderHistory();
     }
+
+    historyRecords = historyRecords.filter(r => r.id !== deleteId);
+    if (selectedRecordId === deleteId) selectedRecordId = null;
+    pendingDeleteId = null;
+    deleteSaving = false;
+    setDeleteDialogState(false, '');
+    document.getElementById('confirmDialog').classList.remove('show');
+    setHistorySyncStatus('success', record?.serverId
+        ? '服务器错题记录、原卷和分析结果已删除。'
+        : '本地错题记录已删除。');
+    renderHistory();
 }
 </script>
 </body>
