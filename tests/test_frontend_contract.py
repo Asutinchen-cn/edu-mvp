@@ -280,6 +280,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             r"requestJson\(`/wrong-questions/mastery-by-knowledge\?\$\{params\.toString\(\)\}`",
         )
         self.assertIn("确认本知识点已掌握", HTML)
+        self.assertIn("let practiceMasteryError = ''", HTML)
+        self.assertIn("本轮练习结果仍保留", HTML)
+        self.assertNotIn("alert('同步掌握状态失败：' + error.message)", HTML)
 
     def test_history_has_an_evidence_based_parent_dashboard(self):
         self.assertIn('id="reviewDashboard"', HTML)
