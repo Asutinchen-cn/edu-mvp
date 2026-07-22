@@ -342,6 +342,23 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("function openQuestionSourceExam(examId)", HTML)
         self.assertIn("按知识点", HTML)
 
+    def test_knowledge_source_record_failure_is_recoverable_inline(self):
+        self.assertIn("let sourceExamLoadingId = null", HTML)
+        self.assertIn("sourceExamLoadingId === Number(item.exam_id)", HTML)
+        self.assertIn("正在加载...", HTML)
+        self.assertIn("sourceExamLoadingId = Number(examId)", HTML)
+        self.assertIn("sourceExamLoadingId = null", HTML)
+        self.assertIn("加载原试卷记录失败：", HTML)
+        self.assertIn("错题仍保留，可以重试", HTML)
+        source_handler = re.search(
+            r"async function openQuestionSourceExam\(examId\)(?P<body>.*?)"
+            r"\nfunction renderHistory\(\)",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(source_handler)
+        self.assertNotIn("alert(", source_handler.group("body"))
+
     def test_knowledge_point_group_can_generate_focused_practice(self):
         self.assertIn("function prepareKnowledgePractice(knowledgePoint, subject)", HTML)
         self.assertIn("生成专项练习", HTML)
