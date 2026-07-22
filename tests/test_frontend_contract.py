@@ -403,6 +403,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertNotIn("fetch('/generate-practice'", HTML)
 
+    def test_practice_generation_failure_does_not_create_a_fake_exportable_question(self):
+        self.assertIn(
+            'id="practiceGenerationStatus" role="status" aria-live="polite" hidden',
+            HTML,
+        )
+        self.assertIn("function setPracticeGenerationStatus(type, message)", HTML)
+        self.assertIn("const hadExistingPractice = currentPracticeQuestions.length > 0", HTML)
+        self.assertIn("上一轮练习和作答结果仍保留，可以重试", HTML)
+        self.assertIn("没有生成可用题目，未提供 PDF 下载，可以重试", HTML)
+        self.assertIn(
+            "exportButton.style.display = hadExistingPractice ? 'inline-block' : 'none'",
+            HTML,
+        )
+        self.assertNotIn("巩固题暂时没有生成成功，请先根据上方薄弱点完成原题订正", HTML)
+
     def test_history_string_ids_are_safe_inside_inline_actions(self):
         self.assertIn("escapeHtml(JSON.stringify(r.id))", HTML)
         self.assertIn("escapeHtml(JSON.stringify(record.id))", HTML)
