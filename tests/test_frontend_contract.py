@@ -205,6 +205,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotIn("function safeUploadUrl", HTML)
         self.assertNotIn("href=\"${escapeHtml(imageUrl)}\"", HTML)
 
+    def test_original_exam_image_failure_is_recoverable_in_history(self):
+        self.assertIn("imageOpening: false", HTML)
+        self.assertIn("record.imageOpening ? '正在读取原卷...'", HTML)
+        self.assertIn("record.imageOpening = true", HTML)
+        self.assertIn("record.imageOpening = false", HTML)
+        self.assertIn("读取原卷失败：", HTML)
+        self.assertIn("原记录仍保留，可以重试", HTML)
+        self.assertNotRegex(
+            HTML,
+            r"openProtectedExamImage\(id\).*?alert\(",
+            msg="查看原卷失败应留在历史区，不能只显示一次性弹窗",
+        )
+
     def test_multi_page_exam_is_uploaded_and_analyzed_as_one_record(self):
         self.assertIn("fd.append('files', current.file, current.name)", HTML)
         self.assertIn("requestJson('/upload-batch'", HTML)
