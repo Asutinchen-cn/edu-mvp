@@ -358,6 +358,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("URL.createObjectURL(await response.blob())", HTML)
         self.assertIn("导出订正单", HTML)
         self.assertIn("correctionExporting: false", HTML)
+        self.assertIn("订正单导出失败", HTML)
+        self.assertIn("订正单下载已开始", HTML)
+        self.assertNotIn("alert(e.message || '导出订正单失败，请稍后重试')", HTML)
 
     def test_practice_generation_uses_the_saved_exam_endpoint(self):
         self.assertIn("const examId = currentAnalysisData.examIds?.[0]", HTML)
@@ -441,6 +444,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("URL.createObjectURL(await response.blob())", HTML)
         self.assertIn("导出近 7 天报告", HTML)
         self.assertIn("let familyReportExporting = false", HTML)
+        self.assertIn("近 7 天报告导出失败", HTML)
+        self.assertIn("近 7 天复习报告下载已开始", HTML)
+        self.assertNotIn("alert(e.message || '导出近 7 天报告失败，请稍后重试')", HTML)
 
     def test_wrong_bank_records_are_not_persisted_in_browser_storage(self):
         self.assertIn("const LEGACY_HISTORY_STORAGE_KEY = 'xiahunao_history'", HTML)

@@ -4497,6 +4497,7 @@ async function exportCorrectionSheet(id) {
     const record = historyRecords.find(item => item.id === id);
     if (!record?.serverId || record.correctionExporting) return;
 
+    setHistorySyncStatus('', '');
     record.correctionExporting = true;
     renderHistory();
     try {
@@ -4517,8 +4518,9 @@ async function exportCorrectionSheet(id) {
         link.click();
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        setHistorySyncStatus('success', '订正单下载已开始，请在浏览器下载记录中查看。');
     } catch (e) {
-        alert(e.message || '导出订正单失败，请稍后重试');
+        setHistorySyncStatus('error', `订正单导出失败：${e.message || '服务器暂时不可用'}。按钮已恢复，可以重试。`);
     } finally {
         record.correctionExporting = false;
         renderHistory();
@@ -4530,10 +4532,11 @@ async function exportFamilyReviewReport() {
     const grade = document.getElementById('gradeSelect').value;
     const studentName = document.getElementById('studentName').value.trim();
     if (!grade || !studentName) {
-        alert('请先选择年级并填写学生姓名');
+        setHistorySyncStatus('error', '请先选择年级并填写学生姓名，再导出近 7 天复习报告。');
         return;
     }
 
+    setHistorySyncStatus('', '');
     familyReportExporting = true;
     renderHistory();
     try {
@@ -4555,8 +4558,9 @@ async function exportFamilyReviewReport() {
         link.click();
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        setHistorySyncStatus('success', '近 7 天复习报告下载已开始，请在浏览器下载记录中查看。');
     } catch (e) {
-        alert(e.message || '导出近 7 天报告失败，请稍后重试');
+        setHistorySyncStatus('error', `近 7 天报告导出失败：${e.message || '服务器暂时不可用'}。按钮已恢复，可以重试。`);
     } finally {
         familyReportExporting = false;
         renderHistory();
