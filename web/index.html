@@ -2690,6 +2690,7 @@ let currentFilter = 'week';
 let currentSubjectArchive = 'all';
 let currentMasteryFilter = 'pending';
 let currentHistoryView = 'exams';
+let sourceExamLoadingId = null;
 let wrongQuestionBank = {
     loaded: false,
     loading: false,
@@ -5360,6 +5361,7 @@ function renderKnowledgeQuestionBank() {
                 <div class="knowledge-questions">
                     ${group.questions.map((item, index) => {
                         const mastered = wrongQuestionMasteryStatus(item) === 'mastered';
+                        const sourceLoading = sourceExamLoadingId === Number(item.exam_id);
                         const reviewStatus = mastered ? '已掌握' : '待复习';
                         const studentAnswer = item.student_answer
                             ? `<span>学生答案：${escapeHtml(item.student_answer)}</span>`
@@ -5384,7 +5386,9 @@ function renderKnowledgeQuestionBank() {
                                         aria-pressed="${mastered ? 'true' : 'false'}"
                                         ${item.mastery_saving ? 'disabled' : ''}
                                         onclick="toggleWrongQuestionMastery(${escapeHtml(JSON.stringify(item.id))})">${item.mastery_saving ? '正在保存...' : (mastered ? '重新复习' : '标记已掌握')}</button>
-                                    <button type="button" class="knowledge-source-button" onclick="openQuestionSourceExam(${Number(item.exam_id)})">查看原记录</button>
+                                    <button type="button" class="knowledge-source-button"
+                                        ${sourceExamLoadingId !== null ? 'disabled' : ''}
+                                        onclick="openQuestionSourceExam(${Number(item.exam_id)})">${sourceLoading ? '正在加载...' : '查看原记录'}</button>
                                 </div>
                             </div>`;
                     }).join('')}
@@ -5476,13 +5480,20 @@ function prepareKnowledgePractice(knowledgePoint, subject) {
 }
 
 async function openQuestionSourceExam(examId) {
-    let record = historyRecords.find(item => Number(item.serverId) === Number(examId));
+    const normalizedExamId = Number(examId);
+    if (!Number.isInteger(normalizedExamId) || normalizedExamId < 1) return;
+
+    let record = historyRecords.find(item => Number(item.serverId) === normalizedExamId);
     if (!record) {
+        if (sourceExamLoadingId !== null) return;
         const grade = document.getElementById('gradeSelect').value;
         const studentName = (document.getElementById('studentName').value || '').trim();
         const params = new URLSearchParams({ grade: grade, student_name: studentName });
+        setHistorySyncStatus('', '');
+        sourceExamLoadingId = Number(examId);
+        renderHistory();
         try {
-            const detail = await requestJson(`/exams/${Number(examId)}?${params.toString()}`, {
+            const detail = await requestJson(`/exams/${normalizedExamId}?${params.toString()}`, {
                 method: 'GET',
                 headers: familyAccessHeaders()
             });
@@ -5492,7 +5503,12 @@ async function openQuestionSourceExam(examId) {
             historyRecords.push(record);
             historyRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
         } catch (error) {
-            alert('加载原试卷记录失败：' + error.message);
+            setHistorySyncStatus('error', `加载原试卷记录失败：${error.message || '服务器暂时不可用'}。错题仍保留，可以重试。`);
+        } finally {
+            sourceExamLoadingId = null;
+        }
+        if (!record) {
+            renderHistory();
             return;
         }
     }
@@ -5514,6 +5530,7 @@ async function openQuestionSourceExam(examId) {
     });
     setHistoryFilter('all');
     selectedRecordId = record.id;
+    setHistorySyncStatus('success', '已打开这道错题对应的原试卷记录。');
     renderHistory();
     if (!record.detailLoaded && !record.detailLoading) await loadHistoryDetail(record.id);
     window.requestAnimationFrame(() => {
