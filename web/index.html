@@ -1826,6 +1826,27 @@
         .generate-btn:disabled {
             opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none;
         }
+        .practice-generation-status {
+            margin-bottom: 14px;
+            padding: 10px 12px;
+            border-left: 3px solid var(--brand-blue);
+            border-radius: 6px;
+            background: #edf5ff;
+            color: #315578;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .practice-generation-status[hidden] { display: none; }
+        .practice-generation-status.success {
+            border-left-color: var(--success);
+            background: #edf9f5;
+            color: #176c54;
+        }
+        .practice-generation-status.error {
+            border-left-color: var(--danger);
+            background: #fff3f1;
+            color: #a5392e;
+        }
         .q-card {
             background: #f8fbff; border-radius: 16px; padding: 16px;
             margin-bottom: 12px; border: 1px solid #e6eef9;
@@ -2434,6 +2455,7 @@
             <button class="generate-btn" id="generateBtn" onclick="generatePractice()">🎯 生成 5 道巩固题</button>
             <button class="generate-btn" id="exportPdfBtn" style="display:none;background:linear-gradient(90deg,#4DCB9D,#36b389)" onclick="exportPracticePdf()">📄 导出 PDF（无答案）</button>
         </div>
+        <div class="practice-generation-status" id="practiceGenerationStatus" role="status" aria-live="polite" hidden></div>
         <div id="practiceList"></div>
     </div>
 </div>
@@ -3560,6 +3582,14 @@ function setPracticeGenerationState(busy, completed = false) {
     }
 }
 
+function setPracticeGenerationStatus(type, message) {
+    const status = document.getElementById('practiceGenerationStatus');
+    status.textContent = message || '';
+    status.hidden = !message;
+    status.classList.toggle('success', type === 'success');
+    status.classList.toggle('error', type === 'error');
+}
+
 function startPracticeFromSummary() {
     document.getElementById('practiceSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
     generatePractice();
@@ -3569,6 +3599,9 @@ async function generatePractice() {
     if (!currentAnalysisData) return;
     const btn = document.getElementById('generateBtn');
     if (btn.disabled) return;
+    const exportButton = document.getElementById('exportPdfBtn');
+    const hadExistingPractice = currentPracticeQuestions.length > 0;
+    setPracticeGenerationStatus('', '');
     setPracticeGenerationState(true);
 
     let questions;
@@ -3614,21 +3647,19 @@ async function generatePractice() {
         generationError = e.message || '生成服务暂时不可用';
     }
 
-    if (!questions || !questions.length) {
-        const subjectLabel = currentAnalysisData.subject === 'english' ? '英语' : '数学';
-        questions = [{
-            id: 1,
-            type: '提示',
-            question: `${subjectLabel}巩固题暂时没有生成成功，请先根据上方薄弱点完成原题订正。`,
-            options: null,
-            answer: '请稍后重试',
-            hint: `${generationError}。本次薄弱点：${currentAnalysisData.weakPoints.join('、')}`
-        }];
+    if (!Array.isArray(questions) || !questions.length) {
+        setPracticeGenerationState(false, hadExistingPractice);
+        exportButton.style.display = hadExistingPractice ? 'inline-block' : 'none';
+        setPracticeGenerationStatus('error', `巩固题生成失败：${generationError || '生成服务未返回可用题目'}。${hadExistingPractice
+            ? '上一轮练习和作答结果仍保留，可以重试。'
+            : '没有生成可用题目，未提供 PDF 下载，可以重试。'}`);
+        return;
     }
 
     renderPracticeQuestions(questions);
     setPracticeGenerationState(false, true);
-    document.getElementById('exportPdfBtn').style.display = 'inline-block';
+    exportButton.style.display = 'inline-block';
+    setPracticeGenerationStatus('success', `已生成 ${questions.length} 道巩固题，可以开始作答。`);
 }
 
 function renderPracticeQuestions(questions) {
