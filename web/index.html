@@ -4175,6 +4175,7 @@ function makeServerHistoryRecord(exam, fallbackGrade, fallbackName) {
         imageCount: Math.max(0, Number(exam.image_count) || (exam.image_available ? 1 : 0)),
         analysisStatus: analysisStatus,
         analysisRetrying: false,
+        imageOpening: false,
         detailLoaded: analysisStatus === 'pending',
         serverSynced: true,
         correctionExporting: false,
@@ -4273,11 +4274,17 @@ function renderPendingAnalysisState(record) {
 }
 
 function renderHistoryDiagnosis(record) {
+    const imageActionLabel = record.imageOpening
+        ? '正在读取原卷...'
+        : (record.imageCount > 1 ? `查看原卷（${record.imageCount}页）` : '查看原卷');
+    const imageAction = record.serverId && record.imageAvailable !== false
+        ? `<button type="button" class="history-action" ${record.imageOpening ? 'disabled' : ''} onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">${imageActionLabel}</button>`
+        : '';
     const actions = `
         <div class="history-actions">
             ${record.serverId && recordWeakPoints(record).length ? `<button type="button" class="history-action primary" onclick="prepareHistoryPractice(${escapeHtml(JSON.stringify(record.id))})">生成巩固练习</button>` : ''}
             ${record.serverId && historyWrongCount(record) > 0 ? `<button type="button" class="history-action" ${record.correctionExporting ? 'disabled' : ''} onclick="exportCorrectionSheet(${escapeHtml(JSON.stringify(record.id))})">${record.correctionExporting ? '正在导出...' : '导出订正单'}</button>` : ''}
-            ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">${record.imageCount > 1 ? `查看原卷（${record.imageCount}页）` : '查看原卷'}</button>` : ''}
+            ${imageAction}
         </div>`;
 
     if (record.analysisStatus === 'pending') {
@@ -4287,7 +4294,7 @@ function renderHistoryDiagnosis(record) {
                 <button type="button" class="history-action primary"
                     ${record.analysisRetrying ? 'disabled' : ''}
                     onclick="retryExamAnalysis(${escapeHtml(JSON.stringify(record.id))})">${record.analysisRetrying ? '正在分析...' : '重新分析'}</button>
-                ${record.serverId && record.imageAvailable !== false ? `<button type="button" class="history-action" onclick="openProtectedExamImage(${escapeHtml(JSON.stringify(record.id))})">${record.imageCount > 1 ? `查看原卷（${record.imageCount}页）` : '查看原卷'}</button>` : ''}
+                ${imageAction}
             </div>`;
     }
     if (record.detailLoading) {
@@ -4429,10 +4436,13 @@ async function retryExamAnalysis(id) {
 
 async function openProtectedExamImage(id) {
     const record = historyRecords.find(item => item.id === id);
-    if (!record?.serverId) return;
+    if (!record?.serverId || record.imageOpening) return;
 
     let previewWindow;
     const objectUrls = [];
+    setHistorySyncStatus('', '');
+    record.imageOpening = true;
+    renderHistory();
     try {
         const accessHeaders = familyAccessHeaders();
         previewWindow = window.open('about:blank', '_blank');
@@ -4486,10 +4496,16 @@ async function openProtectedExamImage(id) {
             });
         }
         window.setTimeout(() => objectUrls.forEach(url => URL.revokeObjectURL(url)), 15 * 60 * 1000);
+        setHistorySyncStatus('success', pageFiles.length > 1
+            ? `原卷 ${pageFiles.length} 页已在新窗口打开。`
+            : '原卷已在新窗口打开。');
     } catch (e) {
         objectUrls.forEach(url => URL.revokeObjectURL(url));
         if (previewWindow && !previewWindow.closed) previewWindow.close();
-        alert(e.message || '读取原卷失败，请稍后重试');
+        setHistorySyncStatus('error', `读取原卷失败：${e.message || '服务器暂时不可用'}。原记录仍保留，可以重试。`);
+    } finally {
+        record.imageOpening = false;
+        renderHistory();
     }
 }
 
