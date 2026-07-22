@@ -5363,6 +5363,7 @@ async function toggleWrongQuestionMastery(questionId) {
     if (!item || item.mastery_saving || !Number.isInteger(questionNumber) || questionNumber < 1) return;
 
     const mastered = wrongQuestionMasteryStatus(item) !== 'mastered';
+    setHistorySyncStatus('', '');
     item.mastery_saving = true;
     renderHistory();
     try {
@@ -5380,7 +5381,7 @@ async function toggleWrongQuestionMastery(questionId) {
             ? '这道错题已标记为“已掌握”，可在已掌握筛选中查看。'
             : '这道错题已重新放回“待复习”。');
     } catch (error) {
-        alert('保存单题状态失败：' + error.message);
+        setHistorySyncStatus('error', `保存单题状态失败：${error.message || '服务器暂时不可用'}。原复习状态未改变，请重试。`);
     } finally {
         item.mastery_saving = false;
         renderHistory();
@@ -5625,6 +5626,7 @@ async function toggleReviewStep(id, step) {
     const completed = previousProgress.completed.includes(step)
         ? REVIEW_STEP_DEFINITIONS.slice(0, stepIndex).map(item => item.id)
         : REVIEW_STEP_DEFINITIONS.slice(0, stepIndex + 1).map(item => item.id);
+    setHistorySyncStatus('', '');
     record.progressSaving = true;
     renderHistory();
 
@@ -5643,7 +5645,7 @@ async function toggleReviewStep(id, step) {
             setHistorySyncStatus('success', '整卷复习流程已更新；逐题掌握状态没有改变。');
         }
     } catch (e) {
-        alert('保存复习进度失败：' + e.message);
+        setHistorySyncStatus('error', `保存复习进度失败：${e.message || '服务器暂时不可用'}。原进度未改变，请重试。`);
     } finally {
         record.progressSaving = false;
         renderHistory();

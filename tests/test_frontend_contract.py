@@ -343,6 +343,8 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertIn("标记已掌握", HTML)
         self.assertIn("重新复习", HTML)
+        self.assertIn("原复习状态未改变，请重试", HTML)
+        self.assertNotIn("alert('保存单题状态失败：' + error.message)", HTML)
 
     def test_history_can_export_a_protected_correction_sheet(self):
         self.assertIn("function exportCorrectionSheet(id)", HTML)
@@ -377,6 +379,8 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             r"requestJson\(`/exams/\$\{record\.serverId\}/review-progress\?\$\{params\.toString\(\)\}`",
         )
         self.assertIn("method: 'PATCH'", HTML)
+        self.assertIn("原进度未改变，请重试", HTML)
+        self.assertNotIn("alert('保存复习进度失败：' + e.message)", HTML)
 
     def test_history_defaults_to_a_parent_focused_pending_review_queue(self):
         self.assertIn("let currentMasteryFilter = 'pending'", HTML)
