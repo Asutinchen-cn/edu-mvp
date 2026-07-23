@@ -420,15 +420,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
 
     def test_practice_state_is_isolated_between_analysis_contexts(self):
         self.assertIn("let activePracticeContextKey = ''", HTML)
+        self.assertIn("let practiceGenerationRequestId = 0", HTML)
         self.assertIn("function buildPracticeContextKey(data)", HTML)
         self.assertIn("function resetPracticeExperience()", HTML)
         self.assertIn("function syncPracticeContext(data)", HTML)
+        self.assertIn("function isPracticeGenerationRequestCurrent(requestId, contextKey)", HTML)
         self.assertIn("syncPracticeContext(data);", HTML)
         self.assertIn("studentName: String(data?.studentName || '')", HTML)
         self.assertIn("examIds: [...new Set", HTML)
         self.assertIn("practiceKnowledgePoint: String(data?.practiceKnowledgePoint", HTML)
         self.assertIn("currentPracticeQuestions = []", HTML)
         self.assertIn("currentPracticeResults = []", HTML)
+        self.assertIn("practiceGenerationRequestId += 1", HTML)
+        self.assertIn("const requestId = ++practiceGenerationRequestId", HTML)
+        self.assertIn("const requestContextKey = activePracticeContextKey", HTML)
+        self.assertIn("if (!isPracticeGenerationRequestCurrent(requestId, requestContextKey)) return", HTML)
         self.assertIn("exportButton.style.display = 'none'", HTML)
 
     def test_history_string_ids_are_safe_inside_inline_actions(self):
