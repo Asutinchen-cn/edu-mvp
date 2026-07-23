@@ -3423,6 +3423,7 @@ function buildParentReviewPlan(data) {
 }
 
 function renderAnalysisResult(data) {
+    syncPracticeContext(data);
     const badgeClasses = ['hot', 'warm', 'cool'];
     const plan = buildParentReviewPlan(data);
     const wrongCount = data.wrongQuestions.length;
@@ -3568,6 +3569,48 @@ let currentPracticeScorable = false;
 let practiceMasterySaving = false;
 let practiceMasteryConfirmed = false;
 let practiceMasteryError = '';
+let activePracticeContextKey = '';
+let practiceGenerationRequestId = 0;
+
+function buildPracticeContextKey(data) {
+    return JSON.stringify({
+        studentName: String(data?.studentName || ''),
+        grade: String(data?.grade || ''),
+        subject: String(data?.subject || ''),
+        examIds: [...new Set((Array.isArray(data?.examIds) ? data.examIds : [])
+            .map(value => Number(value))
+            .filter(value => Number.isInteger(value) && value > 0))].sort((a, b) => a - b),
+        practiceKnowledgePoint: String(data?.practiceKnowledgePoint || data?.weakPoints?.[0] || '')
+    });
+}
+
+function resetPracticeExperience() {
+    practiceGenerationRequestId += 1;
+    currentPracticeQuestions = [];
+    currentPracticeResults = [];
+    currentPracticeScorable = false;
+    practiceMasterySaving = false;
+    practiceMasteryConfirmed = false;
+    practiceMasteryError = '';
+    const list = document.getElementById('practiceList');
+    if (list) list.replaceChildren();
+    const exportButton = document.getElementById('exportPdfBtn');
+    if (exportButton) exportButton.style.display = 'none';
+    setPracticeGenerationStatus('', '');
+    setPracticeGenerationState(false, false);
+}
+
+function syncPracticeContext(data) {
+    const nextContextKey = buildPracticeContextKey(data);
+    if (nextContextKey === activePracticeContextKey) return;
+    activePracticeContextKey = nextContextKey;
+    resetPracticeExperience();
+}
+
+function isPracticeGenerationRequestCurrent(requestId, contextKey) {
+    return requestId === practiceGenerationRequestId
+        && contextKey === activePracticeContextKey;
+}
 
 function setPracticeGenerationState(busy, completed = false) {
     const mainButton = document.getElementById('generateBtn');
@@ -3601,6 +3644,8 @@ async function generatePractice() {
     if (btn.disabled) return;
     const exportButton = document.getElementById('exportPdfBtn');
     const hadExistingPractice = currentPracticeQuestions.length > 0;
+    const requestId = ++practiceGenerationRequestId;
+    const requestContextKey = activePracticeContextKey;
     setPracticeGenerationStatus('', '');
     setPracticeGenerationState(true);
 
@@ -3630,6 +3675,7 @@ async function generatePractice() {
                 headers: familyAccessHeaders()
             });
         }
+        if (!isPracticeGenerationRequestCurrent(requestId, requestContextKey)) return;
         questions = data.questions;
         if (currentAnalysisData.practiceFromWrongBank) {
             const pendingCount = Number(data.pending_wrong_count || 0);
@@ -3644,6 +3690,7 @@ async function generatePractice() {
             renderAnalysisResult(currentAnalysisData);
         }
     } catch(e) {
+        if (!isPracticeGenerationRequestCurrent(requestId, requestContextKey)) return;
         generationError = e.message || '生成服务暂时不可用';
     }
 
