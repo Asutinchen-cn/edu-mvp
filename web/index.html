@@ -1973,6 +1973,33 @@
             background: #edf5ff;
             color: var(--brand-blue);
         }
+        .worksheet-catalog-state {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1px dashed #c7d9f1;
+            border-radius: 8px;
+            background: #f8fbff;
+            color: #41516b;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .worksheet-catalog-retry {
+            flex: 0 0 auto;
+            min-height: 36px;
+            padding: 0 12px;
+            border: 1px solid rgba(23, 105, 232, 0.24);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .worksheet-catalog-retry:hover { background: #edf5ff; }
         .worksheet-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
         .worksheet-status {
             margin-top: 12px;
@@ -2279,6 +2306,8 @@
             .wrong-bank-form { padding: 20px; }
             .wrong-bank-actions { align-items: stretch; }
             .dialog-button { flex: 1; }
+            .worksheet-catalog-state { align-items: stretch; flex-direction: column; }
+            .worksheet-catalog-retry { width: 100%; }
             .mobile-quick-nav {
                 position: fixed;
                 left: 12px;
@@ -2792,6 +2821,7 @@ let pendingDeleteId = null;
 let deleteSaving = false;
 let worksheetUnits = [];
 let worksheetMeta = null;
+const WORKSHEET_CATALOG_RETRY_DELAYS = [0, 600, 1600];
 const REVIEW_STEP_DEFINITIONS = [
     { id: 'corrected', label: '订正原题', description: '说清错因，独立写出正确步骤' },
     { id: 'practiced', label: '完成同类题', description: '完成同类练习并核对答案' },
@@ -2817,17 +2847,67 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-async function loadWorksheetUnits() {
+function renderWorksheetCatalogFailure(message) {
+    worksheetUnits = [];
+    worksheetMeta = null;
+    document.getElementById('worksheetUnits').innerHTML = `
+        <div class="worksheet-catalog-state" role="status">
+            <span>${escapeHtml(message)}</span>
+            <button type="button" class="worksheet-catalog-retry" onclick="loadWorksheetUnits()">↻ 重新加载教材目录</button>
+        </div>`;
+    document.getElementById('worksheetKnowledge').innerHTML = '';
+    document.getElementById('worksheetSource').textContent = message;
+    document.getElementById('worksheetGenerateBtn').disabled = true;
+}
+
+function waitForWorksheetCatalogRetry(delay) {
+    return new Promise(resolve => window.setTimeout(resolve, delay));
+}
+
+async function requestWorksheetCatalog() {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
     try {
-        const resp = await fetch('/curriculum-units');
+        const resp = await fetch('/curriculum-units', {
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal
+        });
+        if (!resp.ok) throw new Error(`教材接口返回 ${resp.status}`);
         const data = await resp.json();
-        worksheetUnits = data.units || [];
-        worksheetMeta = data.meta || null;
-        renderWorksheetUnits();
-    } catch (e) {
-        document.getElementById('worksheetUnits').textContent = '暂时无法加载单元数据';
-        document.getElementById('worksheetSource').textContent = '教材目录加载失败，请刷新页面后重试';
+        if (!Array.isArray(data.units) || !data.units.length) {
+            throw new Error('教材接口未返回有效单元');
+        }
+        return data;
+    } finally {
+        window.clearTimeout(timeout);
     }
+}
+
+async function loadWorksheetUnits() {
+    if (window.location.protocol === 'file:') {
+        renderWorksheetCatalogFailure('请通过线上网址打开本网站，直接打开本地 HTML 无法读取服务器教材目录。');
+        return;
+    }
+
+    document.getElementById('worksheetSource').textContent = '正在连接上海教材目录...';
+    document.getElementById('worksheetUnits').innerHTML = '<div class="worksheet-catalog-state" role="status"><span>正在加载教材单元，请稍候...</span></div>';
+    document.getElementById('worksheetKnowledge').innerHTML = '';
+    document.getElementById('worksheetGenerateBtn').disabled = true;
+    let lastError = null;
+    for (const delay of WORKSHEET_CATALOG_RETRY_DELAYS) {
+        if (delay) await waitForWorksheetCatalogRetry(delay);
+        try {
+            const data = await requestWorksheetCatalog();
+            worksheetUnits = data.units;
+            worksheetMeta = data.meta || null;
+            renderWorksheetUnits();
+            return;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+    console.warn('Curriculum catalog unavailable after retries', lastError);
+    renderWorksheetCatalogFailure('教材目录暂时未连上，已自动重试；可以点击按钮重新加载。');
 }
 
 function renderWorksheetUnits() {
@@ -5171,7 +5251,21 @@ function goToTodayReview() {
         openWrongBankQuery();
         return;
     }
-    document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setHistoryFilter('all');
+    currentSubjectArchive = 'all';
+    document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.subjectFilter === 'all');
+    });
+    currentMasteryFilter = 'pending';
+    document.querySelectorAll('.filter-tab[data-mastery-filter]').forEach(tab => {
+        const active = tab.dataset.masteryFilter === 'pending';
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    renderHistory();
+    window.requestAnimationFrame(() => {
+        document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
 }
 
 function openWrongBankQuery() {

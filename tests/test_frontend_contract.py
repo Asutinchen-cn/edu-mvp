@@ -20,6 +20,16 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("worksheetMeta = data.meta || null", HTML)
         self.assertGreaterEqual(len(re.findall(r"renderWorksheetSource\(\)", HTML)), 2)
 
+    def test_worksheet_catalog_recovers_without_reloading_the_page(self):
+        self.assertIn("const WORKSHEET_CATALOG_RETRY_DELAYS", HTML)
+        self.assertIn("for (const delay of WORKSHEET_CATALOG_RETRY_DELAYS)", HTML)
+        self.assertIn("if (!resp.ok)", HTML)
+        self.assertIn("if (!Array.isArray(data.units) || !data.units.length)", HTML)
+        self.assertIn('onclick="loadWorksheetUnits()"', HTML)
+        self.assertIn("重新加载教材目录", HTML)
+        self.assertIn("请通过线上网址打开本网站", HTML)
+        self.assertNotIn("教材目录加载失败，请刷新页面后重试", HTML)
+
     def test_worksheet_is_grade_aware_and_does_not_silently_reuse_sixth_grade(self):
         self.assertIn('id="worksheetGrade"', HTML)
         self.assertIn('<option value="七年级">七年级</option>', HTML)
@@ -192,6 +202,18 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("openWrongBankQuery()", HTML)
         self.assertIn("document.getElementById('history').scrollIntoView", HTML)
         self.assertRegex(HTML, r"\.mobile-quick-nav\s*\{[^}]*display:\s*none")
+
+        today_review = re.search(
+            r"function goToTodayReview\(\) \{(?P<body>.*?)\n\}",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(today_review)
+        today_review_body = today_review.group("body")
+        self.assertIn("setHistoryFilter('all')", today_review_body)
+        self.assertIn("currentSubjectArchive = 'all'", today_review_body)
+        self.assertIn("currentMasteryFilter = 'pending'", today_review_body)
+        self.assertIn("renderHistory()", today_review_body)
 
         mobile_css = re.search(r"@media \(max-width: 768px\) \{(?P<body>.*?)\n        \}", HTML, re.S)
         self.assertIsNotNone(mobile_css)
