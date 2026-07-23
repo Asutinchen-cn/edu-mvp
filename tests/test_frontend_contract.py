@@ -79,6 +79,13 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotIn("localStorage.setItem('familyAccessCode'", HTML)
         self.assertNotRegex(HTML, r"URLSearchParams\([^)]*familyAccessCode")
 
+    def test_upload_form_explains_and_links_to_family_data_controls(self):
+        self.assertIn('<details class="family-data-note">', HTML)
+        self.assertIn("孩子试卷会怎么保存？", HTML)
+        self.assertIn("访问码只保存不可还原的校验值", HTML)
+        self.assertIn("删除时原卷和分析结果会一并移除", HTML)
+        self.assertIn('onclick="openWrongBankQuery()">管理或删除错题</button>', HTML)
+
     def test_returning_parent_can_query_wrong_bank_without_scrolling_to_upload_form(self):
         self.assertIn('onclick="goToTodayReview()">查看今日复习</button>', HTML)
         self.assertIn('id="wrongBankDialog"', HTML)

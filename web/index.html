@@ -475,6 +475,79 @@
             background: #edf5ff;
             outline: none;
         }
+        .family-data-note {
+            border-top: 1px solid rgba(23, 105, 232, 0.12);
+            border-bottom: 1px solid rgba(23, 105, 232, 0.12);
+        }
+        .family-data-note summary {
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #41516b;
+            font-size: 12px;
+            cursor: pointer;
+            list-style: none;
+        }
+        .family-data-note summary::-webkit-details-marker { display: none; }
+        .family-data-note summary::after {
+            content: "+";
+            margin-left: auto;
+            color: var(--brand-blue);
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .family-data-note[open] summary::after { content: "−"; }
+        .family-data-label {
+            color: var(--brand-blue);
+            font-weight: 800;
+        }
+        .family-data-note summary strong {
+            color: var(--ink);
+            font-size: 13px;
+        }
+        .family-data-body {
+            padding: 0 0 14px;
+        }
+        .family-data-list {
+            display: grid;
+            gap: 7px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .family-data-list li {
+            position: relative;
+            padding-left: 18px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .family-data-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: var(--success);
+            font-weight: 900;
+        }
+        .family-data-manage {
+            min-height: 36px;
+            margin-top: 12px;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: var(--brand-blue);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .family-data-manage:hover,
+        .family-data-manage:focus-visible {
+            text-decoration: underline;
+            outline: none;
+        }
         .dropzone {
             background: #f3f8ff;
             border: 2px dashed #a9c9f6;
@@ -2306,6 +2379,9 @@
             .wrong-bank-form { padding: 20px; }
             .wrong-bank-actions { align-items: stretch; }
             .dialog-button { flex: 1; }
+            .family-data-note summary { align-items: flex-start; flex-wrap: wrap; padding: 10px 0; }
+            .family-data-note summary::after { align-self: center; }
+            .family-data-manage { width: 100%; text-align: left; }
             .worksheet-catalog-state { align-items: stretch; flex-direction: column; }
             .worksheet-catalog-retry { width: 100%; }
             .mobile-quick-nav {
@@ -2493,6 +2569,21 @@
                 </label>
             </div>
         </div>
+
+        <details class="family-data-note">
+            <summary>
+                <span class="family-data-label">数据与隐私</span>
+                <strong>孩子试卷会怎么保存？</strong>
+            </summary>
+            <div class="family-data-body">
+                <ul class="family-data-list">
+                    <li>原卷、识别文字、分析结果和复习进度保存在腾讯云，用于跨设备查询，不公开展示。</li>
+                    <li>访问码只保存不可还原的校验值，浏览器不会长期保存访问码。</li>
+                    <li>查询错题库后可逐份删除；删除时原卷和分析结果会一并移除。</li>
+                </ul>
+                <button type="button" class="family-data-manage" onclick="openWrongBankQuery()">管理或删除错题</button>
+            </div>
+        </details>
 
         <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
             <div class="dropzone-icon">🖼️</div>
