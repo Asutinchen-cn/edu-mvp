@@ -147,6 +147,14 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         ):
             self.assertNotIn(f"alert('{message}')", HTML)
 
+    def test_clear_subject_mismatch_switches_subject_and_keeps_files_for_retry(self):
+        self.assertIn("error.code = json.code || ''", HTML)
+        self.assertIn("error.detectedSubject = json.detected_subject || ''", HTML)
+        self.assertIn("if (e.code === 'subject_mismatch'", HTML)
+        self.assertIn("document.getElementById('analysisSubject').value = e.detectedSubject", HTML)
+        self.assertIn("已为你切换到", HTML)
+        self.assertIn("已选文件仍保留", HTML)
+
     def test_upload_access_code_has_a_full_width_row_on_larger_screens(self):
         self.assertRegex(
             HTML,

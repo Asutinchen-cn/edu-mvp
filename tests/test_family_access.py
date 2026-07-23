@@ -17,6 +17,7 @@ from api.main import (
     ReviewProgressRequest,
     WrongQuestionMasteryRequest,
     app,
+    _detect_ocr_subject,
     _exam_has_family_access,
     _hash_family_access_code,
     _validate_family_access_code,
@@ -43,6 +44,21 @@ from api.main import (
 
 
 class FamilyAccessCodeTest(unittest.TestCase):
+    def test_detects_only_clear_english_or_math_ocr_subjects(self):
+        english_text = """
+        Read the passage and choose the best answer.
+        Tom usually walks to school, but yesterday he went by bus because it was raining.
+        What did Tom do yesterday? Write a complete sentence and check your grammar.
+        """
+        math_text = """
+        一、选择题。计算下列各题，并写出必要步骤。
+        1. 解方程 3x+5=20。2. 求三角形的面积。3. 化简代数式并判断正负。
+        """
+
+        self.assertEqual(_detect_ocr_subject(english_text), "english")
+        self.assertEqual(_detect_ocr_subject(math_text), "math")
+        self.assertIsNone(_detect_ocr_subject("第一页文字 期中练习"))
+
     def test_accepts_parent_friendly_alphanumeric_codes(self):
         self.assertEqual(_validate_family_access_code("Home2026A"), "Home2026A")
 
@@ -823,6 +839,44 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             {path.name for path in Path(self.upload_dir.name).iterdir()},
             files_before,
         )
+
+    def test_clear_subject_mismatch_rejects_upload_and_removes_stored_file(self):
+        class TestUpload:
+            filename = "english-exam.png"
+            content_type = "image/png"
+
+            async def read(self):
+                return b"english-exam-image"
+
+        files_before = {path.name for path in Path(self.upload_dir.name).iterdir()}
+        with patch(
+            "api.main.baidu_ocr",
+            new=AsyncMock(return_value=(
+                "Read the passage and choose the best answer. "
+                "Tom usually walks to school, but yesterday he went by bus because it was raining. "
+                "What did Tom do yesterday? Write a complete sentence and check your grammar."
+            )),
+        ):
+            response = asyncio.run(upload_exam(
+                student_name="小明",
+                grade="六年级",
+                subject="math",
+                file=TestUpload(),
+                family_code="Home2026A",
+            ))
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(payload["code"], "subject_mismatch")
+        self.assertEqual(payload["detected_subject"], "english")
+        self.assertIn("更像英语试卷", payload["error"])
+        self.assertEqual(
+            {path.name for path in Path(self.upload_dir.name).iterdir()},
+            files_before,
+        )
+        db = self.session_factory()
+        self.assertEqual(db.query(Exam).count(), 2)
+        db.close()
 
     def test_multi_page_upload_creates_one_exam_record(self):
         class TestUpload:

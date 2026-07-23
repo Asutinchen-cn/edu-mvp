@@ -358,6 +358,46 @@ DIFFICULTY_LABELS = {"basic": "基础", "advanced": "提高", "challenge": "挑�
 WORKSHEET_GRADE_LABEL = CURRICULUM_META["default_grade"]
 CURRICULUM_UNITS = SIXTH_GRADE_CURRICULUM_UNITS
 
+
+def _detect_ocr_subject(ocr_text: str | None) -> str | None:
+    """Return a subject only when OCR contains strong language-specific evidence."""
+    content = str(ocr_text or "").strip()
+    if not content or "[OCR" in content:
+        return None
+
+    english_words = re.findall(r"[A-Za-z]{2,}(?:'[A-Za-z]+)?", content.lower())
+    english_markers = {
+        "answer", "because", "best", "choose", "complete", "correct",
+        "grammar", "passage", "read", "sentence", "school", "text",
+        "what", "when", "where", "which", "write", "yesterday",
+    }
+    english_marker_count = sum(word in english_markers for word in english_words)
+    latin_character_count = sum(char.isascii() and char.isalpha() for char in content)
+    chinese_character_count = len(re.findall(r"[\u4e00-\u9fff]", content))
+
+    math_terms = (
+        "选择题", "填空题", "计算", "方程", "不等式", "代数式", "函数",
+        "三角形", "四边形", "圆", "面积", "周长", "体积", "概率",
+        "统计", "化简", "因式分解", "正数", "负数", "有理数",
+    )
+    math_term_count = sum(content.count(term) for term in math_terms)
+    math_symbol_count = len(re.findall(r"[=＋+\-−×÷*/<>≤≥√]", content))
+
+    if (
+        len(english_words) >= 15
+        and english_marker_count >= 3
+        and latin_character_count >= max(60, chinese_character_count * 2)
+    ):
+        return "english"
+    if (
+        math_term_count >= 4
+        and chinese_character_count >= 20
+        and (math_symbol_count >= 1 or math_term_count >= 6)
+    ):
+        return "math"
+    return None
+
+
 # 数据模型
 class Exam(Base):
     __tablename__ = "exams"
@@ -2344,6 +2384,20 @@ async def _upload_exam_files(
             ocr_pages.append(f"--- 第 {page_number} 页 ---\n{ocr_result}")
 
         combined_ocr = "\n\n".join(ocr_pages)
+        detected_subject = _detect_ocr_subject(combined_ocr)
+        if detected_subject and detected_subject != subject:
+            detected_label = SUBJECT_LABELS[detected_subject]
+            selected_label = SUBJECT_LABELS[subject]
+            return JSONResponse({
+                "success": False,
+                "code": "subject_mismatch",
+                "detected_subject": detected_subject,
+                "selected_subject": subject,
+                "error": (
+                    f"识别内容更像{detected_label}试卷，当前选择的是{selected_label}。"
+                    f"请切换为{detected_label}后重新上传"
+                ),
+            }, status_code=422)
 
         access_code_salt, access_code_hash = _hash_family_access_code(family_code)
         exam = Exam(

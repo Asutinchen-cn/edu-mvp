@@ -3303,8 +3303,18 @@ async function startAnalysis() {
             setAnalysisStatus('ready', '原卷已保存到错题库。AI 暂时未完成，稍后可在历史记录中重新分析。');
             document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
-            const detail = String(e.message || '服务器暂时不可用').replace(/[。.!?！？]+$/, '');
-            setAnalysisStatus('error', `上传失败：${detail}。已选文件仍保留，可直接重试。`);
+            if (e.code === 'subject_mismatch' && ['math', 'english'].includes(e.detectedSubject)) {
+                const detectedLabel = e.detectedSubject === 'english' ? '英语' : '数学';
+                document.getElementById('analysisSubject').value = e.detectedSubject;
+                setAnalysisStatus(
+                    'ready',
+                    `识别内容更像${detectedLabel}试卷，已为你切换到${detectedLabel}。已选文件仍保留，请确认后重新点击“开始分析”。`
+                );
+                document.getElementById('analysisSubject').focus();
+            } else {
+                const detail = String(e.message || '服务器暂时不可用').replace(/[。.!?！？]+$/, '');
+                setAnalysisStatus('error', `上传失败：${detail}。已选文件仍保留，可直接重试。`);
+            }
         }
     } finally {
         document.getElementById('loadingOverlay').classList.remove('show');
@@ -3322,7 +3332,10 @@ async function requestJson(url, options) {
         throw new Error(`服务器返回异常（${resp.status}），请稍后重试`);
     }
     if (!resp.ok || json.success === false) {
-        throw new Error(json.error || json.detail || `请求失败（${resp.status}）`);
+        const error = new Error(json.error || json.detail || `请求失败（${resp.status}）`);
+        error.code = json.code || '';
+        error.detectedSubject = json.detected_subject || '';
+        throw error;
     }
     return json;
 }
