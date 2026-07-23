@@ -360,6 +360,21 @@ class GradeAwareWorksheetTest(unittest.TestCase):
 
         self.assertEqual(generic_questions, [])
 
+    def test_seventh_grade_first_semester_english_fallbacks_match_the_unit_theme(self):
+        smart_home = " ".join(
+            _fallback_english_content(point)["question"]
+            for point in ["Smart devices", "Smart living", "Smart home technology", "Smart ideas", "Smart future"]
+        ).lower()
+        mountains_and_rivers = " ".join(
+            _fallback_english_content(point)["question"]
+            for point in ["Interesting facts", "Leisure time", "Influence of rivers", "Amazing scenery", "Nature promotion"]
+        ).lower()
+
+        self.assertTrue(any(term in smart_home for term in ("smart home", "device", "technology")))
+        self.assertNotIn("artwork", smart_home)
+        self.assertTrue(any(term in mountains_and_rivers for term in ("river", "mountain", "scenery", "nature")))
+        self.assertNotIn("hobby", mountains_and_rivers)
+
     def test_eighth_grade_math_fallback_uses_quadratic_discriminant(self):
         body = UnitWorksheetRequest(
             grade="八年级",

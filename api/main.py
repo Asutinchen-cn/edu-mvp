@@ -1451,7 +1451,31 @@ def _fallback_math_content(point: str) -> dict:
 
 def _fallback_english_content(point: str) -> dict:
     lower_point = point.lower()
-    if "types of natural disasters" in lower_point:
+    if any(key in lower_point for key in ["english is fun", "english worldwide", "english matters", "english learning styles"]):
+        question = "Which habit can help a student use English confidently in different situations?"
+        options = ["A. Practise listening, speaking, reading and writing regularly.", "B. Memorise words without using them.", "C. Avoid speaking because mistakes are possible.", "D. Study only before a test."]
+        answer, explanation = "A", "Regular practice in different language skills supports effective learning and helps students use English for real communication."
+    elif any(key in lower_point for key in ["be curious", "just do it", "never give up", "be creative", "have a try"]):
+        question = "Lily cannot solve a new problem at first. Which response best shows the spirit of trying new things?"
+        options = ["A. Ask questions, test another idea and keep trying.", "B. Copy an answer without thinking.", "C. Give up immediately.", "D. Refuse to try anything unfamiliar."]
+        answer, explanation = "A", "Curiosity, action, creativity and persistence help a learner face a new task and learn from each attempt."
+    elif any(key in lower_point for key in ["accepting who you are", "following your own heart", "facing difficulties in life", "learning from past experiences", "moving forward to a stronger self"]):
+        question = "Which action shows a strong and healthy mind after making a mistake?"
+        options = ["A. Learn from the experience and make a better plan.", "B. Decide that improvement is impossible.", "C. Hide every difficulty from others.", "D. Blame someone else and do nothing."]
+        answer, explanation = "A", "A strong mind accepts difficulties, learns from past experiences and takes a practical step forward."
+    elif any(key in lower_point for key in ["smart devices", "smart living", "smart home technology", "smart ideas", "smart future"]):
+        question = "Which smart-home device can save energy by turning off lights when no one is in the room?"
+        options = ["A. A motion sensor", "B. A paper calendar", "C. A wooden shelf", "D. A glass bowl"]
+        answer, explanation = "A", "A motion sensor can detect whether someone is present and help a smart-home system control lights automatically."
+    elif any(key in lower_point for key in ["film release", "films teenagers like", "classic chinese animations", "my views on films", "our own film"]):
+        question = "Which sentence gives useful information and a clear opinion about a film?"
+        options = ["A. The animated film opens on Friday, and its story is both imaginative and meaningful.", "B. Film Friday story because good.", "C. The film opening yesterday tomorrow.", "D. Meaningful is animation the."]
+        answer, explanation = "A", "A includes release information and a complete opinion, which are useful when introducing or reviewing a film."
+    elif any(key in lower_point for key in ["interesting facts", "leisure time", "influence of rivers", "amazing scenery", "nature promotion"]):
+        question = "Which sentence clearly describes how a river can influence people's lives and leisure?"
+        options = ["A. The river supports local farming and gives visitors a place to enjoy the scenery.", "B. River farming visitors beautiful because.", "C. People enjoyed tomorrow river.", "D. Scenery influence is the leisure."]
+        answer, explanation = "A", "A explains a river's influence and describes a leisure activity in a complete, logical sentence."
+    elif "types of natural disasters" in lower_point:
         question = "Which natural disaster is caused by a sudden movement of the ground?"
         options = ["A. An earthquake", "B. A drought", "C. A snowstorm", "D. A flood"]
         answer, explanation = "A", "An earthquake happens when the ground suddenly moves; the other options describe different natural hazards."
