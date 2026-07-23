@@ -33,6 +33,18 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
             self.assertIn(header, NGINX_CONFIG)
         self.assertIn("server_tokens off;", NGINX_CONFIG)
 
+    def test_gateway_compresses_frontend_and_json_responses(self):
+        fallback = (PROJECT_ROOT / "nginx" / "nginx.http-fallback.conf").read_text(
+            encoding="utf-8"
+        )
+        for config in (NGINX_CONFIG, fallback):
+            self.assertIn("gzip on;", config)
+            self.assertIn("gzip_vary on;", config)
+            self.assertIn("gzip_proxied any;", config)
+            self.assertRegex(config, r"gzip_min_length\s+1024;")
+            self.assertRegex(config, r"gzip_types[^;]*application/json")
+            self.assertRegex(config, r"gzip_types[^;]*application/javascript")
+
     def test_public_ip_uses_trusted_https_and_redirects_plain_http(self):
         self.assertIn("listen 443 ssl;", NGINX_CONFIG)
         self.assertIn("return 308 https://$host$request_uri;", NGINX_CONFIG)
