@@ -70,7 +70,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotRegex(HTML, r"URLSearchParams\([^)]*familyAccessCode")
 
     def test_returning_parent_can_query_wrong_bank_without_scrolling_to_upload_form(self):
-        self.assertIn('onclick="openWrongBankQuery()">查看今日复习</button>', HTML)
+        self.assertIn('onclick="goToTodayReview()">查看今日复习</button>', HTML)
         self.assertIn('id="wrongBankDialog"', HTML)
         self.assertIn('id="wrongBankGrade"', HTML)
         self.assertIn('id="wrongBankStudentName"', HTML)
@@ -181,6 +181,23 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertRegex(css, r"\.steps-sidebar\s*\{[^}]*display:\s*none")
         self.assertRegex(css, r"\.hero-actions\s*\{[^}]*grid-template-columns:\s*repeat\(2,")
         self.assertRegex(css, r"\.main-card\s*\{[^}]*margin:\s*10px 12px")
+
+    def test_mobile_quick_nav_keeps_core_parent_actions_reachable(self):
+        self.assertIn('<nav class="mobile-quick-nav" aria-label="手机快捷操作">', HTML)
+        self.assertIn('<a href="#analysis"', HTML)
+        self.assertIn('onclick="goToTodayReview()"', HTML)
+        self.assertIn('<a href="#worksheet"', HTML)
+        self.assertIn("function goToTodayReview()", HTML)
+        self.assertIn("!wrongQuestionBank.loaded && historyRecords.length === 0", HTML)
+        self.assertIn("openWrongBankQuery()", HTML)
+        self.assertIn("document.getElementById('history').scrollIntoView", HTML)
+        self.assertRegex(HTML, r"\.mobile-quick-nav\s*\{[^}]*display:\s*none")
+
+        mobile_css = re.search(r"@media \(max-width: 768px\) \{(?P<body>.*?)\n        \}", HTML, re.S)
+        self.assertIsNotNone(mobile_css)
+        css = mobile_css.group("body")
+        self.assertRegex(css, r"body\s*\{[^}]*padding-bottom:")
+        self.assertRegex(css, r"\.mobile-quick-nav\s*\{[^}]*display:\s*grid")
 
     def test_family_access_code_has_safe_visibility_and_generation_helpers(self):
         self.assertIn("function toggleFamilyCodeVisibility", HTML)

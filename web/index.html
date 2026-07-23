@@ -95,6 +95,7 @@
             color: var(--brand-blue);
             background: #edf5ff;
         }
+        .mobile-quick-nav { display: none; }
 
         .header-right {
             display: flex; align-items: center; gap: 16px;
@@ -2167,6 +2168,7 @@
 
         /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
+            body { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
             .header {
                 padding: 10px 12px;
                 align-items: flex-start;
@@ -2277,6 +2279,54 @@
             .wrong-bank-form { padding: 20px; }
             .wrong-bank-actions { align-items: stretch; }
             .dialog-button { flex: 1; }
+            .mobile-quick-nav {
+                position: fixed;
+                left: 12px;
+                right: 12px;
+                bottom: calc(10px + env(safe-area-inset-bottom));
+                z-index: 1100;
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                min-height: 62px;
+                padding: 6px;
+                border: 1px solid rgba(23, 105, 232, 0.16);
+                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.96);
+                box-shadow: 0 16px 36px rgba(21, 34, 58, 0.2);
+                backdrop-filter: blur(16px);
+            }
+            .mobile-quick-nav a,
+            .mobile-quick-nav button {
+                min-width: 0;
+                min-height: 48px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 3px;
+                border: 0;
+                border-radius: 10px;
+                background: transparent;
+                color: #41516b;
+                text-decoration: none;
+                font: inherit;
+                font-size: 11px;
+                font-weight: 800;
+                cursor: pointer;
+            }
+            .mobile-quick-nav a:focus-visible,
+            .mobile-quick-nav button:focus-visible {
+                outline: 2px solid var(--brand-blue);
+                outline-offset: -2px;
+            }
+            .mobile-quick-nav button {
+                background: var(--brand-blue);
+                color: #fff;
+            }
+            .mobile-quick-icon {
+                font-size: 19px;
+                line-height: 1;
+            }
         }
         @media (min-width: 769px) and (max-width: 1080px) {
             .header-nav { display: none; }
@@ -2318,7 +2368,7 @@
             <p>上传初中试卷，获得有依据的错因诊断、家长复习摘要和 7 天行动安排；也可以按上海教材单元生成复习卷与答案解析。</p>
             <div class="hero-actions">
                 <a class="hero-link" href="#analysis">开始分析试卷</a>
-                <button type="button" class="hero-link secondary" onclick="openWrongBankQuery()">查看今日复习</button>
+                <button type="button" class="hero-link secondary" onclick="goToTodayReview()">查看今日复习</button>
                 <a class="hero-link quiet" href="#worksheet">按教材出卷 →</a>
             </div>
         </div>
@@ -2573,6 +2623,21 @@
     </div>
     <div id="historyList"></div>
 </div>
+
+<nav class="mobile-quick-nav" aria-label="手机快捷操作">
+    <a href="#analysis">
+        <span class="mobile-quick-icon" aria-hidden="true">↑</span>
+        <span>上传试卷</span>
+    </a>
+    <button type="button" onclick="goToTodayReview()">
+        <span class="mobile-quick-icon" aria-hidden="true">✓</span>
+        <span>今日复习</span>
+    </button>
+    <a href="#worksheet">
+        <span class="mobile-quick-icon" aria-hidden="true">▤</span>
+        <span>单元卷</span>
+    </a>
+</nav>
 
 <!-- WRONG BANK QUERY DIALOG -->
 <dialog class="wrong-bank-dialog" id="wrongBankDialog" aria-labelledby="wrongBankDialogTitle">
@@ -5099,6 +5164,14 @@ function setMasteryFilter(status) {
         tab.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
     renderHistory();
+}
+
+function goToTodayReview() {
+    if (!wrongQuestionBank.loaded && historyRecords.length === 0) {
+        openWrongBankQuery();
+        return;
+    }
+    document.getElementById('history').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function openWrongBankQuery() {
