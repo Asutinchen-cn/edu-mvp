@@ -106,14 +106,13 @@ class CurriculumUnitsTest(unittest.TestCase):
         self.assertEqual(
             first_titles,
             [
-                "Unit 1 Friendship",
-                "Unit 2 School life",
-                "Unit 3 The seasons",
-                "Unit 4 The Earth",
-                "Unit 5 Off to space",
-                "Unit 6 Travelling around Asia",
-                "Unit 7 Fun after school",
-                "Unit 8 Collecting as a hobby",
+                "Starter",
+                "Unit 1 Trying new things",
+                "Unit 2 Strong mind",
+                "Unit 3 Jobs",
+                "Unit 4 Smart home",
+                "Unit 5 Films",
+                "Unit 6 Mountains and rivers",
             ],
         )
         self.assertEqual(
@@ -127,6 +126,29 @@ class CurriculumUnitsTest(unittest.TestCase):
                 "Unit 6 Trees",
             ],
         )
+
+    def test_seventh_grade_first_semester_english_uses_shanghai_five_four_catalog(self):
+        units = self.units_for("english", "first", "七年级")
+
+        self.assertEqual(
+            [unit["id"] for unit in units],
+            [
+                "english-7a-starter",
+                "english-7a-u1-trying-new-things",
+                "english-7a-u2-strong-mind",
+                "english-7a-u3-jobs",
+                "english-7a-u4-smart-home",
+                "english-7a-u5-films",
+                "english-7a-u6-mountains-rivers",
+            ],
+        )
+        self.assertEqual(
+            units[0]["knowledge_points"],
+            ["English is fun", "English worldwide", "English matters", "English learning styles"],
+        )
+        self.assertNotIn("Unit 1 Friendship", {unit["title"] for unit in units})
+        self.assertNotIn("Unit 2 School life", {unit["title"] for unit in units})
+        self.assertTrue(all("五·四学制" in unit["source_note"] for unit in units))
 
     def test_math_matches_current_shanghai_eighth_grade_chapters(self):
         first_titles = [unit["title"] for unit in self.units_for("math", "first", "八年级")]
