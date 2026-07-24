@@ -23,6 +23,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("目录最近核验", HTML)
         self.assertGreaterEqual(len(re.findall(r"renderWorksheetSource\(\)", HTML)), 2)
 
+    def test_worksheet_keeps_verified_source_details_compact_by_default(self):
+        details_tag = re.search(
+            r'<details class="curriculum-source-details" id="worksheetSourceDetails"[^>]*>',
+            HTML,
+        )
+        self.assertIsNotNone(details_tag)
+        self.assertNotIn(" open", details_tag.group(0))
+        self.assertIn('id="worksheetSourceSummary"', HTML)
+        self.assertIn('id="worksheetSourceVerification"', HTML)
+        self.assertIn("目录核验 ${verifiedOn}", HTML)
+        self.assertIn("当前共 ${units.length} 个单元", HTML)
+        self.assertIn("sourceDetails.dataset.autoOpened", HTML)
+        self.assertIn("sourceDetails.open = true", HTML)
+        self.assertIn("delete sourceDetails.dataset.autoOpened", HTML)
+
     def test_worksheet_catalog_recovers_without_reloading_the_page(self):
         self.assertIn("const WORKSHEET_CATALOG_RETRY_DELAYS", HTML)
         self.assertIn("for (const delay of WORKSHEET_CATALOG_RETRY_DELAYS)", HTML)
