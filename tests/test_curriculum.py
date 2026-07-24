@@ -40,6 +40,25 @@ class CurriculumUnitsTest(unittest.TestCase):
             {"六年级", "七年级", "八年级", "九年级"},
         )
 
+    def test_all_units_name_the_latest_official_semester_catalog(self):
+        first_semester_units = [
+            unit for unit in CURRICULUM_UNITS if unit["semester"] == "first"
+        ]
+        second_semester_units = [
+            unit for unit in CURRICULUM_UNITS if unit["semester"] == "second"
+        ]
+
+        self.assertTrue(first_semester_units)
+        self.assertTrue(second_semester_units)
+        self.assertTrue(
+            all("2025 年秋季教学用书目录" in unit["source_note"] for unit in first_semester_units)
+        )
+        self.assertTrue(
+            all("2026 年春季教学用书目录" in unit["source_note"] for unit in second_semester_units)
+        )
+        self.assertEqual(CURRICULUM_META["verified_on"], "2026-07-24")
+        self.assertIn("2026 年秋季目录尚未发布", CURRICULUM_META["catalog_status_note"])
+
     def test_math_matches_current_shanghai_sixth_grade_chapters(self):
         first_titles = [unit["title"] for unit in self.units_for("math", "first")]
         second_titles = [unit["title"] for unit in self.units_for("math", "second")]

@@ -18,6 +18,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('id="worksheetSource"', HTML)
         self.assertIn("let worksheetMeta = null", HTML)
         self.assertIn("worksheetMeta = data.meta || null", HTML)
+        self.assertIn("worksheetMeta?.verified_on", HTML)
+        self.assertIn("worksheetMeta?.catalog_status_note", HTML)
+        self.assertIn("目录最近核验", HTML)
         self.assertGreaterEqual(len(re.findall(r"renderWorksheetSource\(\)", HTML)), 2)
 
     def test_worksheet_catalog_recovers_without_reloading_the_page(self):
