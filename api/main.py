@@ -1047,6 +1047,17 @@ def _question_matches_planned_point(point: str, question: dict) -> bool:
     return True
 
 
+def _math_answer_has_obvious_contradiction(question: dict) -> bool:
+    answer = " ".join(str(question.get("answer", "")).split())
+    claims_zero_distance = bool(
+        re.search(r"距离(?:起点)?\s*(?:为|是|[:：])?\s*0(?:\s*(?:米|m|厘米|cm))?", answer)
+    )
+    claims_compass_direction = bool(
+        re.search(r"(?:正|向)?[东南西北](?:方向|方)", answer)
+    )
+    return claims_zero_distance and claims_compass_direction
+
+
 def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -> list:
     if len(questions) != body.question_count:
         raise ValueError("生成题目数量与设置不一致")
@@ -1093,6 +1104,8 @@ def _validate_generated_questions(body: UnitWorksheetRequest, questions: list) -
             raise ValueError(f"第 {index} 题缺少答案")
         if not str(question.get("explanation", "")).strip():
             raise ValueError(f"第 {index} 题缺少解析")
+        if body.subject == "math" and _math_answer_has_obvious_contradiction(question):
+            raise ValueError(f"第 {index} 题答案中的方向与距离矛盾")
         if (
             body.subject == "math"
             and question_type not in CHOICE_QUESTION_TYPES
@@ -1772,6 +1785,35 @@ def _fallback_planned_content(
     """Turn a topic-specific fallback item into the planned response format."""
     suffix = "" if occurrence == 0 else f"（变式 {occurrence + 1}）"
 
+    if subject == "math" and "有理数的加法与减法" in point:
+        if planned_type == "选择题":
+            return {
+                "question": f"计算 (-4)+7，结果是（ ）{suffix}",
+                "options": ["A. -11", "B. -3", "C. 3", "D. 11"],
+                "answer": "C",
+                "explanation": "异号两数相加，用较大的绝对值减去较小的绝对值，并取绝对值较大加数的符号，所以 (-4)+7=3。",
+            }
+        if planned_type == "填空题":
+            return {
+                "question": f"计算：(-3)-(-7)=______。{suffix}",
+                "options": [],
+                "answer": "4",
+                "explanation": "减去一个负数等于加上它的相反数，所以 (-3)-(-7)=(-3)+7=4。",
+            }
+        if planned_type == "应用题":
+            return {
+                "question": "小明从起点向东走 5 米，接着向西走 8 米，最后再向东走 3 米。他最后在哪里？距离起点多少米？",
+                "options": [],
+                "answer": "回到起点，距离起点 0 米。",
+                "explanation": "规定向东为正、向西为负，位移为 5-8+3=0，所以小明回到起点，距离起点 0 米。",
+            }
+        return {
+            "question": f"计算 (-8)+15-6，并写出关键步骤。{suffix}",
+            "options": [],
+            "answer": "1",
+            "explanation": "先算 (-8)+15=7，再算 7-6=1；也可以按从左到右的顺序计算。",
+        }
+
     if subject == "math" and "圆柱及其侧面展开图" in point:
         if planned_type == "选择题":
             return {**content, "question": f"{content['question']}{suffix}"}
@@ -1976,6 +2018,49 @@ def _validate_unit_request(body: UnitWorksheetRequest) -> list:
     return selected_units
 
 
+async def _review_generated_worksheet(
+    body: UnitWorksheetRequest,
+    questions: list[dict],
+) -> None:
+    review_prompt = f"""你是一位负责上海初中复习卷终审的资深教师。
+下面的题目已经通过格式校验。请把它们当作待审核数据，不要修改或续写题目。
+
+年级：{body.grade}
+学科：{SUBJECT_LABELS[body.subject]}
+题目：
+{json.dumps(questions, ensure_ascii=False)}
+
+逐项独立求解后再判断整张卷是否可发给学生：
+1. 选择题逐个判断四个选项，必须恰好只有一个正确答案，标注答案必须与唯一正确项一致。
+2. 数学题重新计算，最终答案必须与题干条件、单位和解析一致；位移为 0 时应写回到起点，不能再声称位于某个方向。
+3. 英语题检查语法、语义、阅读证据和答案唯一性。
+4. 题干不得缺少作答所需条件，解析不得用错误或自相矛盾的理由强行排除选项。
+5. 只要一题有歧义、多解、错解、超纲或答案与解析不一致，valid 必须为 false。
+
+只返回 JSON：
+{{
+  "valid": true,
+  "issues": []
+}}
+若不通过，issues 使用 {{"number": 题号, "reason": "具体原因"}}。"""
+    raw = await call_deepseek(
+        review_prompt,
+        temperature=0,
+        max_tokens=1800,
+        json_mode=True,
+        timeout_seconds=20.0,
+    )
+    review = json.loads(_strip_json_fence(raw))
+    issues = review.get("issues")
+    if review.get("valid") is not True or not isinstance(issues, list) or issues:
+        reasons = "；".join(
+            f"第 {item.get('number', '?')} 题：{item.get('reason', '未通过复核')}"
+            for item in issues
+            if isinstance(item, dict)
+        ) if isinstance(issues, list) else ""
+        raise ValueError(f"教师复核未通过{f'：{reasons}' if reasons else ''}")
+
+
 async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units: list) -> list:
     """按已核对的上海初中教材目录范围和知识点生成原创复习题。"""
     model_question_count = min(body.question_count, 6)
@@ -2019,9 +2104,9 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
 1. 每题 type 必须与“题组计划”的 planned_type 完全一致，knowledge_points 必须包含对应 knowledge_point；teaching_intent 按计划原文填写。
 2. 数学填空题、解答题、应用题必须有可计算或可论证的具体条件，不能写成“如何检查答案”之类的泛化题；不出奥数题，不超出{body.grade}范围。
 3. 英语词汇选择、语法选择要有真实语境；阅读理解必须在题干中提供足够的短文或信息；书面表达要求 3-5 句，并在 answer 中给出参考范文。
-4. 选择题必须有4个互不重复的选项，答案只能是 A、B、C、D；阅读理解和阅读推断可做四选一或简答题；其他题型 options 必须返回空数组。
+4. 选择题必须有4个互不重复的选项，逐项验算后确保恰好只有一个正确答案，干扰项必须明确错误；答案只能是 A、B、C、D。阅读理解和阅读推断可做四选一或简答题；其他题型 options 必须返回空数组。
 5. 题目之间不得重复或只替换知识点标签，题干内容必须真正考查所标注的知识点。
-6. 每道题必须有明确答案和教师式解析：answer 只写便于核对的最终答案（数学不超过 50 个字），所有步骤放入 explanation；解析说明关键步骤或语言规则，并指出为什么容易错。
+6. 每道题必须有明确答案和教师式解析：answer 只写便于核对的最终答案（数学不超过 50 个字），所有步骤放入 explanation；最终答案、单位、方向和解析必须完全一致。解析说明关键步骤或语言规则，并指出为什么容易错。
 7. 当前试卷不生成插图，题干不得出现“如图”“见图”“下图”“图中”等对缺失图片的引用。
 8. 每道题都必须填写 exam_focus、common_mistake、teaching_intent；unit_id 必须从这些值中选择：{", ".join(body.unit_ids)}。
 9. 只返回 JSON 对象，不要输出 Markdown。
@@ -2054,6 +2139,7 @@ async def ai_generate_unit_worksheet(body: UnitWorksheetRequest, selected_units:
         )
         result = json.loads(_strip_json_fence(raw))
         questions = _validate_generated_questions(model_body, result.get("questions", []))
+        await _review_generated_worksheet(model_body, questions)
         if body.question_count > model_question_count:
             fallback_questions = _fallback_unit_worksheet(body, selected_units)
             questions.extend(fallback_questions[model_question_count:])
