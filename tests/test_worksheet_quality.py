@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -22,6 +23,68 @@ def math_body(question_count=3):
         question_count=question_count,
         title="六年级圆柱与圆锥单元诊断卷",
     )
+
+
+def rational_math_body():
+    return UnitWorksheetRequest(
+        grade="六年级",
+        subject="math",
+        semester="first",
+        unit_ids=["math-6a-rational-numbers"],
+        knowledge_points=["有理数的加法与减法"],
+        difficulty="basic",
+        question_count=3,
+        title="六年级有理数单元诊断卷",
+    )
+
+
+def rational_math_questions():
+    return [
+        {
+            "id": "q1",
+            "unit_id": "math-6a-rational-numbers",
+            "type": "选择题",
+            "question": "下列说法正确的是（ ）",
+            "options": [
+                "A. 两个有理数的和一定大于每一个加数",
+                "B. 减去一个负数，等于加上这个数的相反数",
+                "C. 异号两数相加，取绝对值较大的加数的符号，并用较大的绝对值减去较小的绝对值",
+                "D. 一个数减去 0，差为 0",
+            ],
+            "answer": "C",
+            "explanation": "B 表述不完整，C 正确。",
+            "knowledge_points": ["有理数的加法与减法"],
+            "exam_focus": "有理数加减法则",
+            "common_mistake": "负数减法变号错误",
+            "teaching_intent": "判断学生是否真正理解核心概念",
+        },
+        {
+            "id": "q2",
+            "unit_id": "math-6a-rational-numbers",
+            "type": "填空题",
+            "question": "计算：(-3)-(-7)=______。",
+            "options": [],
+            "answer": "4",
+            "explanation": "(-3)-(-7)=(-3)+7=4。",
+            "knowledge_points": ["有理数的加法与减法"],
+            "exam_focus": "有理数减法",
+            "common_mistake": "减去负数时没有变号",
+            "teaching_intent": "检查单步算法和书写准确性",
+        },
+        {
+            "id": "q3",
+            "unit_id": "math-6a-rational-numbers",
+            "type": "应用题",
+            "question": "小明从起点向东走 5 米，向西走 8 米，再向东走 3 米。他最后在哪里？",
+            "options": [],
+            "answer": "回到起点，距离起点 0 米。",
+            "explanation": "规定向东为正，5-8+3=0，所以回到起点。",
+            "knowledge_points": ["有理数的加法与减法"],
+            "exam_focus": "用有理数表示方向和位移",
+            "common_mistake": "方向符号混淆",
+            "teaching_intent": "把单一考点放入直接情境",
+        },
+    ]
 
 
 def valid_math_questions():
@@ -112,6 +175,38 @@ class DeepSeekWorksheetRequestTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(questions), 6)
         self.assertEqual(len({question["question"] for question in questions}), 6)
 
+    async def test_semantic_review_replaces_an_ambiguous_math_paper(self):
+        body = rational_math_body()
+        units = _validate_unit_request(body)
+        ambiguous_questions = rational_math_questions()
+        generated_response = json.dumps(
+            {"questions": ambiguous_questions},
+            ensure_ascii=False,
+        )
+        review_response = json.dumps(
+            {
+                "valid": False,
+                "issues": [
+                    {
+                        "number": 1,
+                        "reason": "B 与 C 都可成立，选择题答案不唯一",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        )
+
+        with patch(
+            "api.main.call_deepseek",
+            new=AsyncMock(side_effect=[generated_response, review_response]),
+        ) as mocked_call:
+            questions = await ai_generate_unit_worksheet(body, units)
+
+        self.assertEqual(mocked_call.await_count, 2)
+        self.assertIn("逐项独立求解", mocked_call.await_args_list[1].args[0])
+        self.assertNotEqual(questions[0]["question"], ambiguous_questions[0]["question"])
+        self.assertIn("回到起点", questions[2]["answer"])
+
 
 class WorksheetQualityValidationTest(unittest.TestCase):
     def test_duplicate_question_stems_are_rejected(self):
@@ -161,6 +256,14 @@ class WorksheetQualityValidationTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "图片"):
             _validate_generated_questions(math_body(), questions)
+
+    def test_zero_distance_cannot_still_claim_a_compass_direction(self):
+        questions = rational_math_questions()
+        questions[2]["answer"] = "在起点正西方向，距离起点 0 米。"
+        questions[2]["explanation"] = "5-8+3=0，所以回到了起点。"
+
+        with self.assertRaisesRegex(ValueError, "答案.*矛盾"):
+            _validate_generated_questions(rational_math_body(), questions)
 
     def test_reading_may_use_choices_but_writing_must_stay_open(self):
         body = UnitWorksheetRequest(
@@ -236,6 +339,19 @@ class WorksheetFallbackQualityTest(unittest.TestCase):
         self.assertEqual(questions[3]["options"], [])
         self.assertIn("Read", questions[2]["question"])
         self.assertIn("Write", questions[3]["question"])
+
+    def test_rational_number_fallback_has_a_consistent_real_context(self):
+        body = rational_math_body()
+        questions = _fallback_unit_worksheet(body, _validate_unit_request(body))
+
+        self.assertEqual(
+            [question["type"] for question in questions],
+            ["选择题", "填空题", "应用题"],
+        )
+        self.assertIn("回到起点", questions[2]["answer"])
+        self.assertNotRegex(questions[2]["answer"], r"[东南西北]方向")
+        self.assertIn("5", questions[2]["question"])
+        self.assertIn("8", questions[2]["question"])
 
 
 if __name__ == "__main__":
