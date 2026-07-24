@@ -45,6 +45,23 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
             self.assertRegex(config, r"gzip_types[^;]*application/json")
             self.assertRegex(config, r"gzip_types[^;]*application/javascript")
 
+    def test_app_shell_and_curriculum_catalog_do_not_stay_stale(self):
+        fallback = (PROJECT_ROOT / "nginx" / "nginx.http-fallback.conf").read_text(
+            encoding="utf-8"
+        )
+        for config in (NGINX_CONFIG, fallback):
+            self.assertRegex(
+                config,
+                r"location = /index\.html\s*\{[^}]*"
+                r'add_header Cache-Control "no-cache, must-revalidate" always;',
+            )
+            self.assertRegex(
+                config,
+                r"location ~ \^/\(curriculum-units\|api-info\)"
+                r"\(/\|\$\)\s*\{[^}]*"
+                r'add_header Cache-Control "no-store" always;',
+            )
+
     def test_public_ip_uses_trusted_https_and_redirects_plain_http(self):
         self.assertIn("listen 443 ssl;", NGINX_CONFIG)
         self.assertIn("return 308 https://$host$request_uri;", NGINX_CONFIG)
