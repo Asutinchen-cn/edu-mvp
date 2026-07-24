@@ -2124,6 +2124,12 @@
         }
         .curriculum-source strong { display: block; color: var(--ink); font-size: 14px; }
         .curriculum-source span { display: block; margin-top: 2px; }
+        .curriculum-source .curriculum-verification {
+            margin-top: 7px;
+            color: #52647f;
+            font-size: 12px;
+            line-height: 1.6;
+        }
         .curriculum-source a {
             flex-shrink: 0;
             color: var(--brand-blue);
@@ -3047,12 +3053,15 @@ function renderWorksheetSource() {
     const sourceNote = units[0]?.source_note || `上海${grade}教材目录`;
     const source = worksheetMeta?.sources?.find(item => item.semester === semester) || null;
     const sourceUrl = safeCurriculumSourceUrl(source?.url || '');
+    const verifiedOn = worksheetMeta?.verified_on || '';
+    const catalogStatusNote = worksheetMeta?.catalog_status_note || '';
     const subjectLabel = subject === 'english' ? '英语' : '数学';
     const semesterLabel = semester === 'first' ? '第一学期' : '第二学期';
     document.getElementById('worksheetSource').innerHTML = `
         <div>
             <strong>${units.length ? '教材范围已核对' : '教材范围核对中'}：${escapeHtml(grade)}${subjectLabel} ${semesterLabel}</strong>
             <span>${escapeHtml(sourceNote)}${units.length ? `，当前共 ${units.length} 个单元。` : '，暂不开放生成。'} ${escapeHtml(worksheetMeta?.scope_note || '')}</span>
+            ${(verifiedOn || catalogStatusNote) ? `<span class="curriculum-verification">目录最近核验${verifiedOn ? `：${escapeHtml(verifiedOn)}` : ''}${catalogStatusNote ? ` · ${escapeHtml(catalogStatusNote)}` : ''}</span>` : ''}
         </div>
         ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">查看上海市教委目录</a>` : ''}`;
 }
