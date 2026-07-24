@@ -2108,16 +2108,59 @@
         .worksheet-preview { display: flex; flex-direction: column; gap: 8px; }
         .worksheet-preview-item { padding: 12px 14px; background: #f8fbff; border-radius: 14px; font-size: 13px; border: 1px solid #e6eef9; }
         .worksheet-meta { margin-top: 6px; color: #697386; line-height: 1.5; }
+        .curriculum-source-details {
+            margin: 16px 0 20px;
+            overflow: hidden;
+            border: 1px solid rgba(23, 105, 232, 0.16);
+            border-left: 4px solid var(--brand-blue);
+            border-radius: 8px;
+            background: #f1f7ff;
+        }
+        .curriculum-source-details summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            min-height: 54px;
+            padding: 11px 14px;
+            color: var(--ink);
+            cursor: pointer;
+            list-style: none;
+        }
+        .curriculum-source-details summary::-webkit-details-marker { display: none; }
+        .curriculum-source-details summary::after {
+            flex: 0 0 auto;
+            content: "查看来源";
+            color: var(--brand-blue);
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .curriculum-source-details[open] summary::after { content: "收起来源"; }
+        .curriculum-source-details summary:focus-visible {
+            outline: 3px solid rgba(23, 105, 232, 0.24);
+            outline-offset: -3px;
+        }
+        .curriculum-source-summary { min-width: 0; }
+        .curriculum-source-summary strong {
+            display: block;
+            color: var(--ink);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+        .curriculum-source-summary span {
+            display: block;
+            margin-top: 2px;
+            color: #52647f;
+            font-size: 12px;
+            line-height: 1.45;
+        }
         .curriculum-source {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 16px;
-            margin: 16px 0 20px;
-            padding: 14px 16px;
-            border-left: 4px solid var(--brand-blue);
-            border-radius: 8px;
-            background: #f1f7ff;
+            padding: 12px 14px 14px;
+            border-top: 1px solid rgba(23, 105, 232, 0.12);
             color: #41516b;
             font-size: 13px;
             line-height: 1.6;
@@ -2642,9 +2685,17 @@
         <h3>📚 按教材单元生成复习卷</h3>
         <p>按上海初中教材目录选择年级、单元和知识点，生成原创题目卷与答案解析卷。</p>
     </div>
-    <div class="curriculum-source" id="worksheetSource" role="note" aria-live="polite">
-        正在核对教材范围...
-    </div>
+    <details class="curriculum-source-details" id="worksheetSourceDetails">
+        <summary>
+            <span class="curriculum-source-summary">
+                <strong id="worksheetSourceSummary">正在核对教材范围...</strong>
+                <span id="worksheetSourceVerification">查看教材目录来源</span>
+            </span>
+        </summary>
+        <div class="curriculum-source" id="worksheetSource" role="note" aria-live="polite">
+            正在核对教材范围...
+        </div>
+    </details>
     <div class="worksheet-grid">
         <div class="worksheet-field">
             <label>年级</label>
@@ -2947,6 +2998,11 @@ document.addEventListener('DOMContentLoaded', () => {
 function renderWorksheetCatalogFailure(message) {
     worksheetUnits = [];
     worksheetMeta = null;
+    const sourceDetails = document.getElementById('worksheetSourceDetails');
+    sourceDetails.open = true;
+    sourceDetails.dataset.autoOpened = 'true';
+    document.getElementById('worksheetSourceSummary').textContent = '教材目录暂时未连上';
+    document.getElementById('worksheetSourceVerification').textContent = '请使用下方按钮重新加载';
     document.getElementById('worksheetUnits').innerHTML = `
         <div class="worksheet-catalog-state" role="status">
             <span>${escapeHtml(message)}</span>
@@ -2986,6 +3042,8 @@ async function loadWorksheetUnits() {
         return;
     }
 
+    document.getElementById('worksheetSourceSummary').textContent = '正在连接上海教材目录...';
+    document.getElementById('worksheetSourceVerification').textContent = '系统会自动重试';
     document.getElementById('worksheetSource').textContent = '正在连接上海教材目录...';
     document.getElementById('worksheetUnits').innerHTML = '<div class="worksheet-catalog-state" role="status"><span>正在加载教材单元，请稍候...</span></div>';
     document.getElementById('worksheetKnowledge').innerHTML = '';
@@ -3057,6 +3115,17 @@ function renderWorksheetSource() {
     const catalogStatusNote = worksheetMeta?.catalog_status_note || '';
     const subjectLabel = subject === 'english' ? '英语' : '数学';
     const semesterLabel = semester === 'first' ? '第一学期' : '第二学期';
+    const sourceDetails = document.getElementById('worksheetSourceDetails');
+    document.getElementById('worksheetSourceSummary').textContent = units.length
+        ? `${grade}${subjectLabel} · ${semesterLabel} · ${units.length} 个单元`
+        : `${grade}${subjectLabel} · ${semesterLabel} · 暂未开放`;
+    document.getElementById('worksheetSourceVerification').textContent = verifiedOn
+        ? `目录核验 ${verifiedOn}`
+        : '依据上海市教委公开目录';
+    if (sourceDetails.dataset.autoOpened) {
+        sourceDetails.open = false;
+        delete sourceDetails.dataset.autoOpened;
+    }
     document.getElementById('worksheetSource').innerHTML = `
         <div>
             <strong>${units.length ? '教材范围已核对' : '教材范围核对中'}：${escapeHtml(grade)}${subjectLabel} ${semesterLabel}</strong>
