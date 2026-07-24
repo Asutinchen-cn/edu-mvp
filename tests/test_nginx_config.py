@@ -52,14 +52,17 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
         for config in (NGINX_CONFIG, fallback):
             self.assertRegex(
                 config,
-                r"location = /index\.html\s*\{[^}]*"
-                r'add_header Cache-Control "no-cache, must-revalidate" always;',
+                r"map \$uri \$edu_cache_control\s*\{[^}]*"
+                r'/index\.html\s+"no-cache, must-revalidate";',
             )
             self.assertRegex(
                 config,
-                r"location ~ \^/\(curriculum-units\|api-info\)"
-                r"\(/\|\$\)\s*\{[^}]*"
-                r'add_header Cache-Control "no-store" always;',
+                r"map \$uri \$edu_cache_control\s*\{[^}]*"
+                r'\^/curriculum-units.*"no-store";',
+            )
+            self.assertIn(
+                "add_header Cache-Control $edu_cache_control always;",
+                config,
             )
 
     def test_public_ip_uses_trusted_https_and_redirects_plain_http(self):
