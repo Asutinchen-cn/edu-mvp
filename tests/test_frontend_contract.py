@@ -399,6 +399,17 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("function openQuestionSourceExam(examId)", HTML)
         self.assertIn("按知识点", HTML)
 
+    def test_knowledge_view_total_count_is_not_double_counted(self):
+        count_updater = re.search(
+            r"const subjectCounts = datedQuestions\.reduce\(\(counts, item\) => "
+            r"\{(?P<body>.*?)"
+            r"\}, \{ all: 0, math: 0, english: 0 \}\);",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(count_updater)
+        self.assertEqual(count_updater.group("body").count("counts.all += 1;"), 1)
+
     def test_knowledge_source_record_failure_is_recoverable_inline(self):
         self.assertIn("let sourceExamLoadingId = null", HTML)
         self.assertIn("sourceExamLoadingId === Number(item.exam_id)", HTML)
