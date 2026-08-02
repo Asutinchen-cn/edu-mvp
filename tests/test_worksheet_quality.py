@@ -362,6 +362,33 @@ class WorksheetFallbackQualityTest(unittest.TestCase):
 
 
 class WorksheetPdfCompatibilityTest(unittest.TestCase):
+    def test_ai_line_breaks_do_not_fragment_question_or_explanation_text(self):
+        pdftotext = shutil.which("pdftotext")
+        if not pdftotext:
+            self.skipTest("Poppler PDF inspection tools are not installed")
+
+        questions = rational_math_questions()
+        questions[2]["question"] = "某冷库的室温为\n-4℃，目标为\n-25℃。"
+        questions[2]["explanation"] = "选项\nA\n错误，因为\n0\n不是正数。"
+
+        with tempfile.TemporaryDirectory() as directory:
+            pdf_path = Path(directory) / "answer.pdf"
+            pdf_path.write_bytes(
+                generate_unit_worksheet_pdf(
+                    rational_math_body(), questions, include_answers=True
+                )
+            )
+            text_result = subprocess.run(
+                [pdftotext, str(pdf_path), "-"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(text_result.returncode, 0, text_result.stderr)
+        self.assertIn("某冷库的室温为 -4℃，目标为 -25℃。", text_result.stdout)
+        self.assertIn("解析：选项 A 错误，因为 0 不是正数。", text_result.stdout)
+
     def test_question_and_answer_pdfs_embed_a_matching_truetype_font(self):
         font_dir = Path(__file__).parents[1] / "fonts"
         for font_path in (
