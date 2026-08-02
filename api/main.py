@@ -3650,6 +3650,25 @@ async def generate_knowledge_practice(
 
 # ===== PDF 导出 =====
 
+PROJECT_PDF_FONT_REGULAR_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansSC-Regular.ttf")
+)
+PROJECT_PDF_FONT_BOLD_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansSC-Bold.ttf")
+)
+
+
+def _register_pdf_fonts(pdf_obj) -> str:
+    if not all(
+        os.path.exists(path)
+        for path in (PROJECT_PDF_FONT_REGULAR_PATH, PROJECT_PDF_FONT_BOLD_PATH)
+    ):
+        raise RuntimeError("缺少中文字体，暂时无法生成 PDF")
+    pdf_obj.add_font("zh", "", PROJECT_PDF_FONT_REGULAR_PATH)
+    pdf_obj.add_font("zh", "B", PROJECT_PDF_FONT_BOLD_PATH)
+    return "zh"
+
+
 def generate_practice_pdf(student_name: str, weak_points: list, questions: list) -> bytes:
     """生成巩固练习题 PDF（中文稳定版）"""
     from fpdf import FPDF
@@ -3706,30 +3725,7 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
-    # 尝试加载中文字体
-    project_font = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
-    )
-    font_paths = [
-        project_font,  # 项目内置中文字体（Railway可用）
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-        "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/System/Library/Fonts/PingFang.ttc",
-    ]
-
-    chinese_font = None
-    for fp in font_paths:
-        if os.path.exists(fp):
-            try:
-                pdf.add_font("zh", "", fp)
-                pdf.add_font("zh", "B", fp)
-                chinese_font = "zh"
-                break
-            except Exception:
-                continue
-
-    font = chinese_font or "helvetica"
+    font = _register_pdf_fonts(pdf)
 
     # 标题
     pdf.set_font(font, "B", 18)
@@ -3822,27 +3818,7 @@ def generate_correction_sheet_pdf(
     pdf.set_margins(18, 14, 18)
     pdf.set_auto_page_break(auto=True, margin=18)
 
-    project_font = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
-    )
-    font_paths = [
-        project_font,
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/System/Library/Fonts/PingFang.ttc",
-    ]
-    document_font = None
-    for font_path in font_paths:
-        if not os.path.exists(font_path):
-            continue
-        try:
-            pdf.add_font("zh", "", font_path)
-            pdf.add_font("zh", "B", font_path)
-            document_font = "zh"
-            break
-        except Exception:
-            continue
-    if not document_font:
-        raise RuntimeError("缺少中文字体，暂时无法生成订正单")
+    document_font = _register_pdf_fonts(pdf)
     pdf.document_font = document_font
 
     def write_text(value, line_height=7, bold=False, color=(21, 34, 58)):
@@ -4124,27 +4100,7 @@ def generate_family_review_report_pdf(
     pdf.set_margins(18, 14, 18)
     pdf.set_auto_page_break(auto=True, margin=18)
 
-    project_font = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
-    )
-    font_paths = [
-        project_font,
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/System/Library/Fonts/PingFang.ttc",
-    ]
-    document_font = None
-    for font_path in font_paths:
-        if not os.path.exists(font_path):
-            continue
-        try:
-            pdf.add_font("zh", "", font_path)
-            pdf.add_font("zh", "B", font_path)
-            document_font = "zh"
-            break
-        except Exception:
-            continue
-    if not document_font:
-        raise RuntimeError("缺少中文字体，暂时无法生成家庭复习报告")
+    document_font = _register_pdf_fonts(pdf)
     pdf.document_font = document_font
 
     summary = _summarize_family_review_records(records)
@@ -4277,11 +4233,7 @@ def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, inc
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    font_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSansCJKsc-Regular.otf")
-    )
-    pdf.add_font("zh", "", font_path)
-    pdf.add_font("zh", "B", font_path)
+    _register_pdf_fonts(pdf)
     pdf.set_font("zh", "B", 17)
     safe_multicell(pdf, body.title, h=10, align="C")
     pdf.set_font("zh", "", 10)

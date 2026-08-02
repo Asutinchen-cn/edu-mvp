@@ -363,11 +363,16 @@ class WorksheetFallbackQualityTest(unittest.TestCase):
 
 class WorksheetPdfCompatibilityTest(unittest.TestCase):
     def test_question_and_answer_pdfs_embed_a_matching_truetype_font(self):
-        font_path = Path(__file__).parents[1] / "fonts" / "NotoSansSC-wght.ttf"
-        self.assertTrue(font_path.exists())
-        with TTFont(font_path) as font:
-            self.assertIn("glyf", font)
-            self.assertNotIn("CFF ", font)
+        font_dir = Path(__file__).parents[1] / "fonts"
+        for font_path in (
+            font_dir / "NotoSansSC-Regular.ttf",
+            font_dir / "NotoSansSC-Bold.ttf",
+        ):
+            self.assertTrue(font_path.exists())
+            with TTFont(font_path) as font:
+                self.assertIn("glyf", font)
+                self.assertNotIn("CFF ", font)
+                self.assertNotIn("fvar", font)
 
         pdffonts = shutil.which("pdffonts")
         pdftotext = shutil.which("pdftotext")
