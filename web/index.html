@@ -3056,6 +3056,8 @@ let deleteSaving = false;
 let worksheetUnits = [];
 let worksheetMeta = null;
 const WORKSHEET_CATALOG_RETRY_DELAYS = [0, 600, 1600];
+const WORKSHEET_CATALOG_TIMEOUT_MS = 30000;
+const WORKSHEET_CATALOG_CACHE_KEY = 'edu.curriculum-catalog.v1';
 const REVIEW_STEP_DEFINITIONS = [
     { id: 'corrected', label: '订正原题', description: '说清错因，独立写出正确步骤' },
     { id: 'practiced', label: '完成同类题', description: '完成同类练习并核对答案' },
@@ -3103,17 +3105,39 @@ function waitForWorksheetCatalogRetry(delay) {
     return new Promise(resolve => window.setTimeout(resolve, delay));
 }
 
+function isValidWorksheetCatalog(data) {
+    return Boolean(data && Array.isArray(data.units) && data.units.length);
+}
+
+function readWorksheetCatalogCache() {
+    try {
+        const data = JSON.parse(window.localStorage.getItem(WORKSHEET_CATALOG_CACHE_KEY) || 'null');
+        return isValidWorksheetCatalog(data) ? data : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function writeWorksheetCatalogCache(data) {
+    try {
+        window.localStorage.setItem(WORKSHEET_CATALOG_CACHE_KEY, JSON.stringify(data));
+    } catch (error) {
+        console.warn('Curriculum catalog cache unavailable', error);
+    }
+}
+
 async function requestWorksheetCatalog() {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    const timeout = window.setTimeout(() => controller.abort(), WORKSHEET_CATALOG_TIMEOUT_MS);
     try {
         const resp = await fetch('/curriculum-units', {
             headers: { 'Accept': 'application/json' },
+            cache: 'no-store',
             signal: controller.signal
         });
         if (!resp.ok) throw new Error(`教材接口返回 ${resp.status}`);
         const data = await resp.json();
-        if (!Array.isArray(data.units) || !data.units.length) {
+        if (!isValidWorksheetCatalog(data)) {
             throw new Error('教材接口未返回有效单元');
         }
         return data;
@@ -3128,12 +3152,19 @@ async function loadWorksheetUnits() {
         return;
     }
 
-    document.getElementById('worksheetSourceSummary').textContent = '正在连接上海教材目录...';
-    document.getElementById('worksheetSourceVerification').textContent = '系统会自动重试';
-    document.getElementById('worksheetSource').textContent = '正在连接上海教材目录...';
-    document.getElementById('worksheetUnits').innerHTML = '<div class="worksheet-catalog-state" role="status"><span>正在加载教材单元，请稍候...</span></div>';
-    document.getElementById('worksheetKnowledge').innerHTML = '';
-    document.getElementById('worksheetGenerateBtn').disabled = true;
+    const cachedCatalog = readWorksheetCatalogCache();
+    if (cachedCatalog) {
+        worksheetUnits = cachedCatalog.units;
+        worksheetMeta = cachedCatalog.meta || null;
+        renderWorksheetUnits();
+    } else {
+        document.getElementById('worksheetSourceSummary').textContent = '正在连接上海教材目录...';
+        document.getElementById('worksheetSourceVerification').textContent = '系统会自动重试';
+        document.getElementById('worksheetSource').textContent = '正在连接上海教材目录...';
+        document.getElementById('worksheetUnits').innerHTML = '<div class="worksheet-catalog-state" role="status"><span>正在加载教材单元，请稍候...</span></div>';
+        document.getElementById('worksheetKnowledge').innerHTML = '';
+        document.getElementById('worksheetGenerateBtn').disabled = true;
+    }
     let lastError = null;
     for (const delay of WORKSHEET_CATALOG_RETRY_DELAYS) {
         if (delay) await waitForWorksheetCatalogRetry(delay);
@@ -3141,6 +3172,7 @@ async function loadWorksheetUnits() {
             const data = await requestWorksheetCatalog();
             worksheetUnits = data.units;
             worksheetMeta = data.meta || null;
+            writeWorksheetCatalogCache(data);
             renderWorksheetUnits();
             return;
         } catch (error) {
@@ -3148,6 +3180,11 @@ async function loadWorksheetUnits() {
         }
     }
     console.warn('Curriculum catalog unavailable after retries', lastError);
+    if (cachedCatalog) {
+        const verification = document.getElementById('worksheetSourceVerification');
+        verification.textContent = `${verification.textContent} · 当前显示最近成功目录`;
+        return;
+    }
     renderWorksheetCatalogFailure('教材目录暂时未连上，已自动重试；可以点击按钮重新加载。');
 }
 

@@ -42,7 +42,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("const WORKSHEET_CATALOG_RETRY_DELAYS", HTML)
         self.assertIn("for (const delay of WORKSHEET_CATALOG_RETRY_DELAYS)", HTML)
         self.assertIn("if (!resp.ok)", HTML)
-        self.assertIn("if (!Array.isArray(data.units) || !data.units.length)", HTML)
+        self.assertIn("if (!isValidWorksheetCatalog(data))", HTML)
         self.assertIn('onclick="loadWorksheetUnits()"', HTML)
         self.assertIn("重新加载教材目录", HTML)
         self.assertIn("请通过线上网址打开本网站", HTML)
