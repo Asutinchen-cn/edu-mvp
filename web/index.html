@@ -2099,12 +2099,94 @@
             display: none; margin-top: 18px; padding-top: 18px; border-top: 1px solid #eef0f5;
         }
         .worksheet-result.show { display: block; }
-        .worksheet-downloads { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-        .worksheet-download {
-            display: inline-flex; padding: 10px 16px; border-radius: 999px; color: white;
-            background: var(--brand-blue); font-size: 13px; font-weight: 800; text-decoration: none;
+        .worksheet-downloads {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
         }
-        .worksheet-download.answer { background: var(--success); }
+        .worksheet-download {
+            min-width: 0;
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1px solid rgba(23, 105, 232, 0.2);
+            border-radius: 8px;
+            background: #f4f8ff;
+            color: var(--ink);
+            text-decoration: none;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+        .worksheet-download:hover, .worksheet-download:focus-visible {
+            border-color: var(--brand-blue);
+            background: #edf5ff;
+            outline: none;
+        }
+        .worksheet-download.answer {
+            border-color: rgba(33, 166, 122, 0.24);
+            background: #f0faf6;
+        }
+        .worksheet-download.answer:hover, .worksheet-download.answer:focus-visible {
+            border-color: var(--success);
+            background: #e7f8f1;
+        }
+        .worksheet-download-copy { min-width: 0; }
+        .worksheet-download-copy strong {
+            display: block;
+            color: var(--ink);
+            font-size: 14px;
+            font-weight: 900;
+        }
+        .worksheet-download-copy small {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .worksheet-download-action {
+            flex: 0 0 auto;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--brand-blue);
+            color: #fff;
+            font-size: 18px;
+            font-weight: 900;
+        }
+        .worksheet-download.answer .worksheet-download-action { background: var(--success); }
+        .worksheet-preview-details {
+            overflow: hidden;
+            border-top: 1px solid #e5edf8;
+        }
+        .worksheet-preview-details summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 44px;
+            color: var(--brand-blue);
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            list-style: none;
+        }
+        .worksheet-preview-details summary::-webkit-details-marker { display: none; }
+        .worksheet-preview-details summary::after {
+            content: "展开";
+            color: var(--muted);
+            font-size: 12px;
+        }
+        .worksheet-preview-details[open] summary::after { content: "收起"; }
+        .worksheet-preview-details summary:focus-visible {
+            outline: 3px solid rgba(23, 105, 232, 0.24);
+            outline-offset: 2px;
+        }
         .worksheet-preview { display: flex; flex-direction: column; gap: 8px; }
         .worksheet-preview-item { padding: 12px 14px; background: #f8fbff; border-radius: 14px; font-size: 13px; border: 1px solid #e6eef9; }
         .worksheet-meta { margin-top: 6px; color: #697386; line-height: 1.5; }
@@ -2366,6 +2448,7 @@
             }
             .worksheet-grid { grid-template-columns: 1fr; }
             .worksheet-field.full { grid-column: auto; }
+            .worksheet-downloads { grid-template-columns: 1fr; }
             .curriculum-source { align-items: flex-start; flex-direction: column; }
             .practice-header, .history-header {
                 flex-direction: column;
@@ -2758,7 +2841,10 @@
     <div class="worksheet-status" id="worksheetStatus" role="status" aria-live="polite" hidden></div>
     <div class="worksheet-result" id="worksheetResult">
         <div class="worksheet-downloads" id="worksheetDownloads"></div>
-        <div class="worksheet-preview" id="worksheetPreview"></div>
+        <details class="worksheet-preview-details" id="worksheetPreviewDetails">
+            <summary id="worksheetPreviewSummary">预览题目与考点</summary>
+            <div class="worksheet-preview" id="worksheetPreview"></div>
+        </details>
     </div>
 </div>
 
@@ -3155,6 +3241,9 @@ function setWorksheetStatus(type, message) {
 function clearWorksheetOutput() {
     document.getElementById('worksheetDownloads').innerHTML = '';
     document.getElementById('worksheetPreview').innerHTML = '';
+    const previewDetails = document.getElementById('worksheetPreviewDetails');
+    previewDetails.open = false;
+    document.getElementById('worksheetPreviewSummary').textContent = '预览题目与考点';
     document.getElementById('worksheetResult').classList.remove('show');
     setWorksheetStatus('', '');
 }
@@ -3215,16 +3304,29 @@ async function generateUnitWorksheet() {
         }
         if (!resp.ok) throw new Error(data.error || '生成失败');
         document.getElementById('worksheetDownloads').innerHTML = `
-            <a class="worksheet-download" download="${data.question_pdf.filename}" href="${data.question_pdf.data_url}">📄 下载题目卷</a>
-            <a class="worksheet-download answer" download="${data.answer_pdf.filename}" href="${data.answer_pdf.data_url}">✅ 下载答案解析卷</a>`;
+            <a class="worksheet-download" aria-label="下载题目卷，给孩子作答，不含答案" download="${escapeHtml(data.question_pdf.filename)}" href="${escapeHtml(data.question_pdf.data_url)}">
+                <span class="worksheet-download-copy">
+                    <strong>题目卷</strong>
+                    <small>给孩子作答 · 不含答案</small>
+                </span>
+                <span class="worksheet-download-action" aria-hidden="true">↓</span>
+            </a>
+            <a class="worksheet-download answer" aria-label="下载答案解析卷，供家长核对，含答案和解析" download="${escapeHtml(data.answer_pdf.filename)}" href="${escapeHtml(data.answer_pdf.data_url)}">
+                <span class="worksheet-download-copy">
+                    <strong>答案解析卷</strong>
+                    <small>家长核对 · 含答案和解析</small>
+                </span>
+                <span class="worksheet-download-action" aria-hidden="true">↓</span>
+            </a>`;
         document.getElementById('worksheetPreview').innerHTML = data.questions.map(q => `
             <div class="worksheet-preview-item">
                 <strong>${escapeHtml(q.number)}. [${escapeHtml(q.type)}]</strong> ${escapeHtml(q.question)}
                 ${q.exam_focus ? `<div class="worksheet-meta">考点：${escapeHtml(q.exam_focus)}</div>` : ''}
                 ${q.teaching_intent ? `<div class="worksheet-meta">命题意图：${escapeHtml(q.teaching_intent)}</div>` : ''}
             </div>`).join('');
+        document.getElementById('worksheetPreviewSummary').textContent = `预览 ${data.questions.length} 道题目与考点`;
         document.getElementById('worksheetResult').classList.add('show');
-        setWorksheetStatus('success', `生成完成，共 ${data.questions.length} 题。请分别下载题目卷和答案解析卷。`);
+        setWorksheetStatus('success', `生成完成，共 ${data.questions.length} 题。两份 PDF 已准备好，建议先下载题目卷。`);
         document.getElementById('worksheetResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) {
         const detail = String(e.message || '服务器暂时不可用')
