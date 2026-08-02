@@ -1,6 +1,12 @@
 import json
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
+
+from fontTools.ttLib import TTFont
 
 from api.main import (
     UnitWorksheetRequest,
@@ -9,6 +15,7 @@ from api.main import (
     _validate_unit_request,
     ai_generate_unit_worksheet,
     call_deepseek,
+    generate_unit_worksheet_pdf,
 )
 
 
@@ -352,6 +359,58 @@ class WorksheetFallbackQualityTest(unittest.TestCase):
         self.assertNotRegex(questions[2]["answer"], r"[东南西北]方向")
         self.assertIn("5", questions[2]["question"])
         self.assertIn("8", questions[2]["question"])
+
+
+class WorksheetPdfCompatibilityTest(unittest.TestCase):
+    def test_question_and_answer_pdfs_embed_a_matching_truetype_font(self):
+        font_path = Path(__file__).parents[1] / "fonts" / "NotoSansSC-wght.ttf"
+        self.assertTrue(font_path.exists())
+        with TTFont(font_path) as font:
+            self.assertIn("glyf", font)
+            self.assertNotIn("CFF ", font)
+
+        pdffonts = shutil.which("pdffonts")
+        pdftotext = shutil.which("pdftotext")
+        if not pdffonts or not pdftotext:
+            self.skipTest("Poppler PDF inspection tools are not installed")
+
+        body = rational_math_body()
+        questions = rational_math_questions()
+        with tempfile.TemporaryDirectory() as directory:
+            for include_answers, filename in (
+                (False, "question.pdf"),
+                (True, "answer.pdf"),
+            ):
+                pdf_path = Path(directory) / filename
+                pdf_path.write_bytes(
+                    generate_unit_worksheet_pdf(body, questions, include_answers)
+                )
+
+                font_result = subprocess.run(
+                    [pdffonts, str(pdf_path)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                font_output = font_result.stdout + font_result.stderr
+                self.assertEqual(font_result.returncode, 0, font_output)
+                self.assertNotIn("Mismatch between font type", font_output)
+                self.assertIn("CID TrueType", font_result.stdout)
+
+                text_result = subprocess.run(
+                    [pdftotext, str(pdf_path), "-"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(text_result.returncode, 0, text_result.stderr)
+                self.assertNotIn("Mismatch between font type", text_result.stderr)
+                self.assertIn("六年级有理数单元诊断卷", text_result.stdout)
+                self.assertIn("(-3)-(-7)=______", text_result.stdout)
+                if include_answers:
+                    self.assertIn("答案：4", text_result.stdout)
+                else:
+                    self.assertNotIn("答案：4", text_result.stdout)
 
 
 if __name__ == "__main__":
