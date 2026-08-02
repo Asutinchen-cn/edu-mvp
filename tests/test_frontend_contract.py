@@ -48,6 +48,20 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("请通过线上网址打开本网站", HTML)
         self.assertNotIn("教材目录加载失败，请刷新页面后重试", HTML)
 
+    def test_worksheet_catalog_tolerates_slow_network_and_reuses_last_verified_copy(self):
+        timeout_match = re.search(
+            r"const WORKSHEET_CATALOG_TIMEOUT_MS\s*=\s*(\d+)",
+            HTML,
+        )
+        self.assertIsNotNone(timeout_match)
+        self.assertGreaterEqual(int(timeout_match.group(1)), 30_000)
+        self.assertIn("const WORKSHEET_CATALOG_CACHE_KEY", HTML)
+        self.assertIn("readWorksheetCatalogCache()", HTML)
+        self.assertIn("writeWorksheetCatalogCache(data)", HTML)
+        self.assertIn("window.localStorage.getItem(WORKSHEET_CATALOG_CACHE_KEY)", HTML)
+        self.assertIn("window.localStorage.setItem(WORKSHEET_CATALOG_CACHE_KEY", HTML)
+        self.assertIn("cache: 'no-store'", HTML)
+
     def test_worksheet_is_grade_aware_and_does_not_silently_reuse_sixth_grade(self):
         self.assertIn('id="worksheetGrade"', HTML)
         self.assertIn('<option value="七年级">七年级</option>', HTML)
