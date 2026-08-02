@@ -4222,8 +4222,8 @@ def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, inc
     """生成按单元筛选的题目卷或答案解析卷。"""
     from fpdf import FPDF
 
-    def safe_multicell(pdf_obj, text_value, h=7, align="J"):
-        text_value = str(text_value or "").strip()
+    def safe_multicell(pdf_obj, text_value, h=7, align="L"):
+        text_value = re.sub(r"\s+", " ", str(text_value or "")).strip()
         if not text_value:
             return
         pdf_obj.set_x(pdf_obj.l_margin)
