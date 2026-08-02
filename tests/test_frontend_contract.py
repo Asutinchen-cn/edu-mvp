@@ -82,6 +82,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("setWorksheetStatus('error'", HTML)
         self.assertNotIn("alert('生成复习卷失败：' + e.message)", HTML)
 
+    def test_worksheet_output_clearly_separates_child_and_parent_pdfs(self):
+        self.assertIn("给孩子作答 · 不含答案", HTML)
+        self.assertIn("家长核对 · 含答案和解析", HTML)
+        self.assertIn('class="worksheet-download-copy"', HTML)
+        self.assertIn('class="worksheet-download-action"', HTML)
+        preview_details = re.search(
+            r'<details class="worksheet-preview-details" id="worksheetPreviewDetails"[^>]*>',
+            HTML,
+        )
+        self.assertIsNotNone(preview_details)
+        self.assertNotIn(" open", preview_details.group(0))
+        self.assertIn('id="worksheetPreviewSummary"', HTML)
+        self.assertIn("预览 ${data.questions.length} 道题目与考点", HTML)
+        self.assertIn("previewDetails.open = false", HTML)
+
     def test_analysis_grade_selector_is_focused_on_junior_middle_school(self):
         for grade in ("六年级", "七年级", "八年级", "九年级"):
             self.assertIn(f'<option value="{grade}"', HTML)
