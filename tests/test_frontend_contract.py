@@ -222,6 +222,35 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         ):
             self.assertNotIn(f"alert('{message}')", HTML)
 
+    def test_parent_forms_use_labels_and_keyboard_operable_upload_actions(self):
+        for control_id in (
+            "gradeSelect",
+            "analysisSubject",
+            "worksheetGrade",
+            "worksheetSubject",
+            "worksheetEnglishEdition",
+            "worksheetSemester",
+            "worksheetDifficulty",
+            "worksheetCount",
+            "worksheetTitle",
+        ):
+            self.assertRegex(HTML, rf'<label for="{control_id}"[^>]*>')
+
+        self.assertIn('<button type="button" class="dropzone" id="dropzone"', HTML)
+        self.assertIn('<button type="button" class="example-link" onclick="loadExample()">', HTML)
+        self.assertIn('aria-label="关闭分析结果"', HTML)
+        self.assertIn('<label class="visually-hidden" for="dateFrom">开始日期</label>', HTML)
+        self.assertIn('<label class="visually-hidden" for="dateTo">结束日期</label>', HTML)
+        self.assertIn(".visually-hidden {", HTML)
+
+    def test_mobile_history_filters_have_comfortable_touch_targets(self):
+        filter_style = re.search(r"\.filter-tab\s*\{(?P<body>[^}]*)\}", HTML)
+        history_view_style = re.search(r"\.history-view-button\s*\{(?P<body>[^}]*)\}", HTML)
+        self.assertIsNotNone(filter_style)
+        self.assertIsNotNone(history_view_style)
+        self.assertRegex(filter_style.group("body"), r"min-height:\s*40px")
+        self.assertRegex(history_view_style.group("body"), r"min-height:\s*40px")
+
     def test_clear_subject_mismatch_switches_subject_and_keeps_files_for_retry(self):
         self.assertIn("error.code = json.code || ''", HTML)
         self.assertIn("error.detectedSubject = json.detected_subject || ''", HTML)

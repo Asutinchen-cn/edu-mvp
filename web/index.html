@@ -22,6 +22,17 @@
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             background:
@@ -549,11 +560,14 @@
             outline: none;
         }
         .dropzone {
+            width: 100%;
             background: #f3f8ff;
             border: 2px dashed #a9c9f6;
             border-radius: 18px;
             padding: 34px 20px;
             text-align: center;
+            color: inherit;
+            font: inherit;
             cursor: pointer;
             transition: all 0.3s;
         }
@@ -585,7 +599,14 @@
             box-shadow: 0 12px 24px rgba(23, 105, 232, 0.22);
         }
         .example-link {
+            display: block;
+            min-height: 40px;
+            margin: 0 auto;
+            padding: 0 8px;
+            border: 0;
+            background: transparent;
             text-align: center;
+            font-family: inherit;
             font-size: 13px;
             color: var(--brand-blue);
             cursor: pointer;
@@ -757,6 +778,7 @@
             flex-wrap: wrap;
         }
         .filter-tab {
+            min-height: 40px;
             padding: 6px 16px;
             border: 1px solid var(--line);
             border-radius: 999px;
@@ -810,7 +832,7 @@
             background: #f4f8ff;
         }
         .history-view-button {
-            min-height: 34px;
+            min-height: 40px;
             padding: 0 14px;
             border: 0;
             border-radius: 6px;
@@ -830,6 +852,7 @@
             margin-left: auto;
         }
         .date-range input[type="date"] {
+            min-height: 40px;
             padding: 6px 10px;
             border: 1px solid var(--line);
             border-radius: 10px;
@@ -2658,7 +2681,7 @@
 
         <div class="form-row">
             <div class="form-group">
-                <label>年级</label>
+                <label for="gradeSelect">年级</label>
                 <select id="gradeSelect">
                     <option value="六年级" selected>六年级</option>
                     <option value="七年级">七年级</option>
@@ -2667,7 +2690,7 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>学科</label>
+                <label for="analysisSubject">学科</label>
                 <select id="analysisSubject">
                     <option value="math">数学</option>
                     <option value="english">英语</option>
@@ -2717,11 +2740,12 @@
             </div>
         </details>
 
-        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+        <button type="button" class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
             <div class="dropzone-icon">🖼️</div>
             <div class="dropzone-text">点击上传或拖拽文件到此处</div>
             <div class="dropzone-hint">支持 JPG / PNG / PDF；多页请一次选完，最多 12 页 / 50MB</div>
-        </div>
+        </button>
+        <label class="visually-hidden" for="fileInput">选择试卷图片或 PDF</label>
         <input type="file" id="fileInput" accept="image/jpeg,image/png,application/pdf" multiple style="display:none">
 
         <div class="file-preview" id="filePreview"></div>
@@ -2730,7 +2754,7 @@
             ☁️ 选择试卷图片
         </button>
 
-        <div class="example-link" onclick="loadExample()">示例：点击查看上传示例</div>
+        <button type="button" class="example-link" onclick="loadExample()">示例：点击查看上传示例</button>
 
         <div class="analysis-status" id="analysisStatus" role="status" aria-live="polite" hidden></div>
 
@@ -2744,7 +2768,7 @@
 <div class="result-section" id="resultSection">
     <div class="result-header">
         <h3>📊 分析结果</h3>
-        <button class="close-result" onclick="closeResult()">✕</button>
+        <button class="close-result" aria-label="关闭分析结果" onclick="closeResult()">✕</button>
     </div>
     <!-- Summary Card -->
     <div class="summary-card" id="summaryCard"></div>
@@ -2781,7 +2805,7 @@
     </details>
     <div class="worksheet-grid">
         <div class="worksheet-field">
-            <label>年级</label>
+            <label for="worksheetGrade">年级</label>
             <select id="worksheetGrade" onchange="renderWorksheetUnits()">
                 <option value="六年级">六年级</option>
                 <option value="七年级">七年级</option>
@@ -2790,36 +2814,36 @@
             </select>
         </div>
         <div class="worksheet-field">
-            <label>学科</label>
+            <label for="worksheetSubject">学科</label>
             <select id="worksheetSubject" onchange="renderWorksheetUnits()">
                 <option value="math">数学</option>
                 <option value="english">英语</option>
             </select>
         </div>
         <div class="worksheet-field" id="worksheetEditionField" hidden>
-            <label>英语版本</label>
+            <label for="worksheetEnglishEdition">英语版本</label>
             <select id="worksheetEnglishEdition" onchange="renderWorksheetUnits()">
                 <option value="oxford-shanghai">牛津上海版</option>
                 <option value="new-century">新世纪版</option>
             </select>
         </div>
         <div class="worksheet-field">
-            <label>学期</label>
+            <label for="worksheetSemester">学期</label>
             <select id="worksheetSemester" onchange="renderWorksheetUnits()">
                 <option value="first">第一学期</option>
                 <option value="second">第二学期</option>
             </select>
         </div>
         <div class="worksheet-field full">
-            <label>单元</label>
-            <div class="worksheet-checks" id="worksheetUnits"></div>
+            <label id="worksheetUnitsLabel">单元</label>
+            <div class="worksheet-checks" id="worksheetUnits" role="group" aria-labelledby="worksheetUnitsLabel"></div>
         </div>
         <div class="worksheet-field full">
-            <label>知识点</label>
-            <div class="worksheet-checks" id="worksheetKnowledge"></div>
+            <label id="worksheetKnowledgeLabel">知识点</label>
+            <div class="worksheet-checks" id="worksheetKnowledge" role="group" aria-labelledby="worksheetKnowledgeLabel"></div>
         </div>
         <div class="worksheet-field">
-            <label>难度</label>
+            <label for="worksheetDifficulty">难度</label>
             <select id="worksheetDifficulty">
                 <option value="basic">基础</option>
                 <option value="advanced">提高</option>
@@ -2827,11 +2851,11 @@
             </select>
         </div>
         <div class="worksheet-field">
-            <label>题量</label>
+            <label for="worksheetCount">题量</label>
             <input id="worksheetCount" type="number" min="3" max="20" value="8">
         </div>
         <div class="worksheet-field full">
-            <label>卷面标题</label>
+            <label for="worksheetTitle">卷面标题</label>
             <input id="worksheetTitle" type="text" value="上海六年级单元复习卷">
         </div>
     </div>
@@ -2879,8 +2903,10 @@
         <button class="filter-tab" data-filter="all" onclick="filterHistory('all', this)">全部</button>
         <button class="filter-tab sync-bank-btn" onclick="openWrongBankQuery()">查询家庭错题库</button>
         <div class="date-range">
+            <label class="visually-hidden" for="dateFrom">开始日期</label>
             <input type="date" id="dateFrom">
             <span>~</span>
+            <label class="visually-hidden" for="dateTo">结束日期</label>
             <input type="date" id="dateTo">
         </div>
     </div>
