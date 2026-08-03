@@ -45,6 +45,25 @@ def rational_math_body():
     )
 
 
+def full_rational_math_body():
+    return UnitWorksheetRequest(
+        grade="六年级",
+        subject="math",
+        semester="first",
+        unit_ids=["math-6a-rational-numbers"],
+        knowledge_points=[
+            "有理数",
+            "有理数的加法与减法",
+            "有理数的乘法与除法",
+            "有理数的乘方",
+            "有理数的混合运算",
+        ],
+        difficulty="basic",
+        question_count=3,
+        title="六年级有理数单元诊断卷",
+    )
+
+
 def rational_math_questions():
     return [
         {
@@ -223,6 +242,22 @@ class WorksheetQualityValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "重复"):
             _validate_generated_questions(math_body(), questions)
 
+    def test_rational_multiplication_point_rejects_a_wrapped_absolute_value_item(self):
+        body = full_rational_math_body()
+        questions = _fallback_unit_worksheet(body, _validate_unit_request(body))
+        questions[2].update({
+            "question": (
+                "在实际情境中完成下面问题，并写出依据："
+                "在 -5、-3、0、2 中，绝对值最小的数是哪个？"
+            ),
+            "answer": "0",
+            "explanation": "四个数的绝对值依次为 5、3、0、2，其中 0 最小。",
+            "knowledge_points": ["有理数的乘法与除法"],
+        })
+
+        with self.assertRaisesRegex(ValueError, "重复|考点"):
+            _validate_generated_questions(body, questions)
+
     def test_choice_answer_must_reference_one_of_four_options(self):
         questions = valid_math_questions()
         questions[1]["answer"] = "E"
@@ -359,6 +394,21 @@ class WorksheetFallbackQualityTest(unittest.TestCase):
         self.assertNotRegex(questions[2]["answer"], r"[东南西北]方向")
         self.assertIn("5", questions[2]["question"])
         self.assertIn("8", questions[2]["question"])
+
+    def test_full_rational_fallback_assesses_multiplication_instead_of_rephrasing(self):
+        body = full_rational_math_body()
+        questions = _fallback_unit_worksheet(body, _validate_unit_request(body))
+
+        self.assertEqual(
+            [question["knowledge_points"][0] for question in questions],
+            ["有理数", "有理数的加法与减法", "有理数的乘法与除法"],
+        )
+        self.assertNotIn("绝对值最小", questions[2]["question"])
+        self.assertRegex(
+            questions[2]["question"] + questions[2]["explanation"],
+            r"乘|×",
+        )
+        self.assertIn("每分钟", questions[2]["question"])
 
 
 class WorksheetPdfCompatibilityTest(unittest.TestCase):
