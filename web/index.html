@@ -1807,20 +1807,29 @@
         }
         .detail-header {
             display: flex; justify-content: space-between; align-items: center;
+            width: 100%;
             padding: 14px 18px;
+            border: 0;
             cursor: pointer;
             background: #f8fbff;
+            color: inherit;
+            font: inherit;
+            text-align: left;
             transition: background 0.2s;
             user-select: none;
         }
         .detail-header:hover { background: #eef6ff; }
+        .detail-header:focus-visible {
+            outline: 3px solid rgba(23, 105, 232, 0.28);
+            outline-offset: -3px;
+        }
         .detail-header-left {
             display: flex; align-items: center; gap: 10px;
         }
         .detail-header-left .section-icon {
             font-size: 18px;
         }
-        .detail-header-left h4 {
+        .detail-header-left .detail-title {
             font-size: 14px; font-weight: 600; color: #333;
         }
         .detail-toggle {
@@ -1970,11 +1979,18 @@
             display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;
         }
         .q-option {
-            font-size: 13px; color: #555; padding: 6px 12px;
+            width: 100%; min-height: 40px;
+            font-family: inherit; font-size: 13px; color: #555; padding: 6px 12px;
+            text-align: left;
             background: white; border-radius: 8px; border: 1px solid #eef0f5;
             cursor: pointer; transition: all 0.2s;
         }
         .q-option:hover { border-color: #3A8DFF; }
+        .q-option:focus-visible {
+            outline: 3px solid rgba(23, 105, 232, 0.22);
+            outline-offset: 1px;
+        }
+        .q-option:disabled { color: #555; cursor: default; opacity: 1; }
         .q-option.selected { border-color: #3A8DFF; background: #eef4ff; }
         .q-option.correct { border-color: #4DCB9D; background: #e6faf0; }
         .q-option.wrong { border-color: #e53935; background: #ffe8e8; }
@@ -4000,14 +4016,14 @@ function renderAnalysisResult(data) {
     document.getElementById('detailSections').innerHTML = `
         <!-- Section A: Error Type Distribution -->
         <div class="detail-section" id="sectionA">
-            <div class="detail-header" onclick="toggleSection('sectionA')">
-                <div class="detail-header-left">
+            <button type="button" class="detail-header" aria-expanded="false" aria-controls="sectionA-body" onclick="toggleSection('sectionA')">
+                <span class="detail-header-left">
                     <span class="section-icon">📊</span>
-                    <h4>错误类型分布</h4>
-                </div>
+                    <span class="detail-title">错误类型分布</span>
+                </span>
                 <span class="detail-toggle">▶</span>
-            </div>
-            <div class="detail-body">
+            </button>
+            <div class="detail-body" id="sectionA-body">
                 ${data.errorTypes.length ? data.errorTypes.map(et => `
                     <div class="error-type-row">
                         <div class="error-type-label">${escapeHtml(et.name)}</div>
@@ -4022,14 +4038,14 @@ function renderAnalysisResult(data) {
 
         <!-- Section B: Wrong Questions -->
         <div class="detail-section" id="sectionB">
-            <div class="detail-header" onclick="toggleSection('sectionB')">
-                <div class="detail-header-left">
+            <button type="button" class="detail-header" aria-expanded="false" aria-controls="sectionB-body" onclick="toggleSection('sectionB')">
+                <span class="detail-header-left">
                     <span class="section-icon">❌</span>
-                    <h4>错题列表（共 ${data.wrongQuestions.length} 题）</h4>
-                </div>
+                    <span class="detail-title">错题列表（共 ${data.wrongQuestions.length} 题）</span>
+                </span>
                 <span class="detail-toggle">▶</span>
-            </div>
-            <div class="detail-body">
+            </button>
+            <div class="detail-body" id="sectionB-body">
                 ${data.wrongQuestions.map(q => `
                     <div class="wrong-q-item">
                         <div class="wrong-q-top">
@@ -4045,14 +4061,14 @@ function renderAnalysisResult(data) {
 
         <!-- Section C: Weak Point Details -->
         <div class="detail-section" id="sectionC">
-            <div class="detail-header" onclick="toggleSection('sectionC')">
-                <div class="detail-header-left">
+            <button type="button" class="detail-header" aria-expanded="false" aria-controls="sectionC-body" onclick="toggleSection('sectionC')">
+                <span class="detail-header-left">
                     <span class="section-icon">🎯</span>
-                    <h4>薄弱知识点详解</h4>
-                </div>
+                    <span class="detail-title">薄弱知识点详解</span>
+                </span>
                 <span class="detail-toggle">▶</span>
-            </div>
-            <div class="detail-body">
+            </button>
+            <div class="detail-body" id="sectionC-body">
                 ${data.weakDetails.map(w => `
                     <div class="weak-detail-card">
                         <div class="weak-detail-name">🔴 ${escapeHtml(w.name)}</div>
@@ -4066,7 +4082,10 @@ function renderAnalysisResult(data) {
 }
 
 function toggleSection(id) {
-    document.getElementById(id).classList.toggle('open');
+    const section = document.getElementById(id);
+    const isOpen = section.classList.toggle('open');
+    const header = section.querySelector('.detail-header');
+    header.setAttribute('aria-expanded', String(isOpen));
 }
 
 function closeResult() {
@@ -4242,12 +4261,13 @@ function renderPracticeQuestions(questions) {
             <div class="q-options" id="q-opts-${i}">
                 ${q.options.map((opt, j) => {
                     const label = String.fromCharCode(65 + j);
-                    return `<div class="q-option" data-idx="${j}" onclick="checkAnswer(${i}, ${j})">${label}. ${escapeHtml(opt)}</div>`;
+                    return `<button type="button" class="q-option" data-idx="${j}" onclick="checkAnswer(${i}, ${j})">${label}. ${escapeHtml(opt)}</button>`;
                 }).join('')}
             </div>` : `
             <div class="q-actions">
+                <label class="visually-hidden" for="fill-input-${i}">第 ${i+1} 题答案</label>
                 <input type="text" id="fill-input-${i}" placeholder="请输入答案" style="padding:6px 12px;border:1px solid #dde4f0;border-radius:8px;font-size:13px;width:200px">
-                <button class="q-action-btn" id="fill-check-${i}" onclick="checkFillAnswer(${i})">确认</button>
+                <button type="button" class="q-action-btn" id="fill-check-${i}" onclick="checkFillAnswer(${i})">确认</button>
             </div>`;
         return `
             <div class="q-card" id="q-card-${i}">
@@ -4260,8 +4280,8 @@ function renderPracticeQuestions(questions) {
                 <div class="q-answer" id="q-answer-${i}">✅ 正确答案：${escapeHtml(q.answer)}</div>
                 <div class="q-hint" id="q-hint-${i}">💡 提示：${escapeHtml(q.hint)}</div>
                 <div class="q-actions">
-                    <button class="q-action-btn" onclick="showHint(${i})">查看提示</button>
-                    <button class="q-action-btn" onclick="showAnswer(${i})">查看答案</button>
+                    <button type="button" class="q-action-btn" onclick="showHint(${i})">查看提示</button>
+                    <button type="button" class="q-action-btn" onclick="showAnswer(${i})">查看答案</button>
                 </div>
             </div>`;
     }).join('');
@@ -4300,7 +4320,7 @@ function practiceChoiceAnswerIndex(answer) {
 
 function lockPracticeQuestion(questionIndex) {
     document.querySelectorAll(`#q-opts-${questionIndex} .q-option`).forEach(option => {
-        option.style.pointerEvents = 'none';
+        option.disabled = true;
     });
     const input = document.getElementById(`fill-input-${questionIndex}`);
     const checkButton = document.getElementById(`fill-check-${questionIndex}`);
@@ -4326,7 +4346,7 @@ function checkAnswer(qIdx, selectedIdx) {
     const opts = document.querySelectorAll(`#q-opts-${qIdx} .q-option`);
     const correctIdx = practiceChoiceAnswerIndex(currentPracticeQuestions[qIdx]?.answer);
     opts.forEach((opt, i) => {
-        opt.style.pointerEvents = 'none';
+        opt.disabled = true;
         if (i === correctIdx) opt.classList.add('correct');
         if (i === selectedIdx && i !== correctIdx) opt.classList.add('wrong');
     });

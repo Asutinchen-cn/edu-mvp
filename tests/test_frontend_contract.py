@@ -251,6 +251,29 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertRegex(filter_style.group("body"), r"min-height:\s*40px")
         self.assertRegex(history_view_style.group("body"), r"min-height:\s*40px")
 
+    def test_analysis_details_and_practice_questions_are_keyboard_operable(self):
+        self.assertIn(
+            '<button type="button" class="detail-header" aria-expanded="false"',
+            HTML,
+        )
+        self.assertIn('aria-controls="sectionA-body"', HTML)
+        self.assertIn("header.setAttribute('aria-expanded', String(isOpen));", HTML)
+        practice_renderer = re.search(
+            r"function renderPracticeQuestions\(questions\) \{(?P<body>.*?)\n\}\n\nfunction normalizePracticeAnswer",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(practice_renderer)
+        self.assertIn('<button type="button" class="q-option"', practice_renderer.group("body"))
+        self.assertNotRegex(practice_renderer.group("body"), r'<div class="q-option(?:\s|")')
+        self.assertIn('option.disabled = true', HTML)
+        self.assertIn('class="visually-hidden" for="fill-input-${i}"', HTML)
+
+        option_style = re.search(r"\.q-option\s*\{(?P<body>[^}]*)\}", HTML)
+        self.assertIsNotNone(option_style)
+        self.assertRegex(option_style.group("body"), r"min-height:\s*40px")
+        self.assertRegex(option_style.group("body"), r"width:\s*100%")
+
     def test_clear_subject_mismatch_switches_subject_and_keeps_files_for_retry(self):
         self.assertIn("error.code = json.code || ''", HTML)
         self.assertIn("error.detectedSubject = json.detected_subject || ''", HTML)
