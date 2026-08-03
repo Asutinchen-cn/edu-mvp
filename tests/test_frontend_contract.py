@@ -274,6 +274,28 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertRegex(option_style.group("body"), r"min-height:\s*40px")
         self.assertRegex(option_style.group("body"), r"width:\s*100%")
 
+    def test_practice_uses_text_feedback_instead_of_color_alone(self):
+        self.assertIn(
+            'class="q-feedback" id="q-feedback-${i}" role="status" aria-live="polite"',
+            HTML,
+        )
+        self.assertIn("function setPracticeQuestionFeedback(questionIndex, type, message)", HTML)
+        self.assertIn("回答正确", HTML)
+        self.assertIn("回答错误，正确答案已标出", HTML)
+        self.assertIn("已查看答案，本题记为未掌握", HTML)
+        self.assertIn('aria-controls="q-hint-${i}" aria-expanded="false"', HTML)
+        self.assertIn('onclick="showHint(${i}, this)"', HTML)
+        self.assertIn('aria-controls="q-answer-${i}" aria-expanded="false"', HTML)
+        self.assertIn('onclick="showAnswer(${i}, this)"', HTML)
+        self.assertIn("button.setAttribute('aria-expanded', String(isVisible));", HTML)
+        self.assertIn("button.disabled = true", HTML)
+        self.assertIn("，你的答案，回答正确", HTML)
+        self.assertIn("，你的答案，回答错误", HTML)
+
+        feedback_style = re.search(r"\.q-feedback\s*\{(?P<body>[^}]*)\}", HTML)
+        self.assertIsNotNone(feedback_style)
+        self.assertRegex(feedback_style.group("body"), r"min-height:\s*20px")
+
     def test_clear_subject_mismatch_switches_subject_and_keeps_files_for_retry(self):
         self.assertIn("error.code = json.code || ''", HTML)
         self.assertIn("error.detectedSubject = json.detected_subject || ''", HTML)

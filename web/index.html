@@ -2005,6 +2005,17 @@
             padding-left: 12px; border-left: 2px solid #eef0f5;
         }
         .q-hint.show { display: block; }
+        .q-feedback {
+            min-height: 20px;
+            margin-top: 8px;
+            font-size: 12px;
+            line-height: 1.6;
+            font-weight: 800;
+        }
+        .q-feedback:empty { display: none; }
+        .q-feedback.correct { color: #176c54; }
+        .q-feedback.wrong { color: #b33b30; }
+        .q-feedback.info { color: #315578; }
         .q-actions {
             display: flex; gap: 10px; margin-top: 8px;
         }
@@ -4261,12 +4272,12 @@ function renderPracticeQuestions(questions) {
             <div class="q-options" id="q-opts-${i}">
                 ${q.options.map((opt, j) => {
                     const label = String.fromCharCode(65 + j);
-                    return `<button type="button" class="q-option" data-idx="${j}" onclick="checkAnswer(${i}, ${j})">${label}. ${escapeHtml(opt)}</button>`;
+                    return `<button type="button" class="q-option" data-idx="${j}" aria-describedby="q-feedback-${i}" onclick="checkAnswer(${i}, ${j})">${label}. ${escapeHtml(opt)}</button>`;
                 }).join('')}
             </div>` : `
             <div class="q-actions">
                 <label class="visually-hidden" for="fill-input-${i}">第 ${i+1} 题答案</label>
-                <input type="text" id="fill-input-${i}" placeholder="请输入答案" style="padding:6px 12px;border:1px solid #dde4f0;border-radius:8px;font-size:13px;width:200px">
+                <input type="text" id="fill-input-${i}" aria-describedby="q-feedback-${i}" placeholder="请输入答案" style="padding:6px 12px;border:1px solid #dde4f0;border-radius:8px;font-size:13px;width:200px">
                 <button type="button" class="q-action-btn" id="fill-check-${i}" onclick="checkFillAnswer(${i})">确认</button>
             </div>`;
         return `
@@ -4279,9 +4290,10 @@ function renderPracticeQuestions(questions) {
                 ${optionsHtml}
                 <div class="q-answer" id="q-answer-${i}">✅ 正确答案：${escapeHtml(q.answer)}</div>
                 <div class="q-hint" id="q-hint-${i}">💡 提示：${escapeHtml(q.hint)}</div>
+                <div class="q-feedback" id="q-feedback-${i}" role="status" aria-live="polite"></div>
                 <div class="q-actions">
-                    <button type="button" class="q-action-btn" onclick="showHint(${i})">查看提示</button>
-                    <button type="button" class="q-action-btn" onclick="showAnswer(${i})">查看答案</button>
+                    <button type="button" class="q-action-btn" aria-controls="q-hint-${i}" aria-expanded="false" onclick="showHint(${i}, this)">查看提示</button>
+                    <button type="button" class="q-action-btn" aria-controls="q-answer-${i}" aria-expanded="false" onclick="showAnswer(${i}, this)">查看答案</button>
                 </div>
             </div>`;
     }).join('');
@@ -4328,16 +4340,28 @@ function lockPracticeQuestion(questionIndex) {
     if (checkButton) checkButton.disabled = true;
 }
 
+function setPracticeQuestionFeedback(questionIndex, type, message) {
+    const feedback = document.getElementById(`q-feedback-${questionIndex}`);
+    if (!feedback) return;
+    feedback.className = `q-feedback ${type}`;
+    feedback.textContent = message;
+}
+
 function recordPracticeResult(questionIndex, isCorrect) {
     if (
-        !currentPracticeScorable
-        || questionIndex < 0
+        questionIndex < 0
         || questionIndex >= currentPracticeResults.length
         || currentPracticeResults[questionIndex] !== null
     ) return;
-    currentPracticeResults[questionIndex] = Boolean(isCorrect);
     const card = document.getElementById(`q-card-${questionIndex}`);
     card?.classList.add(isCorrect ? 'result-correct' : 'result-wrong');
+    setPracticeQuestionFeedback(
+        questionIndex,
+        isCorrect ? 'correct' : 'wrong',
+        isCorrect ? '回答正确' : '回答错误，正确答案已标出'
+    );
+    if (!currentPracticeScorable) return;
+    currentPracticeResults[questionIndex] = Boolean(isCorrect);
     renderPracticeResultPanel();
 }
 
@@ -4349,6 +4373,14 @@ function checkAnswer(qIdx, selectedIdx) {
         opt.disabled = true;
         if (i === correctIdx) opt.classList.add('correct');
         if (i === selectedIdx && i !== correctIdx) opt.classList.add('wrong');
+        const optionLabel = opt.textContent.trim();
+        if (i === selectedIdx && i === correctIdx) {
+            opt.setAttribute('aria-label', `${optionLabel}，你的答案，回答正确`);
+        } else if (i === selectedIdx) {
+            opt.setAttribute('aria-label', `${optionLabel}，你的答案，回答错误`);
+        } else if (i === correctIdx) {
+            opt.setAttribute('aria-label', `${optionLabel}，正确答案`);
+        }
     });
     recordPracticeResult(qIdx, selectedIdx === correctIdx);
 }
@@ -4371,20 +4403,29 @@ function checkFillAnswer(qIdx) {
     recordPracticeResult(qIdx, isCorrect);
 }
 
-function showHint(idx) {
-    document.getElementById(`q-hint-${idx}`).classList.toggle('show');
+function showHint(idx, button) {
+    const isVisible = document.getElementById(`q-hint-${idx}`).classList.toggle('show');
+    button.setAttribute('aria-expanded', String(isVisible));
+    button.textContent = isVisible ? '收起提示' : '查看提示';
 }
 
-function showAnswer(idx) {
-    if (currentPracticeScorable && currentPracticeResults[idx] === null) {
+function showAnswer(idx, button) {
+    const wasUnanswered = currentPracticeScorable && currentPracticeResults[idx] === null;
+    if (wasUnanswered) {
         const correctIdx = practiceChoiceAnswerIndex(currentPracticeQuestions[idx]?.answer);
         document.querySelectorAll(`#q-opts-${idx} .q-option`).forEach((option, optionIndex) => {
             if (optionIndex === correctIdx) option.classList.add('correct');
         });
         lockPracticeQuestion(idx);
         recordPracticeResult(idx, false);
+        setPracticeQuestionFeedback(idx, 'info', '已查看答案，本题记为未掌握');
+    } else if (!currentPracticeScorable) {
+        setPracticeQuestionFeedback(idx, 'info', '答案已显示，本轮不计入掌握状态');
     }
     document.getElementById(`q-answer-${idx}`).classList.add('show');
+    button.setAttribute('aria-expanded', 'true');
+    button.textContent = '答案已显示';
+    button.disabled = true;
 }
 
 function renderPracticeResultPanel() {
