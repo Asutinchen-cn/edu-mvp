@@ -3058,6 +3058,8 @@ let worksheetMeta = null;
 const WORKSHEET_CATALOG_RETRY_DELAYS = [0, 600, 1600];
 const WORKSHEET_CATALOG_TIMEOUT_MS = 30000;
 const WORKSHEET_CATALOG_CACHE_KEY = 'edu.curriculum-catalog.v1';
+const WORKSHEET_CATALOG_RECOVERY_DELAY_MS = 15000;
+let worksheetCatalogRecoveryTimer = null;
 const REVIEW_STEP_DEFINITIONS = [
     { id: 'corrected', label: '订正原题', description: '说清错因，独立写出正确步骤' },
     { id: 'practiced', label: '完成同类题', description: '完成同类练习并核对答案' },
@@ -3105,6 +3107,20 @@ function waitForWorksheetCatalogRetry(delay) {
     return new Promise(resolve => window.setTimeout(resolve, delay));
 }
 
+function clearWorksheetCatalogRecovery() {
+    if (worksheetCatalogRecoveryTimer === null) return;
+    window.clearTimeout(worksheetCatalogRecoveryTimer);
+    worksheetCatalogRecoveryTimer = null;
+}
+
+function scheduleWorksheetCatalogRecovery() {
+    if (worksheetCatalogRecoveryTimer !== null) return;
+    worksheetCatalogRecoveryTimer = window.setTimeout(() => {
+        worksheetCatalogRecoveryTimer = null;
+        loadWorksheetUnits();
+    }, WORKSHEET_CATALOG_RECOVERY_DELAY_MS);
+}
+
 function isValidWorksheetCatalog(data) {
     return Boolean(data && Array.isArray(data.units) && data.units.length);
 }
@@ -3147,6 +3163,7 @@ async function requestWorksheetCatalog() {
 }
 
 async function loadWorksheetUnits() {
+    clearWorksheetCatalogRecovery();
     if (window.location.protocol === 'file:') {
         renderWorksheetCatalogFailure('请通过线上网址打开本网站，直接打开本地 HTML 无法读取服务器教材目录。');
         return;
@@ -3173,6 +3190,7 @@ async function loadWorksheetUnits() {
             worksheetUnits = data.units;
             worksheetMeta = data.meta || null;
             writeWorksheetCatalogCache(data);
+            clearWorksheetCatalogRecovery();
             renderWorksheetUnits();
             return;
         } catch (error) {
@@ -3183,9 +3201,11 @@ async function loadWorksheetUnits() {
     if (cachedCatalog) {
         const verification = document.getElementById('worksheetSourceVerification');
         verification.textContent = `${verification.textContent} · 当前显示最近成功目录`;
+        scheduleWorksheetCatalogRecovery();
         return;
     }
     renderWorksheetCatalogFailure('教材目录暂时未连上，已自动重试；可以点击按钮重新加载。');
+    scheduleWorksheetCatalogRecovery();
 }
 
 function renderWorksheetUnits() {

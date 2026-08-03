@@ -62,6 +62,17 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("window.localStorage.setItem(WORKSHEET_CATALOG_CACHE_KEY", HTML)
         self.assertIn("cache: 'no-store'", HTML)
 
+    def test_worksheet_catalog_keeps_recovering_after_a_temporary_api_restart(self):
+        self.assertIn("const WORKSHEET_CATALOG_RECOVERY_DELAY_MS", HTML)
+        self.assertIn("let worksheetCatalogRecoveryTimer = null", HTML)
+        self.assertIn("function scheduleWorksheetCatalogRecovery()", HTML)
+        self.assertIn(
+            "worksheetCatalogRecoveryTimer = window.setTimeout",
+            HTML,
+        )
+        self.assertIn("scheduleWorksheetCatalogRecovery();", HTML)
+        self.assertIn("window.clearTimeout(worksheetCatalogRecoveryTimer)", HTML)
+
     def test_worksheet_is_grade_aware_and_does_not_silently_reuse_sixth_grade(self):
         self.assertIn('id="worksheetGrade"', HTML)
         self.assertIn('<option value="七年级">七年级</option>', HTML)
