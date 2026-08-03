@@ -45,7 +45,7 @@ def rational_math_body():
     )
 
 
-def full_rational_math_body():
+def full_rational_math_body(question_count=3):
     return UnitWorksheetRequest(
         grade="六年级",
         subject="math",
@@ -59,7 +59,7 @@ def full_rational_math_body():
             "有理数的混合运算",
         ],
         difficulty="basic",
-        question_count=3,
+        question_count=question_count,
         title="六年级有理数单元诊断卷",
     )
 
@@ -256,6 +256,19 @@ class WorksheetQualityValidationTest(unittest.TestCase):
         })
 
         with self.assertRaisesRegex(ValueError, "重复|考点"):
+            _validate_generated_questions(body, questions)
+
+    def test_mixed_operations_point_rejects_a_single_negative_multiplication(self):
+        body = full_rational_math_body(question_count=5)
+        questions = _fallback_unit_worksheet(body, _validate_unit_request(body))
+        questions[4].update({
+            "question": "计算 (-3)×4。",
+            "answer": "-12",
+            "explanation": "负数乘正数，积为负数，所以 (-3)×4=-12。",
+            "knowledge_points": ["有理数的混合运算"],
+        })
+
+        with self.assertRaisesRegex(ValueError, "考点"):
             _validate_generated_questions(body, questions)
 
     def test_choice_answer_must_reference_one_of_four_options(self):
