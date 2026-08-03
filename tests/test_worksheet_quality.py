@@ -409,19 +409,31 @@ class WorksheetFallbackQualityTest(unittest.TestCase):
         self.assertIn("8", questions[2]["question"])
 
     def test_full_rational_fallback_assesses_multiplication_instead_of_rephrasing(self):
-        body = full_rational_math_body()
+        body = full_rational_math_body(question_count=8)
         questions = _fallback_unit_worksheet(body, _validate_unit_request(body))
 
         self.assertEqual(
             [question["knowledge_points"][0] for question in questions],
-            ["有理数", "有理数的加法与减法", "有理数的乘法与除法"],
+            [
+                "有理数",
+                "有理数的加法与减法",
+                "有理数的乘法与除法",
+                "有理数的乘方",
+                "有理数的混合运算",
+                "有理数",
+                "有理数的加法与减法",
+                "有理数的乘法与除法",
+            ],
         )
+        self.assertEqual(len({question["question"] for question in questions}), 8)
         self.assertNotIn("绝对值最小", questions[2]["question"])
         self.assertRegex(
             questions[2]["question"] + questions[2]["explanation"],
             r"乘|×",
         )
         self.assertIn("每分钟", questions[2]["question"])
+        self.assertIn("⁴", questions[3]["question"])
+        self.assertIn("÷", questions[4]["question"])
 
 
 class WorksheetPdfCompatibilityTest(unittest.TestCase):

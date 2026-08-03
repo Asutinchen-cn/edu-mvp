@@ -1031,7 +1031,60 @@ def _choice_answer_label(value: str) -> str:
 
 
 def _question_matches_planned_point(point: str, question: dict) -> bool:
-    text_value = f"{question.get('question', '')} {question.get('explanation', '')}"
+    text_value = " ".join(
+        [
+            str(question.get("question", "")),
+            *(str(option) for option in (question.get("options") or [])),
+            str(question.get("explanation", "")),
+        ]
+    )
+    if point == "有理数的加法与减法":
+        return any(
+            term in text_value
+            for term in ("加法", "减法", "相加", "相减", "加上", "减去", "+")
+        )
+    if point == "有理数的乘法与除法":
+        return any(
+            term in text_value
+            for term in (
+                "乘法", "除法", "乘以", "除以", "相乘", "求积", "积为", "积是",
+                "求商", "商为", "商是", "×", "÷",
+            )
+        )
+    if point == "有理数的乘方":
+        return any(
+            term in text_value
+            for term in ("乘方", "次方", "平方", "立方", "指数", "²", "³", "^", "⁴", "⁵")
+        )
+    if point == "有理数的混合运算":
+        has_add_subtract = any(
+            term in text_value
+            for term in ("加法", "减法", "相加", "相减", "加上", "减去", "+")
+        ) or bool(re.search(r"\d\s*-\s*(?:\[|\(|\d)", text_value))
+        has_multiply_divide = any(
+            term in text_value
+            for term in (
+                "乘法",
+                "除法",
+                "乘以",
+                "除以",
+                "相乘",
+                "求积",
+                "积为",
+                "积是",
+                "求商",
+                "商为",
+                "商是",
+                "×",
+                "÷",
+            )
+        )
+        operation_groups = (
+            has_add_subtract,
+            has_multiply_divide,
+            any(term in text_value for term in ("乘方", "次方", "平方", "立方", "²", "³", "^")),
+        )
+        return "混合运算" in text_value or sum(operation_groups) >= 2
     if "圆柱及其侧面展开图" in point:
         return (
             "圆柱" in text_value
@@ -1785,6 +1838,33 @@ def _fallback_planned_content(
     """Turn a topic-specific fallback item into the planned response format."""
     suffix = "" if occurrence == 0 else f"（变式 {occurrence + 1}）"
 
+    if subject == "math" and point == "有理数":
+        if planned_type == "选择题":
+            return {**content, "question": f"{content['question']}{suffix}"}
+        if planned_type == "填空题":
+            return {
+                "question": f"数轴上表示 -6 的点到原点的距离是______。{suffix}",
+                "options": [],
+                "answer": "6",
+                "explanation": "数轴上的点到原点的距离等于这个数的绝对值，所以 |-6|=6。",
+            }
+        if planned_type == "应用题":
+            return {
+                "question": (
+                    "以海平面为 0 米，山顶海拔记作 +850 米，地下停车场的位置记作 -12 米。"
+                    f"请分别说明两个数的实际意义，并判断哪个位置更高。{suffix}"
+                ),
+                "options": [],
+                "answer": "山顶高于海平面850米，停车场低于海平面12米；山顶更高。",
+                "explanation": "正数表示高于基准面，负数表示低于基准面；+850>-12，所以山顶的位置更高。",
+            }
+        return {
+            "question": f"把 -3.5、0、+2、-1 按从小到大的顺序排列，并说明数轴上的判断依据。{suffix}",
+            "options": [],
+            "answer": "-3.5<-1<0<+2",
+            "explanation": "数轴上右边的数大于左边的数，因此顺序为 -3.5<-1<0<+2。",
+        }
+
     if subject == "math" and "有理数的加法与减法" in point:
         if planned_type == "选择题":
             return {
@@ -1812,6 +1892,99 @@ def _fallback_planned_content(
             "options": [],
             "answer": "1",
             "explanation": "先算 (-8)+15=7，再算 7-6=1；也可以按从左到右的顺序计算。",
+        }
+
+    if subject == "math" and point == "有理数的乘法与除法":
+        if planned_type == "选择题":
+            return {
+                "question": f"计算 (-6)×(-4)，结果是（ ）。{suffix}",
+                "options": ["A. -24", "B. -10", "C. 10", "D. 24"],
+                "answer": "D",
+                "explanation": "两个负数相乘，积为正数；6×4=24，所以 (-6)×(-4)=24。",
+            }
+        if planned_type == "填空题":
+            return {
+                "question": f"计算：(-42)÷7=______。{suffix}",
+                "options": [],
+                "answer": "-6",
+                "explanation": "异号两数相除，商为负数；42÷7=6，所以 (-42)÷7=-6。",
+            }
+        if planned_type == "应用题":
+            return {
+                "question": (
+                    "潜水器每分钟的位置变化记作 -12 米。按这个速度连续下潜 5 分钟，"
+                    f"它的位置一共变化了多少米？{suffix}"
+                ),
+                "options": [],
+                "answer": "-60米",
+                "explanation": "每分钟变化 -12 米，5 分钟的总变化为 (-12)×5=-60 米。负号表示向海平面以下移动。",
+            }
+        return {
+            "question": f"计算 (-48)÷(-6)×(-3)，并写出符号判断过程。{suffix}",
+            "options": [],
+            "answer": "-24",
+            "explanation": "先算 (-48)÷(-6)=8，再算 8×(-3)=-24；每一步都先判断符号。",
+        }
+
+    if subject == "math" and point == "有理数的乘方":
+        if planned_type == "选择题":
+            return {
+                "question": f"计算 (-2)⁴，结果是（ ）。{suffix}",
+                "options": ["A. -16", "B. -8", "C. 8", "D. 16"],
+                "answer": "D",
+                "explanation": "(-2)⁴ 表示 4 个 -2 相乘，负因数有偶数个，所以结果为 16。",
+            }
+        if planned_type == "填空题":
+            return {
+                "question": f"计算：(-3)³=______。{suffix}",
+                "options": [],
+                "answer": "-27",
+                "explanation": "(-3)³=(-3)×(-3)×(-3)=-27，负数的奇次方仍为负数。",
+            }
+        if planned_type == "应用题":
+            return {
+                "question": f"一个正方体的棱长是 4 cm，用乘方表示并计算它的体积。{suffix}",
+                "options": [],
+                "answer": "4³=64 cm³",
+                "explanation": "正方体体积等于棱长的三次方，4³=4×4×4=64 cm³。",
+            }
+        return {
+            "question": f"比较 -3² 与 (-3)² 的大小，并说明括号对乘方意义的影响。{suffix}",
+            "options": [],
+            "answer": "-3²=-9，(-3)²=9，所以 -3²<(-3)²。",
+            "explanation": "-3² 的底数是 3，负号在乘方外；(-3)² 的底数是 -3，平方后为正数。",
+        }
+
+    if subject == "math" and point == "有理数的混合运算":
+        if planned_type == "选择题":
+            return {
+                "question": f"计算 8-2×(-3)，结果是（ ）。{suffix}",
+                "options": ["A. -18", "B. 2", "C. 14", "D. 30"],
+                "answer": "C",
+                "explanation": "混合运算先算乘法：2×(-3)=-6，再算 8-(-6)=14。",
+            }
+        if planned_type == "填空题":
+            return {
+                "question": f"计算：(-2)³+18÷(-3)=______。{suffix}",
+                "options": [],
+                "answer": "-14",
+                "explanation": "先算乘方和除法：(-2)³=-8，18÷(-3)=-6，再算 -8+(-6)=-14。",
+            }
+        if planned_type == "应用题":
+            return {
+                "question": (
+                    "某班积分规则为：答对一题得 5 分，答错一题扣 2 分。小林答对 6 题、"
+                    f"答错 3 题，他的总积分是多少？{suffix}"
+                ),
+                "options": [],
+                "answer": "24分",
+                "explanation": "按混合运算列式 5×6+(-2)×3=30-6=24，所以总积分为 24 分。",
+            }
+        return {
+            "question": f"计算 12-[3×(-2)+(-4)²]，并说明运算顺序。{suffix}",
+            "options": [],
+            "answer": "2",
+            "explanation": "先算乘方和乘法：(-4)²=16，3×(-2)=-6；括号内为 10，最后 12-10=2。",
         }
 
     if subject == "math" and "圆柱及其侧面展开图" in point:
@@ -2036,6 +2209,7 @@ async def _review_generated_worksheet(
 3. 英语题检查语法、语义、阅读证据和答案唯一性。
 4. 题干不得缺少作答所需条件，解析不得用错误或自相矛盾的理由强行排除选项。
 5. 只要一题有歧义、多解、错解、超纲或答案与解析不一致，valid 必须为 false。
+6. 对比整张卷：题目不能只是增加“实际情境”“写出依据”等前缀后重复前题；每题必须真正考查其 knowledge_points 标注的考点，应用题必须包含可用于建模的具体情境。
 
 只返回 JSON：
 {{
