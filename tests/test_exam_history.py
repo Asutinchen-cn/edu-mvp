@@ -155,7 +155,7 @@ class AiAnalysisNormalizationTest(unittest.TestCase):
                 "type": "选择题",
                 "question": f"My brother often ___ his homework. ({index})",
                 "options": ["A. do", "B. does", "C. doing", "D. to do"],
-                "answer": "B",
+                "answer": "does",
                 "hint": "Check the subject.",
             }
             for index in range(1, 6)
@@ -169,6 +169,7 @@ class AiAnalysisNormalizationTest(unittest.TestCase):
             ))
 
         self.assertEqual(questions[0]["options"], ["do", "does", "doing", "to do"])
+        self.assertEqual(questions[0]["answer"], "B")
 
 
 class AnalysisHistorySummaryTest(unittest.TestCase):

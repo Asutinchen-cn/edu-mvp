@@ -2559,8 +2559,18 @@ def _validate_practice_questions(raw_questions) -> list:
                 raise ValueError(f"第 {index} 道选择题存在空选项")
             if len({option.casefold() for option in normalized_options}) != 4:
                 raise ValueError(f"第 {index} 道选择题选项重复")
-            if not re.match(r"^[A-D](?:[.、:：\s]|$)", answer.upper()):
-                raise ValueError(f"第 {index} 道选择题答案必须是 A-D")
+            answer_match = re.match(r"^([A-D])(?:[.、:：\s]|$)", answer.upper())
+            if answer_match:
+                current["answer"] = answer_match.group(1)
+            else:
+                matching_options = [
+                    option_index
+                    for option_index, option in enumerate(normalized_options)
+                    if option.casefold() == answer.casefold()
+                ]
+                if len(matching_options) != 1:
+                    raise ValueError(f"第 {index} 道选择题答案必须对应唯一选项")
+                current["answer"] = chr(65 + matching_options[0])
             current["options"] = normalized_options
         else:
             current.pop("options", None)
