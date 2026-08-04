@@ -2546,7 +2546,15 @@ def _validate_practice_questions(raw_questions) -> list:
             options = raw_question.get("options")
             if not isinstance(options, list) or len(options) != 4:
                 raise ValueError(f"第 {index} 道选择题必须有 4 个选项")
-            normalized_options = [" ".join(str(option or "").split()) for option in options]
+            normalized_options = [
+                re.sub(
+                    r"^[A-D][.、:：)]\s*",
+                    "",
+                    " ".join(str(option or "").split()),
+                    flags=re.IGNORECASE,
+                )
+                for option in options
+            ]
             if any(not option for option in normalized_options):
                 raise ValueError(f"第 {index} 道选择题存在空选项")
             if len({option.casefold() for option in normalized_options}) != 4:
@@ -2611,7 +2619,7 @@ async def ai_generate_questions(
 3. 不得照抄原题；必须更换数字、语境或问法，检验学生是否真正理解。
 4. 由易到难：2道基础辨析、2道典型应用、1道迁移题。
 5. 包含选择题（2-3道）和填空题（2-3道），每道题都要有简短提示和唯一明确答案。
-6. 选择题必须有4个互不重复的选项，干扰项对应常见错误但不能含糊。
+6. 选择题必须有4个互不重复的选项，干扰项对应常见错误但不能含糊；选项内容不要带 A/B/C/D 编号，系统会自动编号。
 
 请按以下JSON格式返回（不要包含其他文字，只返回JSON数组）：
 [

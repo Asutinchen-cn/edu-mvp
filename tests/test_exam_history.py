@@ -148,6 +148,28 @@ class AiAnalysisNormalizationTest(unittest.TestCase):
                     grade="六年级",
                 ))
 
+    def test_practice_generation_removes_model_option_labels(self):
+        generated = json.dumps([
+            {
+                "id": index,
+                "type": "选择题",
+                "question": f"My brother often ___ his homework. ({index})",
+                "options": ["A. do", "B. does", "C. doing", "D. to do"],
+                "answer": "B",
+                "hint": "Check the subject.",
+            }
+            for index in range(1, 6)
+        ])
+
+        with patch("api.main.call_deepseek", AsyncMock(return_value=generated)):
+            questions = asyncio.run(ai_generate_questions(
+                ["一般现在时"],
+                subject="english",
+                grade="六年级",
+            ))
+
+        self.assertEqual(questions[0]["options"], ["do", "does", "doing", "to do"])
+
 
 class AnalysisHistorySummaryTest(unittest.TestCase):
     def test_counts_only_saved_wrong_questions(self):
