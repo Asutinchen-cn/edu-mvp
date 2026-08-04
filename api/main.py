@@ -2512,6 +2512,65 @@ async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
 
 # ===== AI 生成巩固练习题（DeepSeek） =====
 
+def _validate_practice_questions(raw_questions) -> list:
+    if not isinstance(raw_questions, list) or len(raw_questions) != 5:
+        raise ValueError("巩固题必须完整返回 5 道")
+
+    normalized = []
+    seen_questions = set()
+    for index, raw_question in enumerate(raw_questions, start=1):
+        if not isinstance(raw_question, dict):
+            raise ValueError(f"第 {index} 道巩固题结构无效")
+        question_type = str(raw_question.get("type") or "").strip()
+        question = " ".join(str(raw_question.get("question") or "").split())
+        answer = str(raw_question.get("answer") or "").strip()
+        hint = " ".join(str(raw_question.get("hint") or "").split())
+        if question_type not in {"选择题", "填空题"}:
+            raise ValueError(f"第 {index} 道巩固题题型无效")
+        if not question or not answer or not hint:
+            raise ValueError(f"第 {index} 道巩固题缺少题目、答案或提示")
+        question_key = question.casefold()
+        if question_key in seen_questions:
+            raise ValueError("巩固题题干重复")
+        seen_questions.add(question_key)
+
+        current = {
+            **raw_question,
+            "id": index,
+            "type": question_type,
+            "question": question,
+            "answer": answer,
+            "hint": hint,
+        }
+        if question_type == "选择题":
+            options = raw_question.get("options")
+            if not isinstance(options, list) or len(options) != 4:
+                raise ValueError(f"第 {index} 道选择题必须有 4 个选项")
+            normalized_options = [" ".join(str(option or "").split()) for option in options]
+            if any(not option for option in normalized_options):
+                raise ValueError(f"第 {index} 道选择题存在空选项")
+            if len({option.casefold() for option in normalized_options}) != 4:
+                raise ValueError(f"第 {index} 道选择题选项重复")
+            if not re.match(r"^[A-D](?:[.、:：\s]|$)", answer.upper()):
+                raise ValueError(f"第 {index} 道选择题答案必须是 A-D")
+            current["options"] = normalized_options
+        else:
+            current.pop("options", None)
+        normalized.append(current)
+    return normalized
+
+
+def _practice_generation_unavailable_response():
+    return JSONResponse(
+        {
+            "success": False,
+            "error": "巩固题生成服务暂时不可用，请稍后重试",
+            "retryable": True,
+        },
+        status_code=503,
+        headers={"Retry-After": "15"},
+    )
+
 async def ai_generate_questions(
     weak_points: list,
     *,
@@ -2580,18 +2639,10 @@ async def ai_generate_questions(
             lines = result.split("\n")
             result = "\n".join(lines[1:-1])
         questions = json.loads(result)
-        for i, q in enumerate(questions):
-            q.setdefault("id", i + 1)
-        return questions[:5]
+        return _validate_practice_questions(questions)
     except Exception as e:
         print(f"DeepSeek generate error: {e}")
-        return [{
-            "id": 1,
-            "type": "提示",
-            "question": "AI出题服务暂时不可用，请稍后重试",
-            "answer": "",
-            "hint": str(e)[:50]
-        }]
+        raise AnalysisServiceUnavailable(str(e)) from e
 
 # ===== API 路由 =====
 
@@ -3721,6 +3772,8 @@ async def generate_practice(
             "total": len(questions),
             "note": "由 DeepSeek AI 动态生成"
         })
+    except AnalysisServiceUnavailable:
+        return _practice_generation_unavailable_response()
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -3800,12 +3853,15 @@ async def generate_knowledge_practice(
     selected_evidence = pending_evidence or matched_evidence
     model_evidence = selected_evidence[:3]
     source_exam_ids = list(dict.fromkeys(item["exam_id"] for item in model_evidence))
-    questions = await ai_generate_questions(
-        [target],
-        subject=subject,
-        grade=grade,
-        wrong_questions=model_evidence,
-    )
+    try:
+        questions = await ai_generate_questions(
+            [target],
+            subject=subject,
+            grade=grade,
+            wrong_questions=model_evidence,
+        )
+    except AnalysisServiceUnavailable:
+        return _practice_generation_unavailable_response()
     return JSONResponse({
         "success": True,
         "practice_mode": "knowledge_point_bank",
@@ -4575,6 +4631,8 @@ async def export_practice_pdf(
             media_type="application/pdf",
             headers={"Content-Disposition": content_disposition}
         )
+    except AnalysisServiceUnavailable:
+        return _practice_generation_unavailable_response()
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 

@@ -437,6 +437,23 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertIn("不在这份试卷", json.loads(response.body)["error"])
         generator.assert_not_awaited()
 
+    def test_practice_generation_failure_is_retryable_and_has_no_fake_question(self):
+        generator = AsyncMock(side_effect=AnalysisServiceUnavailable("provider timeout"))
+
+        with patch("api.main.ai_generate_questions", generator):
+            response = asyncio.run(generate_practice(
+                self.first_exam_id,
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(payload["retryable"])
+        self.assertNotIn("questions", payload)
+        self.assertIn("稍后重试", payload["error"])
+
     def test_knowledge_practice_combines_exams_and_prefers_pending_evidence(self):
         db = self.session_factory()
         first_exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
@@ -515,6 +532,39 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("家庭错题库", json.loads(response.body)["error"])
         generator.assert_not_awaited()
+
+    def test_knowledge_practice_generation_failure_is_retryable(self):
+        generator = AsyncMock(side_effect=AnalysisServiceUnavailable("provider timeout"))
+
+        with patch("api.main.ai_generate_questions", generator):
+            response = asyncio.run(generate_knowledge_practice(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                knowledge_point="一元一次方程",
+                family_code="Home2026A",
+            ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(payload["retryable"])
+        self.assertNotIn("questions", payload)
+
+    def test_practice_pdf_generation_failure_is_retryable(self):
+        generator = AsyncMock(side_effect=AnalysisServiceUnavailable("provider timeout"))
+
+        with patch("api.main.ai_generate_questions", generator):
+            response = asyncio.run(export_practice_pdf(
+                self.first_exam_id,
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(payload["retryable"])
+        self.assertEqual(response.headers["retry-after"], "15")
 
     def test_reanalysis_resets_each_current_wrong_question_to_pending(self):
         db = self.session_factory()

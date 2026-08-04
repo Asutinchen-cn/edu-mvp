@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 from api.main import (
+    AnalysisServiceUnavailable,
     _analysis_history_detail,
     _analysis_history_summary,
     _build_review_schedule,
@@ -78,13 +79,16 @@ class AiAnalysisNormalizationTest(unittest.TestCase):
         self.assertEqual(analysis["evidence_status"], "insufficient")
 
     def test_focused_practice_prompt_keeps_grade_subject_and_error_evidence(self):
-        generated = json.dumps([{
-            "id": 1,
-            "type": "填空题",
-            "question": "Yesterday, Tom ___ home early.",
-            "answer": "went",
-            "hint": "Look at the time word.",
-        }])
+        generated = json.dumps([
+            {
+                "id": index,
+                "type": "填空题",
+                "question": f"Yesterday, Tom ___ home early. ({index})",
+                "answer": "went",
+                "hint": "Look at the time word.",
+            }
+            for index in range(1, 6)
+        ])
         model = AsyncMock(return_value=generated)
 
         with patch("api.main.call_deepseek", model):
@@ -105,6 +109,44 @@ class AiAnalysisNormalizationTest(unittest.TestCase):
         self.assertIn("只生成英语题", prompt)
         self.assertIn("一般过去时错误", prompt)
         self.assertIn("不得照抄原题", prompt)
+
+    def test_practice_generation_rejects_an_incomplete_model_paper(self):
+        incomplete = json.dumps([{
+            "id": 1,
+            "type": "填空题",
+            "question": "Yesterday, Tom ___ home early.",
+            "answer": "went",
+            "hint": "Look at the time word.",
+        }])
+
+        with patch("api.main.call_deepseek", AsyncMock(return_value=incomplete)):
+            with self.assertRaises(AnalysisServiceUnavailable):
+                asyncio.run(ai_generate_questions(
+                    ["一般过去时"],
+                    subject="english",
+                    grade="六年级",
+                ))
+
+    def test_practice_generation_rejects_invalid_choice_answers(self):
+        invalid = json.dumps([
+            {
+                "id": index,
+                "type": "选择题",
+                "question": f"Choose the correct answer. ({index})",
+                "options": ["one", "two", "three", "four"],
+                "answer": "E",
+                "hint": "Read the sentence.",
+            }
+            for index in range(1, 6)
+        ])
+
+        with patch("api.main.call_deepseek", AsyncMock(return_value=invalid)):
+            with self.assertRaises(AnalysisServiceUnavailable):
+                asyncio.run(ai_generate_questions(
+                    ["一般过去时"],
+                    subject="english",
+                    grade="六年级",
+                ))
 
 
 class AnalysisHistorySummaryTest(unittest.TestCase):
