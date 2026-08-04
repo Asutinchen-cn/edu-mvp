@@ -48,6 +48,20 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("请通过线上网址打开本网站", HTML)
         self.assertNotIn("教材目录加载失败，请刷新页面后重试", HTML)
 
+    def test_worksheet_catalog_initial_retries_cover_a_short_api_restart(self):
+        retry_delays = re.search(
+            r"const WORKSHEET_CATALOG_RETRY_DELAYS\s*=\s*\[(?P<values>[^]]+)\]",
+            HTML,
+        )
+        self.assertIsNotNone(retry_delays)
+        delays = [
+            int(value.strip())
+            for value in retry_delays.group("values").split(",")
+        ]
+        self.assertEqual(delays[0], 0)
+        self.assertGreaterEqual(sum(delays), 4_000)
+        self.assertGreaterEqual(max(delays), 3_000)
+
     def test_worksheet_catalog_tolerates_slow_network_and_reuses_last_verified_copy(self):
         timeout_match = re.search(
             r"const WORKSHEET_CATALOG_TIMEOUT_MS\s*=\s*(\d+)",
