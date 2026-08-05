@@ -629,6 +629,26 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertNotIn("巩固题暂时没有生成成功，请先根据上方薄弱点完成原题订正", HTML)
 
+    def test_practice_pdf_download_uses_the_generated_question_payload(self):
+        self.assertIn("let currentPracticePdf = null", HTML)
+        self.assertIn("function normalizePracticePdfPayload(value)", HTML)
+        self.assertIn("currentPracticePdf = practicePdf", HTML)
+        self.assertIn("currentPracticePdf = null", HTML)
+        self.assertIn("data.practice_pdf", HTML)
+        self.assertIn("new Blob([bytes], { type: 'application/pdf' })", HTML)
+        self.assertIn("URL.createObjectURL", HTML)
+        self.assertIn("downloadLink.download = currentPracticePdf.filename", HTML)
+        self.assertIn("URL.revokeObjectURL", HTML)
+        self.assertIn("下载 PDF（无答案）", HTML)
+        export_handler = re.search(
+            r"function exportPracticePdf\(\)(?P<body>.*?)\n\}\n\n// ===== EXAMPLE =====",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(export_handler)
+        self.assertNotIn("window.open", export_handler.group("body"))
+        self.assertNotIn(".print", export_handler.group("body"))
+
     def test_practice_state_is_isolated_between_analysis_contexts(self):
         self.assertIn("let activePracticeContextKey = ''", HTML)
         self.assertIn("let practiceGenerationRequestId = 0", HTML)

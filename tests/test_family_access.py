@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -398,7 +399,10 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         }]
         generator = AsyncMock(return_value=generated_questions)
 
-        with patch("api.main.ai_generate_questions", generator):
+        with (
+            patch("api.main.ai_generate_questions", generator),
+            patch("api.main.generate_practice_pdf", return_value=b"%PDF-same-practice") as render_pdf,
+        ):
             response = asyncio.run(generate_practice(
                 self.first_exam_id,
                 "六年级",
@@ -412,6 +416,18 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(payload["weak_points"], ["一元一次方程"])
         self.assertEqual(payload["practice_mode"], "knowledge_point")
         self.assertEqual(payload["questions"], generated_questions)
+        self.assertEqual(payload["practice_pdf"]["filename"], "六年级数学-错题巩固练习.pdf")
+        self.assertEqual(
+            base64.b64decode(payload["practice_pdf"]["data_url"].split(",", 1)[1]),
+            b"%PDF-same-practice",
+        )
+        render_pdf.assert_called_once_with(
+            "小明",
+            ["一元一次方程"],
+            generated_questions,
+            grade="六年级",
+            subject="math",
+        )
         generator.assert_awaited_once()
         self.assertEqual(generator.await_args.args[0], ["一元一次方程"])
         self.assertEqual(generator.await_args.kwargs["subject"], "math")
@@ -491,7 +507,10 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         }]
         generator = AsyncMock(return_value=generated_questions)
 
-        with patch("api.main.ai_generate_questions", generator):
+        with (
+            patch("api.main.ai_generate_questions", generator),
+            patch("api.main.generate_practice_pdf", return_value=b"%PDF-bank-practice") as render_pdf,
+        ):
             response = asyncio.run(generate_knowledge_practice(
                 grade="六年级",
                 student_name="小明",
@@ -508,6 +527,18 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(payload["evidence_count"], 1)
         self.assertEqual(payload["source_exam_ids"], [second_exam_id])
         self.assertEqual(payload["questions"], generated_questions)
+        self.assertEqual(payload["practice_pdf"]["filename"], "六年级数学-错题巩固练习.pdf")
+        self.assertEqual(
+            base64.b64decode(payload["practice_pdf"]["data_url"].split(",", 1)[1]),
+            b"%PDF-bank-practice",
+        )
+        render_pdf.assert_called_once_with(
+            "小明",
+            ["一元一次方程"],
+            generated_questions,
+            grade="六年级",
+            subject="math",
+        )
         generator.assert_awaited_once()
         self.assertEqual(generator.await_args.args[0], ["一元一次方程"])
         self.assertEqual(generator.await_args.kwargs["subject"], "math")

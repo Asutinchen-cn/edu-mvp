@@ -1,8 +1,11 @@
 import asyncio
+import io
 import json
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
+
+from pypdf import PdfReader
 
 from api.main import (
     AnalysisServiceUnavailable,
@@ -15,6 +18,7 @@ from api.main import (
     ai_generate_questions,
     generate_correction_sheet_pdf,
     generate_family_review_report_pdf,
+    generate_practice_pdf,
 )
 
 
@@ -344,6 +348,72 @@ class ReviewProgressTest(unittest.TestCase):
             "due_at": None,
             "status": "completed",
         })
+
+
+class PracticePdfTest(unittest.TestCase):
+    def test_builds_the_current_five_questions_without_answers_or_hints(self):
+        questions = [
+            {
+                "type": "选择题",
+                "question": "Choose the correct past tense of go.",
+                "options": ["go", "goes", "went", "going"],
+                "answer": "C",
+                "hint": "Look for yesterday.",
+            },
+            {
+                "type": "填空题",
+                "question": "Yesterday I ____ to school.",
+                "options": [],
+                "answer": "went",
+                "hint": "Use the past tense.",
+            },
+            {
+                "type": "选择题",
+                "question": "Which sentence is correct?",
+                "options": ["I go yesterday.", "I went yesterday.", "I going yesterday.", "I goes yesterday."],
+                "answer": "B",
+                "hint": "Find the time marker.",
+            },
+            {
+                "type": "填空题",
+                "question": "Last week they ____ football.",
+                "options": [],
+                "answer": "played",
+                "hint": "Add -ed.",
+            },
+            {
+                "type": "选择题",
+                "question": "What did Ben do last night?",
+                "options": ["He reads.", "He read a book.", "He reading.", "He is read."],
+                "answer": "B",
+                "hint": "Read is irregular here.",
+            },
+        ]
+
+        pdf_bytes = generate_practice_pdf(
+            "小明",
+            ["一般过去时"],
+            questions,
+            grade="六年级",
+            subject="english",
+        )
+        text = "\n".join(
+            page.extract_text() or ""
+            for page in PdfReader(io.BytesIO(pdf_bytes)).pages
+        )
+
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn("错题巩固练习", text)
+        self.assertIn("学生：小明", text)
+        self.assertIn("年级：六年级", text)
+        self.assertIn("学科：英语", text)
+        self.assertIn("Choose the correct past tense of go.", text)
+        self.assertIn("C. went", text)
+        self.assertIn("答：", text)
+        self.assertNotIn("Consolidation Practice", text)
+        self.assertNotIn("答案：", text)
+        self.assertNotIn("提示：", text)
+        self.assertNotIn("Look for yesterday.", text)
 
 
 class CorrectionSheetPdfTest(unittest.TestCase):
