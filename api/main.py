@@ -3778,6 +3778,13 @@ async def generate_practice(
             grade=exam_grade,
             wrong_questions=wrong_questions,
         )
+        practice_pdf = _practice_pdf_payload(
+            exam_student_name,
+            exam_grade,
+            exam_subject,
+            weak_points,
+            questions,
+        )
 
         return JSONResponse({
             "success": True,
@@ -3787,6 +3794,7 @@ async def generate_practice(
             "weak_points": weak_points,
             "practice_mode": "knowledge_point" if knowledge_point else "exam",
             "questions": questions,
+            "practice_pdf": practice_pdf,
             "total": len(questions),
             "note": "由 DeepSeek AI 动态生成"
         })
@@ -3878,8 +3886,20 @@ async def generate_knowledge_practice(
             grade=grade,
             wrong_questions=model_evidence,
         )
+        practice_pdf = _practice_pdf_payload(
+            student_name,
+            grade,
+            subject,
+            [target],
+            questions,
+        )
     except AnalysisServiceUnavailable:
         return _practice_generation_unavailable_response()
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": f"生成练习 PDF 失败：{str(e)[:160]}"},
+            status_code=500,
+        )
     return JSONResponse({
         "success": True,
         "practice_mode": "knowledge_point_bank",
@@ -3892,6 +3912,7 @@ async def generate_knowledge_practice(
         "evidence_count": len(model_evidence),
         "source_exam_ids": source_exam_ids,
         "questions": questions,
+        "practice_pdf": practice_pdf,
         "total": len(questions),
         "note": "优先依据家庭错题库中尚未掌握的真实错因生成",
     })
@@ -3917,7 +3938,14 @@ def _register_pdf_fonts(pdf_obj) -> str:
     return "zh"
 
 
-def generate_practice_pdf(student_name: str, weak_points: list, questions: list) -> bytes:
+def generate_practice_pdf(
+    student_name: str,
+    weak_points: list,
+    questions: list,
+    *,
+    grade: str = "",
+    subject: str = "",
+) -> bytes:
     """生成巩固练习题 PDF（中文稳定版）"""
     from fpdf import FPDF
 
@@ -3959,11 +3987,6 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
                 start += chunk
 
     class PracticePDF(FPDF):
-        def header(self):
-            self.set_font("helvetica", "B", 16)
-            self.cell(0, 10, "Consolidation Practice", new_x="LMARGIN", new_y="NEXT", align="C")
-            self.ln(5)
-
         def footer(self):
             self.set_y(-15)
             self.set_font("helvetica", "I", 8)
@@ -3977,12 +4000,18 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
 
     # 标题
     pdf.set_font(font, "B", 18)
-    _safe_multicell(pdf, "巩固练习题", h=10)
+    pdf.cell(0, 10, "错题巩固练习", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(2)
 
     # 学生信息
     pdf.set_font(font, "", 11)
-    _safe_multicell(pdf, f"学生：{_clean_text(student_name)}")
+    subject_label = SUBJECT_LABELS.get(subject, _clean_text(subject))
+    info_parts = [f"学生：{_clean_text(student_name)}"]
+    if grade:
+        info_parts.append(f"年级：{_clean_text(grade)}")
+    if subject_label:
+        info_parts.append(f"学科：{_clean_text(subject_label)}")
+    _safe_multicell(pdf, "    ".join(info_parts))
 
     # 薄弱知识点
     if weak_points:
@@ -3997,8 +4026,6 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
     for i, q in enumerate(questions):
         q_type = _clean_text(q.get("type", ""))
         q_text = _clean_text(q.get("question", ""))
-        q_hint = _clean_text(q.get("hint", ""))
-        q_answer = _clean_text(q.get("answer", ""))
         q_options = q.get("options", [])
 
         # 题号 + 类型
@@ -4015,11 +4042,37 @@ def generate_practice_pdf(student_name: str, weak_points: list, questions: list)
             for j, opt in enumerate(q_options):
                 opt_label = chr(65 + j)
                 _safe_multicell(pdf, f"{opt_label}. {_clean_text(opt)}", h=7)
+        else:
+            _safe_multicell(pdf, "答：________________________________________", h=8)
 
         pdf.set_text_color(0, 0, 0)
         pdf.ln(3)
 
     return pdf.output()
+
+
+def _practice_pdf_payload(
+    student_name: str,
+    grade: str,
+    subject: str,
+    weak_points: list,
+    questions: list,
+) -> dict:
+    pdf_bytes = generate_practice_pdf(
+        student_name,
+        weak_points,
+        questions,
+        grade=grade,
+        subject=subject,
+    )
+    subject_label = SUBJECT_LABELS.get(subject, "学科")
+    return {
+        "filename": f"{grade}{subject_label}-错题巩固练习.pdf",
+        "data_url": (
+            "data:application/pdf;base64,"
+            f"{base64.b64encode(pdf_bytes).decode('ascii')}"
+        ),
+    }
 
 
 def generate_correction_sheet_pdf(

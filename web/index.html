@@ -2806,7 +2806,7 @@
         <div class="practice-header">
             <h3>✏️ 巩固练习题</h3>
             <button class="generate-btn" id="generateBtn" onclick="generatePractice()">🎯 生成 5 道巩固题</button>
-            <button class="generate-btn" id="exportPdfBtn" style="display:none;background:linear-gradient(90deg,#4DCB9D,#36b389)" onclick="exportPracticePdf()">📄 导出 PDF（无答案）</button>
+            <button class="generate-btn" id="exportPdfBtn" style="display:none;background:linear-gradient(90deg,#4DCB9D,#36b389)" onclick="exportPracticePdf()">📄 下载 PDF（无答案）</button>
         </div>
         <div class="practice-generation-status" id="practiceGenerationStatus" role="status" aria-live="polite" hidden></div>
         <div id="practiceList"></div>
@@ -4106,6 +4106,7 @@ function closeResult() {
 // ===== PRACTICE QUESTIONS =====
 let currentAnalysisData = null;
 let currentPracticeQuestions = [];
+let currentPracticePdf = null;
 let currentPracticeResults = [];
 let currentPracticeScorable = false;
 let practiceMasterySaving = false;
@@ -4129,6 +4130,7 @@ function buildPracticeContextKey(data) {
 function resetPracticeExperience() {
     practiceGenerationRequestId += 1;
     currentPracticeQuestions = [];
+    currentPracticePdf = null;
     currentPracticeResults = [];
     currentPracticeScorable = false;
     practiceMasterySaving = false;
@@ -4175,6 +4177,14 @@ function setPracticeGenerationStatus(type, message) {
     status.classList.toggle('error', type === 'error');
 }
 
+function normalizePracticePdfPayload(value) {
+    if (!value || typeof value !== 'object') return null;
+    const filename = String(value.filename || '').trim();
+    const dataUrl = String(value.data_url || '').trim();
+    if (!filename || !dataUrl.startsWith('data:application/pdf;base64,')) return null;
+    return { filename: filename, dataUrl: dataUrl };
+}
+
 function startPracticeFromSummary() {
     document.getElementById('practiceSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
     generatePractice();
@@ -4192,6 +4202,7 @@ async function generatePractice() {
     setPracticeGenerationState(true);
 
     let questions;
+    let practicePdf = null;
     let generationError = '';
     const examId = currentAnalysisData.examIds?.[0];
     try {
@@ -4219,6 +4230,7 @@ async function generatePractice() {
         }
         if (!isPracticeGenerationRequestCurrent(requestId, requestContextKey)) return;
         questions = data.questions;
+        practicePdf = normalizePracticePdfPayload(data.practice_pdf);
         if (currentAnalysisData.practiceFromWrongBank) {
             const pendingCount = Number(data.pending_wrong_count || 0);
             const matchedCount = Number(data.matched_wrong_count || 0);
@@ -4238,7 +4250,7 @@ async function generatePractice() {
 
     if (!Array.isArray(questions) || !questions.length) {
         setPracticeGenerationState(false, hadExistingPractice);
-        exportButton.style.display = hadExistingPractice ? 'inline-block' : 'none';
+        exportButton.style.display = hadExistingPractice && currentPracticePdf ? 'inline-block' : 'none';
         setPracticeGenerationStatus('error', `巩固题生成失败：${generationError || '生成服务未返回可用题目'}。${hadExistingPractice
             ? '上一轮练习和作答结果仍保留，可以重试。'
             : '没有生成可用题目，未提供 PDF 下载，可以重试。'}`);
@@ -4246,9 +4258,12 @@ async function generatePractice() {
     }
 
     renderPracticeQuestions(questions);
+    currentPracticePdf = practicePdf;
     setPracticeGenerationState(false, true);
-    exportButton.style.display = 'inline-block';
-    setPracticeGenerationStatus('success', `已生成 ${questions.length} 道巩固题，可以开始作答。`);
+    exportButton.style.display = currentPracticePdf ? 'inline-block' : 'none';
+    setPracticeGenerationStatus('success', currentPracticePdf
+        ? `已生成 ${questions.length} 道巩固题，可以开始作答或下载同题 PDF。`
+        : `已生成 ${questions.length} 道巩固题，可以开始作答；PDF 暂时不可用。`);
 }
 
 function renderPracticeQuestions(questions) {
@@ -4531,59 +4546,34 @@ async function confirmKnowledgeMastery() {
 }
 
 // ===== EXPORT PDF =====
+function practicePdfBlob(dataUrl) {
+    const encoded = dataUrl.split(',', 2)[1] || '';
+    const binary = window.atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+    }
+    return new Blob([bytes], { type: 'application/pdf' });
+}
+
 function exportPracticePdf() {
-    if (!currentAnalysisData) return;
-    const cards = document.querySelectorAll('.q-card');
-    if (!cards.length) return;
-    const studentName = escapeHtml(currentAnalysisData.studentName);
-    const grade = escapeHtml(currentAnalysisData.grade);
-    const weakPoints = Array.isArray(currentAnalysisData.weakPoints)
-        ? currentAnalysisData.weakPoints.map(escapeHtml).join('、')
-        : '';
-
-    // Build printable HTML
-    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>巩固练习题 - ${studentName}(${grade})</title>
-    <style>
-        body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;padding:40px;color:#333;line-height:1.8}
-        h1{font-size:20px;text-align:center;margin-bottom:4px}
-        .info{text-align:center;font-size:13px;color:#666;margin-bottom:24px}
-        .q{margin-bottom:20px;page-break-inside:avoid}
-        .q-title{font-size:14px;font-weight:700;margin-bottom:6px}
-        .q-text{font-size:14px;margin-bottom:6px}
-        .q-option{font-size:13px;margin-left:20px;margin-bottom:2px}
-        .q-fill{font-size:13px;margin-left:20px;border-bottom:1px solid #ccc;display:inline-block;min-width:120px}
-        .divider{border-top:1px dashed #ccc;margin:20px 0}
-        .footer{text-align:center;font-size:11px;color:#999;margin-top:30px}
-    </style></head><body>`;
-    html += `<h1>🎯 巩固练习题</h1>`;
-    html += `<div class="info">学生：${studentName} | 年级：${grade} | 薄弱知识点：${weakPoints}</div>`;
-    html += `<div class="divider"></div>`;
-
-    cards.forEach((card, i) => {
-        const type = card.querySelector('.q-type')?.textContent || '';
-        const text = card.querySelector('.q-text')?.textContent || '';
-        html += `<div class="q">`;
-        html += `<div class="q-title">第 ${i+1} 题 [${escapeHtml(type)}]</div>`;
-        html += `<div class="q-text">${escapeHtml(text)}</div>`;
-        const options = card.querySelectorAll('.q-option');
-        if (options.length) {
-            options.forEach(opt => {
-                html += `<div class="q-option">${escapeHtml(opt.textContent)}</div>`;
-            });
-        } else {
-            html += `<div class="q-fill">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>`;
-        }
-        html += `</div>`;
-    });
-    html += `<div class="footer">虾胡闹，有钳途 · AI 个性化学习方案</div>`;
-    html += `</body></html>`;
-
-    // Open print dialog
-    const win = window.open('', '_blank');
-    win.document.write(html);
-    win.document.close();
-    win.onload = () => { win.print(); };
+    if (!currentPracticePdf) {
+        setPracticeGenerationStatus('error', '当前练习没有可下载的 PDF，请重新生成。');
+        return;
+    }
+    try {
+        const objectUrl = URL.createObjectURL(practicePdfBlob(currentPracticePdf.dataUrl));
+        const downloadLink = document.createElement('a');
+        downloadLink.href = objectUrl;
+        downloadLink.download = currentPracticePdf.filename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        setPracticeGenerationStatus('success', 'PDF 下载已开始，内容与当前 5 道巩固题一致且不含答案。');
+    } catch (error) {
+        setPracticeGenerationStatus('error', 'PDF 下载失败，请重新生成后再试。');
+    }
 }
 
 // ===== EXAMPLE =====
