@@ -666,17 +666,25 @@
         /* ===== FILE PREVIEW ===== */
         .file-preview {
             display: none;
-            gap: 12px;
-            flex-wrap: wrap;
+            grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+            gap: 10px;
             margin-top: 8px;
         }
-        .file-preview.show { display: flex; }
+        .file-preview.show { display: grid; }
         .file-thumb {
             position: relative;
-            width: 80px; height: 80px;
-            border-radius: 10px;
+            min-width: 0;
+            border: 1px solid var(--line);
+            border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #fff;
+        }
+        .file-media {
+            position: relative;
+            width: 100%;
+            height: 92px;
+            overflow: hidden;
+            background: #f4f8ff;
         }
         .file-thumb img {
             width: 100%; height: 100%; object-fit: cover;
@@ -696,13 +704,59 @@
             color: var(--muted);
             font-size: 12px;
         }
-        .file-thumb .remove-btn {
-            position: absolute; top: 2px; right: 2px;
-            width: 20px; height: 20px;
-            background: rgba(0,0,0,0.5);
-            color: white; border: none; border-radius: 50%;
-            font-size: 12px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
+        .file-order {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            padding: 3px 7px;
+            border-radius: 6px;
+            background: rgba(21, 34, 58, 0.82);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 800;
+        }
+        .file-name {
+            min-width: 0;
+            padding: 7px 8px 4px;
+            overflow: hidden;
+            color: #41516b;
+            font-size: 11px;
+            font-weight: 700;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .file-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 4px;
+            padding: 4px 6px 7px;
+        }
+        .file-order-btn,
+        .file-remove-btn {
+            min-width: 0;
+            height: 30px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: #fff;
+            color: var(--brand-blue);
+            font: inherit;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .file-remove-btn { color: var(--danger); }
+        .file-order-btn:hover:not(:disabled),
+        .file-order-btn:focus-visible,
+        .file-remove-btn:hover,
+        .file-remove-btn:focus-visible {
+            border-color: rgba(23, 105, 232, 0.42);
+            background: #edf5ff;
+            outline: none;
+        }
+        .file-order-btn:disabled {
+            color: #aab6c8;
+            background: #f4f6f9;
+            cursor: not-allowed;
         }
 
         /* ===== LOADING OVERLAY ===== */
@@ -2490,6 +2544,8 @@
             .upload-area { gap: 12px; padding: 16px; border-radius: 14px; }
             .upload-title { font-size: 18px; }
             .dropzone { padding: 24px 12px; border-radius: 14px; }
+            .file-preview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .file-order-btn, .file-remove-btn { height: 40px; }
             .worksheet-card, .history-card, .result-section {
                 margin-left: 18px;
                 margin-right: 18px;
@@ -2775,7 +2831,7 @@
         <label class="visually-hidden" for="fileInput">选择试卷图片或 PDF</label>
         <input type="file" id="fileInput" accept="image/jpeg,image/png,application/pdf" multiple style="display:none">
 
-        <div class="file-preview" id="filePreview"></div>
+        <div class="file-preview" id="filePreview" aria-label="已选择的试卷文件，按当前顺序分析" role="list" aria-live="polite"></div>
 
         <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
             ☁️ 选择试卷图片
@@ -3460,7 +3516,7 @@ function setAnalysisStatus(type, message) {
 function selectedUploadSummary() {
     const totalBytes = uploadedFiles.reduce((sum, item) => sum + item.file.size, 0);
     const sizeMb = Math.max(0.1, totalBytes / 1024 / 1024).toFixed(1);
-    return `已选择 ${uploadedFiles.length} 页试卷，共 ${sizeMb}MB。确认姓名和访问码后即可开始分析。`;
+    return `已选择 ${uploadedFiles.length} 个文件，共 ${sizeMb}MB。系统将按下方顺序分析。`;
 }
 
 function setAnalysisBusy(busy) {
@@ -3545,15 +3601,43 @@ function renderFilePreview() {
     uploadedFiles.forEach((f, i) => {
         const div = document.createElement('div');
         div.className = 'file-thumb';
+        div.setAttribute('role', 'listitem');
+        const safeName = escapeHtml(f.name);
         const preview = f.type === 'application/pdf'
             ? '<div class="file-pdf">PDF</div>'
             : (f.data
-                ? `<img src="${f.data}" alt="${escapeHtml(f.name)}">`
+                ? `<img src="${f.data}" alt="${safeName}">`
                 : '<div class="file-loading">读取中</div>');
-        div.innerHTML = `${preview}<button class="remove-btn" onclick="removeFile(${i})">✕</button>`;
+        div.innerHTML = `
+            <div class="file-media">
+                ${preview}
+                <span class="file-order">顺序 ${i + 1}</span>
+            </div>
+            <div class="file-name" title="${safeName}">${safeName}</div>
+            <div class="file-actions">
+                <button type="button" class="file-order-btn" title="前移" aria-label="将第 ${i + 1} 个文件前移：${safeName}" onclick="moveUploadFile(${i}, -1)" ${i === 0 ? 'disabled' : ''}>←</button>
+                <button type="button" class="file-order-btn" title="后移" aria-label="将第 ${i + 1} 个文件后移：${safeName}" onclick="moveUploadFile(${i}, 1)" ${i === uploadedFiles.length - 1 ? 'disabled' : ''}>→</button>
+                <button type="button" class="file-remove-btn" title="移除" aria-label="移除第 ${i + 1} 个文件：${safeName}" onclick="removeFile(${i})">×</button>
+            </div>`;
         container.appendChild(div);
     });
     container.classList.toggle('show', uploadedFiles.length > 0);
+}
+
+function moveUploadFile(index, offset) {
+    const nextIndex = index + offset;
+    if (
+        !Number.isInteger(index)
+        || !Number.isInteger(offset)
+        || index < 0
+        || index >= uploadedFiles.length
+        || nextIndex < 0
+        || nextIndex >= uploadedFiles.length
+    ) return;
+    const [moved] = uploadedFiles.splice(index, 1);
+    uploadedFiles.splice(nextIndex, 0, moved);
+    renderFilePreview();
+    setAnalysisStatus('ready', selectedUploadSummary());
 }
 
 function removeFile(index) {

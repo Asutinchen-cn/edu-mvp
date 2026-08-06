@@ -236,6 +236,30 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         ):
             self.assertNotIn(f"alert('{message}')", HTML)
 
+    def test_multi_page_upload_preview_exposes_and_preserves_file_order(self):
+        self.assertIn(
+            'id="filePreview" aria-label="已选择的试卷文件，按当前顺序分析"',
+            HTML,
+        )
+        preview_renderer = re.search(
+            r"function renderFilePreview\(\) \{(?P<body>.*?)\n\}\n\nfunction removeFile",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(preview_renderer)
+        preview_body = preview_renderer.group("body")
+        self.assertIn('class="file-order"', preview_body)
+        self.assertIn('class="file-name"', preview_body)
+        self.assertIn('将第 ${i + 1} 个文件前移', preview_body)
+        self.assertIn('将第 ${i + 1} 个文件后移', preview_body)
+        self.assertIn('移除第 ${i + 1} 个文件', preview_body)
+        self.assertIn("function moveUploadFile(index, offset)", HTML)
+        self.assertIn("uploadedFiles.splice(nextIndex, 0, moved)", HTML)
+        self.assertRegex(
+            HTML,
+            r"uploadedFiles\.forEach\(current => \{\s*fd\.append\('files', current\.file, current\.name\)",
+        )
+
     def test_parent_forms_use_labels_and_keyboard_operable_upload_actions(self):
         for control_id in (
             "gradeSelect",
