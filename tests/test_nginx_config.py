@@ -65,6 +65,22 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
                 config,
             )
 
+    def test_private_and_generated_learning_data_is_never_cached(self):
+        fallback = (PROJECT_ROOT / "nginx" / "nginx.http-fallback.conf").read_text(
+            encoding="utf-8"
+        )
+        no_store_rule = (
+            '~^/(upload|upload-batch|analyze|exams|wrong-questions|generate-practice|'
+            'generate-knowledge-practice|generate-unit-worksheet|export-practice-pdf|'
+            'family-review-report|api-info)(?:/|$) "no-store";'
+        )
+        for config in (NGINX_CONFIG, fallback):
+            self.assertIn(no_store_rule, config)
+            self.assertIn(
+                "add_header Cache-Control $edu_cache_control always;",
+                config,
+            )
+
     def test_public_ip_uses_trusted_https_and_redirects_plain_http(self):
         self.assertIn("listen 443 ssl;", NGINX_CONFIG)
         self.assertIn("return 308 https://$host$request_uri;", NGINX_CONFIG)
