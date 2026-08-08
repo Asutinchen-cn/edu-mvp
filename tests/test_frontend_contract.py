@@ -475,6 +475,22 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             r"localStorage\.setItem\([^\n]*(familyAccessCode|family_code|familyCode)",
         )
 
+    def test_newly_generated_family_access_code_must_be_saved_before_upload(self):
+        self.assertIn('id="copyFamilyAccessCodeBtn"', HTML)
+        self.assertIn("let generatedFamilyAccessCode = ''", HTML)
+        self.assertIn("let copiedFamilyAccessCode = ''", HTML)
+        self.assertIn("function generatedFamilyCodeNeedsSaving()", HTML)
+        self.assertIn("generatedFamilyCodeNeedsSaving()", HTML)
+        self.assertIn("setupFamilyAccessCodeGuard();", HTML)
+        self.assertIn("以后上传与查询都使用同一个访问码", HTML)
+        self.assertIn("请先点击“复制”保存刚生成的家庭访问码", HTML)
+        self.assertIn("document.getElementById('copyFamilyAccessCodeBtn').focus()", HTML)
+        self.assertIn("copiedFamilyAccessCode = familyCode", HTML)
+        self.assertNotRegex(
+            HTML,
+            r"(?:localStorage|sessionStorage)\.setItem\([^\n]*(familyAccess|family_code|familyCode)",
+        )
+
     def test_original_exam_files_use_the_protected_image_endpoint(self):
         self.assertIn("async function openProtectedExamImage(id)", HTML)
         self.assertIn("/image?${params.toString()}", HTML)

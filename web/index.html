@@ -444,6 +444,8 @@
             font-size: 11px;
             line-height: 1.5;
         }
+        .field-hint.warning { color: #9a5700; font-weight: 700; }
+        .field-hint.success { color: #13734a; font-weight: 700; }
         .remember-profile {
             display: inline-flex;
             align-items: flex-start;
@@ -2954,9 +2956,9 @@
                     >
                     <button type="button" class="access-code-action" data-family-target="familyAccessCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('familyAccessCode', this)">显示</button>
                     <button type="button" class="access-code-action" aria-label="生成家庭访问码" onclick="generateFamilyAccessCode('familyAccessCode')">生成</button>
-                    <button type="button" class="access-code-action" aria-label="复制家庭访问码" onclick="copyFamilyAccessCode('familyAccessCode', this)">复制</button>
+                    <button type="button" class="access-code-action" id="copyFamilyAccessCodeBtn" aria-label="复制家庭访问码" onclick="copyFamilyAccessCode('familyAccessCode', this)">复制</button>
                 </div>
-                <span class="field-hint" id="familyAccessHint" role="status" aria-live="polite">上传和查询错题库时使用，本网站不会保存访问码</span>
+                <span class="field-hint" id="familyAccessHint" role="status" aria-live="polite">以后上传与查询都使用同一个访问码；本网站不会保存它</span>
                 <label class="remember-profile" for="rememberFamilyProfile">
                     <input type="checkbox" id="rememberFamilyProfile" checked>
                     <span>在这台设备记住年级和姓名</span>
@@ -3378,6 +3380,8 @@ const WORKSHEET_CATALOG_CACHE_KEY = 'edu.curriculum-catalog.v1';
 const WORKSHEET_CATALOG_RECOVERY_DELAY_MS = 15000;
 let worksheetCatalogRecoveryTimer = null;
 let helpDialogReturnFocus = null;
+let generatedFamilyAccessCode = '';
+let copiedFamilyAccessCode = '';
 const REVIEW_STEP_DEFINITIONS = [
     { id: 'corrected', label: '订正原题', description: '说清错因，独立写出正确步骤' },
     { id: 'practiced', label: '完成同类题', description: '完成同类练习并核对答案' },
@@ -3392,6 +3396,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFileInput();
     setupDateFilters();
     setupMobileQuickNav();
+    setupFamilyAccessCodeGuard();
     setupWorksheetOutputInvalidation();
     loadWorksheetUnits();
     const wrongBankDialog = document.getElementById('wrongBankDialog');
@@ -3928,6 +3933,33 @@ function toggleFamilyCodeVisibility(inputId, button) {
     button.setAttribute('aria-label', shouldShow ? '隐藏家庭访问码' : '显示家庭访问码');
 }
 
+function setFamilyAccessHint(message, state = '') {
+    const hint = document.getElementById('familyAccessHint');
+    hint.textContent = message;
+    hint.classList.toggle('warning', state === 'warning');
+    hint.classList.toggle('success', state === 'success');
+}
+
+function setupFamilyAccessCodeGuard() {
+    const input = document.getElementById('familyAccessCode');
+    input.addEventListener('input', () => {
+        const currentCode = input.value.trim();
+        if (!generatedFamilyAccessCode || currentCode === generatedFamilyAccessCode) return;
+        generatedFamilyAccessCode = '';
+        copiedFamilyAccessCode = '';
+        setFamilyAccessHint('以后上传与查询都使用同一个访问码；本网站不会保存它');
+    });
+}
+
+function generatedFamilyCodeNeedsSaving() {
+    const currentCode = document.getElementById('familyAccessCode').value.trim();
+    return Boolean(
+        generatedFamilyAccessCode
+        && currentCode === generatedFamilyAccessCode
+        && copiedFamilyAccessCode !== currentCode
+    );
+}
+
 function generateFamilyAccessCode(inputId) {
     const input = document.getElementById(inputId);
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -3941,7 +3973,9 @@ function generateFamilyAccessCode(inputId) {
         toggle.setAttribute('aria-label', '隐藏家庭访问码');
     }
     if (inputId === 'familyAccessCode') {
-        document.getElementById('familyAccessHint').textContent = '已生成安全访问码，请点击“复制”并妥善保存；刷新页面后不会保留';
+        generatedFamilyAccessCode = input.value;
+        copiedFamilyAccessCode = '';
+        setFamilyAccessHint('已生成安全访问码，请点击“复制”并妥善保存；刷新页面后不会保留', 'warning');
     }
     input.focus();
 }
@@ -3951,7 +3985,7 @@ async function copyFamilyAccessCode(inputId, button) {
     const familyCode = (input.value || '').trim();
     const hint = inputId === 'familyAccessCode' ? document.getElementById('familyAccessHint') : null;
     if (!/^[A-Za-z0-9]{8,32}$/.test(familyCode)) {
-        if (hint) hint.textContent = '请先输入或生成 8-32 位字母或数字组成的家庭访问码';
+        if (hint) setFamilyAccessHint('请先输入或生成 8-32 位字母或数字组成的家庭访问码', 'warning');
         input.focus();
         return;
     }
@@ -3977,13 +4011,16 @@ async function copyFamilyAccessCode(inputId, button) {
     }
 
     if (!copied) {
-        if (hint) hint.textContent = '复制失败，请显示访问码后手动复制';
+        if (hint) setFamilyAccessHint('复制失败，请显示访问码后手动复制', 'warning');
         return;
     }
 
     button.textContent = '已复制';
     button.setAttribute('aria-label', '家庭访问码已复制');
-    if (hint) hint.textContent = '访问码已复制，请妥善保存；刷新页面后不会保留';
+    if (hint) {
+        copiedFamilyAccessCode = familyCode;
+        setFamilyAccessHint('访问码已复制，请妥善保存；以后上传与查询继续使用这个访问码', 'success');
+    }
     window.setTimeout(() => {
         button.textContent = '复制';
         button.setAttribute('aria-label', '复制家庭访问码');
@@ -4076,6 +4113,12 @@ async function startAnalysis() {
     } catch (e) {
         setAnalysisStatus('error', `${e.message}。`);
         document.getElementById('familyAccessCode').focus();
+        return;
+    }
+    if (generatedFamilyCodeNeedsSaving()) {
+        setAnalysisStatus('error', '请先点击“复制”保存刚生成的家庭访问码，再开始分析。这个访问码用于以后查询和管理错题。');
+        setFamilyAccessHint('刚生成的访问码还没有确认保存；请先点击“复制”', 'warning');
+        document.getElementById('copyFamilyAccessCodeBtn').focus();
         return;
     }
 
