@@ -2367,6 +2367,155 @@
         }
         .curriculum-source a:hover { text-decoration: underline; }
 
+        /* ===== FIRST-TIME HELP ===== */
+        .help-dialog {
+            width: min(680px, calc(100% - 32px));
+            max-height: calc(100vh - 32px);
+            margin: auto;
+            padding: 0;
+            border: 0;
+            border-radius: 16px;
+            background: #fff;
+            color: var(--ink);
+            box-shadow: 0 24px 80px rgba(20, 42, 76, 0.28);
+            overflow: auto;
+        }
+        .help-dialog::backdrop { background: rgba(21, 34, 58, 0.48); }
+        .help-dialog-shell { padding: 24px; }
+        .help-dialog-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .help-dialog-head h2 { font-size: 22px; margin-bottom: 6px; }
+        .help-dialog-head p { color: var(--muted); font-size: 13px; line-height: 1.65; }
+        .upload-example-layout {
+            display: grid;
+            grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.1fr);
+            gap: 22px;
+            align-items: center;
+        }
+        .upload-example-figure { margin: 0; }
+        .upload-example-photo {
+            position: relative;
+            min-height: 270px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 26px;
+            overflow: hidden;
+            border: 1px solid #cfe0f7;
+            border-radius: 8px;
+            background: #eaf2fc;
+        }
+        .upload-example-sheet {
+            width: 76%;
+            min-height: 220px;
+            padding: 22px 18px;
+            border: 1px solid #d7dee8;
+            border-radius: 4px;
+            background: #fff;
+            box-shadow: 0 14px 28px rgba(21, 34, 58, 0.15);
+            transform: rotate(-2deg);
+        }
+        .example-sheet-title {
+            margin-bottom: 14px;
+            color: #273958;
+            font-size: 12px;
+            font-weight: 900;
+            text-align: center;
+        }
+        .example-sheet-line {
+            height: 6px;
+            margin: 10px 0;
+            border-radius: 3px;
+            background: #dde5f0;
+        }
+        .example-sheet-line.short { width: 68%; }
+        .example-sheet-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            margin-top: 4px;
+            border: 2px solid var(--danger);
+            border-radius: 50%;
+            color: var(--danger);
+            font-size: 12px;
+            font-weight: 900;
+        }
+        .capture-corner {
+            position: absolute;
+            width: 26px;
+            height: 26px;
+            border-color: var(--success);
+            border-style: solid;
+        }
+        .capture-corner.top-left { top: 14px; left: 14px; border-width: 3px 0 0 3px; }
+        .capture-corner.top-right { top: 14px; right: 14px; border-width: 3px 3px 0 0; }
+        .capture-corner.bottom-left { bottom: 14px; left: 14px; border-width: 0 0 3px 3px; }
+        .capture-corner.bottom-right { right: 14px; bottom: 14px; border-width: 0 3px 3px 0; }
+        .upload-example-figure figcaption {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
+            text-align: center;
+        }
+        .help-checklist,
+        .help-step-list {
+            display: grid;
+            gap: 0;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .help-checklist li,
+        .help-step-list li {
+            display: grid;
+            grid-template-columns: 34px minmax(0, 1fr);
+            gap: 12px;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--line);
+        }
+        .help-checklist li:last-child,
+        .help-step-list li:last-child { border-bottom: 0; }
+        .help-check-icon,
+        .help-step-number {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: #edf7f3;
+            color: var(--success);
+            font-size: 14px;
+            font-weight: 900;
+        }
+        .help-step-number { background: #edf5ff; color: var(--brand-blue); }
+        .help-checklist strong,
+        .help-step-list strong { display: block; margin-bottom: 3px; font-size: 14px; }
+        .help-checklist span,
+        .help-step-list span { color: var(--muted); font-size: 12px; line-height: 1.6; }
+        .help-privacy-note {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-left: 4px solid var(--brand-blue);
+            background: #f1f7ff;
+            color: #41516b;
+            font-size: 12px;
+            line-height: 1.65;
+        }
+        .help-dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 18px;
+        }
+
         /* ===== WRONG BANK QUERY ===== */
         .wrong-bank-dialog {
             width: min(560px, calc(100% - 32px));
@@ -2615,6 +2764,11 @@
             .wrong-bank-grid { grid-template-columns: 1fr; }
             .wrong-bank-field.full { grid-column: auto; }
             .wrong-bank-form { padding: 20px; }
+            .help-dialog-shell { padding: 20px; }
+            .upload-example-layout { grid-template-columns: 1fr; gap: 14px; }
+            .upload-example-photo { min-height: 210px; }
+            .upload-example-sheet { min-height: 170px; padding: 16px 14px; }
+            .help-dialog-actions .dialog-button { width: 100%; }
             .wrong-bank-actions { align-items: stretch; }
             .dialog-button { flex: 1; }
             .family-data-note summary { align-items: flex-start; flex-wrap: wrap; padding: 10px 0; }
@@ -2698,7 +2852,7 @@
             <a href="#worksheet">单元复习卷</a>
             <a href="#history">历史记录</a>
         </nav>
-        <button class="guide-btn" onclick="showGuide()">📖 使用指南</button>
+        <button type="button" class="guide-btn" onclick="showGuide()">📖 使用指南</button>
         <div class="user-avatar">学</div>
     </div>
 </div>
@@ -3011,6 +3165,58 @@
     </a>
 </nav>
 
+<!-- FIRST-TIME HELP DIALOG -->
+<dialog class="help-dialog" id="helpDialog" aria-labelledby="helpDialogTitle" aria-describedby="helpDialogDescription">
+    <div class="help-dialog-shell">
+        <div class="help-dialog-head">
+            <div>
+                <h2 id="helpDialogTitle">使用帮助</h2>
+                <p id="helpDialogDescription">按清晰步骤完成试卷分析与错题复习。</p>
+            </div>
+            <button type="button" class="dialog-close" aria-label="关闭使用帮助" onclick="closeHelpDialog()">×</button>
+        </div>
+        <div id="helpDialogContent">
+            <section id="uploadExampleHelp" hidden>
+                <div class="upload-example-layout">
+                    <figure class="upload-example-figure">
+                        <div class="upload-example-photo" aria-label="清晰试卷照片示例">
+                            <span class="capture-corner top-left" aria-hidden="true"></span>
+                            <span class="capture-corner top-right" aria-hidden="true"></span>
+                            <span class="capture-corner bottom-left" aria-hidden="true"></span>
+                            <span class="capture-corner bottom-right" aria-hidden="true"></span>
+                            <div class="upload-example-sheet" aria-hidden="true">
+                                <div class="example-sheet-title">六年级数学练习</div>
+                                <div class="example-sheet-line"></div>
+                                <div class="example-sheet-line short"></div>
+                                <span class="example-sheet-mark">×</span>
+                                <div class="example-sheet-line"></div>
+                                <div class="example-sheet-line short"></div>
+                            </div>
+                        </div>
+                        <figcaption>整张试卷完整入镜，题目、作答和批改痕迹清晰可见。</figcaption>
+                    </figure>
+                    <ul class="help-checklist">
+                        <li><span class="help-check-icon" aria-hidden="true">✓</span><div><strong>四角完整</strong><span>不要裁掉题号、选项或老师批注。</span></div></li>
+                        <li><span class="help-check-icon" aria-hidden="true">✓</span><div><strong>光线均匀</strong><span>避开反光和阴影，镜头与试卷尽量平行。</span></div></li>
+                        <li><span class="help-check-icon" aria-hidden="true">✓</span><div><strong>多页按顺序</strong><span>一次选完后，可在缩略图下方调整前后顺序。</span></div></li>
+                    </ul>
+                </div>
+            </section>
+            <section id="usageGuideHelp" hidden>
+                <ol class="help-step-list">
+                    <li><span class="help-step-number" aria-hidden="true">1</span><div><strong>上传试卷</strong><span>选择年级和学科，填写学生姓名与家庭访问码，再上传完整试卷。</span></div></li>
+                    <li><span class="help-step-number" aria-hidden="true">2</span><div><strong>查看诊断</strong><span>核对错题、错因和薄弱知识点，并下载错题订正单。</span></div></li>
+                    <li><span class="help-step-number" aria-hidden="true">3</span><div><strong>错题订正</strong><span>完成同类练习和隔天回测，按题标记是否真正掌握。</span></div></li>
+                </ol>
+                <div class="help-privacy-note">家庭访问码用于保护服务器中的原卷和错题记录。网站可以记住年级与姓名，但不会保存访问码。</div>
+            </section>
+        </div>
+        <div class="help-dialog-actions">
+            <button type="button" class="dialog-button primary" onclick="closeHelpDialog()">知道了</button>
+        </div>
+    </div>
+</dialog>
+
 <!-- WRONG BANK QUERY DIALOG -->
 <dialog class="wrong-bank-dialog" id="wrongBankDialog" aria-labelledby="wrongBankDialogTitle">
     <form class="wrong-bank-form" novalidate onsubmit="submitWrongBankQuery(event)">
@@ -3169,6 +3375,7 @@ const WORKSHEET_CATALOG_TIMEOUT_MS = 30000;
 const WORKSHEET_CATALOG_CACHE_KEY = 'edu.curriculum-catalog.v1';
 const WORKSHEET_CATALOG_RECOVERY_DELAY_MS = 15000;
 let worksheetCatalogRecoveryTimer = null;
+let helpDialogReturnFocus = null;
 const REVIEW_STEP_DEFINITIONS = [
     { id: 'corrected', label: '订正原题', description: '说清错因，独立写出正确步骤' },
     { id: 'practiced', label: '完成同类题', description: '完成同类练习并核对答案' },
@@ -3191,6 +3398,18 @@ document.addEventListener('DOMContentLoaded', () => {
     wrongBankDialog.addEventListener('cancel', event => {
         event.preventDefault();
         closeWrongBankQuery();
+    });
+    const helpDialog = document.getElementById('helpDialog');
+    helpDialog.addEventListener('click', event => {
+        if (event.target === helpDialog) closeHelpDialog();
+    });
+    helpDialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        closeHelpDialog();
+    });
+    helpDialog.addEventListener('close', () => {
+        helpDialogReturnFocus?.focus();
+        helpDialogReturnFocus = null;
     });
 });
 
@@ -4662,12 +4881,39 @@ function exportPracticePdf() {
 
 // ===== EXAMPLE =====
 function loadExample() {
-    alert('示例：请上传一张清晰的试卷照片，确保文字清晰可辨。支持 JPG/PNG/PDF 格式，建议光线充足时拍摄。');
+    openHelpDialog('upload');
 }
 
 // ===== GUIDE =====
 function showGuide() {
-    alert('使用指南：\n\n1. 选择年级、学科并填写学生姓名\n2. 设置 8-32 位家庭访问码，请妥善记住\n3. 上传试卷照片（支持多张）\n4. 点击“开始分析”\n5. 查看有证据的错题诊断与复习安排\n6. 下次点击“查看今日复习”，使用相同访问码查询\n\n本机可以记住年级和姓名，但不会保存家庭访问码。');
+    openHelpDialog('guide');
+}
+
+function openHelpDialog(mode) {
+    const copy = {
+        upload: {
+            title: '怎样拍清楚整份试卷',
+            description: '清晰、完整、顺序正确的原卷，能让错题识别更准确。'
+        },
+        guide: {
+            title: '从上传到真正掌握',
+            description: '家长只需跟着三个步骤完成一次复习闭环。'
+        }
+    }[mode];
+    if (!copy) return;
+
+    const dialog = document.getElementById('helpDialog');
+    helpDialogReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.getElementById('helpDialogTitle').textContent = copy.title;
+    document.getElementById('helpDialogDescription').textContent = copy.description;
+    document.getElementById('uploadExampleHelp').hidden = mode !== 'upload';
+    document.getElementById('usageGuideHelp').hidden = mode !== 'guide';
+    if (!dialog.open) dialog.showModal();
+}
+
+function closeHelpDialog() {
+    const dialog = document.getElementById('helpDialog');
+    if (dialog.open) dialog.close();
 }
 
 // ===== HISTORY =====

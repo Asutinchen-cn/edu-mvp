@@ -281,6 +281,25 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('<label class="visually-hidden" for="dateTo">结束日期</label>', HTML)
         self.assertIn(".visually-hidden {", HTML)
 
+    def test_first_time_help_uses_an_accessible_in_page_dialog(self):
+        self.assertIn(
+            '<dialog class="help-dialog" id="helpDialog" aria-labelledby="helpDialogTitle" aria-describedby="helpDialogDescription">',
+            HTML,
+        )
+        self.assertIn('id="helpDialogContent"', HTML)
+        self.assertIn('function openHelpDialog(mode)', HTML)
+        self.assertIn('function closeHelpDialog()', HTML)
+        self.assertIn("openHelpDialog('upload')", HTML)
+        self.assertIn("openHelpDialog('guide')", HTML)
+        self.assertIn("helpDialog.addEventListener('cancel'", HTML)
+        self.assertIn("helpDialog.addEventListener('close'", HTML)
+        self.assertIn("helpDialogReturnFocus?.focus()", HTML)
+        self.assertIn('class="upload-example-sheet"', HTML)
+        self.assertIn('四角完整', HTML)
+        self.assertIn('错题订正', HTML)
+        self.assertNotIn("alert('示例：请上传一张清晰的试卷照片", HTML)
+        self.assertNotIn("alert('使用指南：", HTML)
+
     def test_mobile_history_filters_have_comfortable_touch_targets(self):
         filter_style = re.search(r"\.filter-tab\s*\{(?P<body>[^}]*)\}", HTML)
         history_view_style = re.search(r"\.history-view-button\s*\{(?P<body>[^}]*)\}", HTML)
