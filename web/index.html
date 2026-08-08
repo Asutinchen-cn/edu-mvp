@@ -2810,13 +2810,15 @@
                 font-size: 11px;
                 font-weight: 800;
                 cursor: pointer;
+                transition: background 160ms ease, color 160ms ease;
             }
             .mobile-quick-nav a:focus-visible,
             .mobile-quick-nav button:focus-visible {
                 outline: 2px solid var(--brand-blue);
                 outline-offset: -2px;
             }
-            .mobile-quick-nav button {
+            .mobile-quick-nav a.active,
+            .mobile-quick-nav button.active {
                 background: var(--brand-blue);
                 color: #fff;
             }
@@ -3151,15 +3153,15 @@
 </div>
 
 <nav class="mobile-quick-nav" aria-label="手机快捷操作">
-    <a href="#analysis">
+    <a class="active" href="#analysis" data-mobile-section="analysis" aria-current="location">
         <span class="mobile-quick-icon" aria-hidden="true">↑</span>
         <span>上传试卷</span>
     </a>
-    <button type="button" onclick="goToTodayReview()">
+    <button type="button" data-mobile-section="history" onclick="goToTodayReview()">
         <span class="mobile-quick-icon" aria-hidden="true">✓</span>
         <span>今日复习</span>
     </button>
-    <a href="#worksheet">
+    <a href="#worksheet" data-mobile-section="worksheet">
         <span class="mobile-quick-icon" aria-hidden="true">▤</span>
         <span>单元卷</span>
     </a>
@@ -3389,6 +3391,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDropzone();
     setupFileInput();
     setupDateFilters();
+    setupMobileQuickNav();
     setupWorksheetOutputInvalidation();
     loadWorksheetUnits();
     const wrongBankDialog = document.getElementById('wrongBankDialog');
@@ -3412,6 +3415,50 @@ document.addEventListener('DOMContentLoaded', () => {
         helpDialogReturnFocus = null;
     });
 });
+
+function setupMobileQuickNav() {
+    const items = [...document.querySelectorAll('.mobile-quick-nav [data-mobile-section]')];
+    const targets = items.map(item => ({
+        item: item,
+        section: document.getElementById(item.dataset.mobileSection)
+    })).filter(target => target.section);
+    if (!targets.length) return;
+
+    let updateScheduled = false;
+    const updateState = () => {
+        updateScheduled = false;
+        const orderedTargets = [...targets].sort((left, right) => (
+            left.section.offsetTop - right.section.offsetTop
+        ));
+        const marker = window.scrollY + Math.min(window.innerHeight * 0.4, 280);
+        let activeSection = orderedTargets[0].section.id;
+        orderedTargets.forEach(target => {
+            if (target.section.offsetTop <= marker) activeSection = target.section.id;
+        });
+        if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 8) {
+            activeSection = orderedTargets[orderedTargets.length - 1].section.id;
+        }
+        items.forEach(item => {
+            const active = item.dataset.mobileSection === activeSection;
+            item.classList.toggle('active', active);
+            if (active) {
+                item.setAttribute('aria-current', 'location');
+            } else {
+                item.removeAttribute('aria-current');
+            }
+        });
+    };
+    const requestUpdate = () => {
+        if (updateScheduled) return;
+        updateScheduled = true;
+        window.requestAnimationFrame(updateState);
+    };
+
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate);
+    items.forEach(item => item.addEventListener('click', () => window.setTimeout(requestUpdate, 0)));
+    requestUpdate();
+}
 
 function renderWorksheetCatalogFailure(message) {
     worksheetUnits = [];

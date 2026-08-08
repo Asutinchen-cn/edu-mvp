@@ -436,6 +436,24 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertRegex(css, r"body\s*\{[^}]*padding-bottom:")
         self.assertRegex(css, r"\.mobile-quick-nav\s*\{[^}]*display:\s*grid")
 
+    def test_mobile_quick_nav_tracks_the_visible_parent_task(self):
+        self.assertIn('data-mobile-section="analysis"', HTML)
+        self.assertIn('data-mobile-section="history"', HTML)
+        self.assertIn('data-mobile-section="worksheet"', HTML)
+        self.assertIn("function setupMobileQuickNav()", HTML)
+        self.assertIn("setupMobileQuickNav();", HTML)
+        self.assertIn("item.setAttribute('aria-current', 'location')", HTML)
+        self.assertIn("item.removeAttribute('aria-current')", HTML)
+        self.assertIn("window.addEventListener('scroll', requestUpdate", HTML)
+        self.assertRegex(
+            HTML,
+            r"\.mobile-quick-nav (?:a|button)\.active[^}]*background:\s*var\(--brand-blue\)",
+        )
+        self.assertNotRegex(
+            HTML,
+            r"\.mobile-quick-nav button\s*\{[^}]*background:\s*var\(--brand-blue\)",
+        )
+
     def test_family_access_code_has_safe_visibility_and_generation_helpers(self):
         self.assertIn("function toggleFamilyCodeVisibility", HTML)
         self.assertIn("function generateFamilyAccessCode", HTML)
