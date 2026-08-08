@@ -6123,7 +6123,9 @@ async function loadWrongQuestionBank(options = {}) {
         wrongQuestionBank.loaded = false;
         wrongQuestionBank.error = error.message || '错题明细加载失败';
         renderHistory();
-        if (!quiet) alert('加载错题明细失败：' + wrongQuestionBank.error);
+        if (!quiet) {
+            setHistorySyncStatus('error', `加载错题明细失败：${wrongQuestionBank.error}。可以重新查询家庭错题库。`);
+        }
         throw error;
     }
 }
@@ -6135,7 +6137,8 @@ async function syncServerWrongBank(options = {}) {
     if (!grade || !studentName) {
         const error = new Error('请选择年级并填写学生姓名');
         if (quiet) throw error;
-        alert(error.message);
+        setHistorySyncStatus('error', `${error.message}，再查询家庭错题库。`);
+        document.getElementById('studentName').focus();
         return null;
     }
 
@@ -6144,7 +6147,7 @@ async function syncServerWrongBank(options = {}) {
         accessHeaders = familyAccessHeaders();
     } catch (e) {
         if (quiet) throw e;
-        alert(e.message);
+        setHistorySyncStatus('error', `${e.message}。输入正确访问码后可以重试。`);
         document.getElementById('familyAccessCode').focus();
         return null;
     }
@@ -6213,11 +6216,11 @@ async function syncServerWrongBank(options = {}) {
         const message = visibleRecords.length
             ? `已同步 ${subjectText} ${visibleRecords.length} 份试卷、${visibleQuestions.length} 道错题`
             : `家庭错题库中暂无${subjectText}记录`;
-        if (!quiet) alert(message);
+        if (!quiet) setHistorySyncStatus('success', message);
         return { count: visibleRecords.length, message: message };
     } catch (e) {
         if (quiet) throw e;
-        alert('查询家庭错题库失败：' + e.message);
+        setHistorySyncStatus('error', `查询家庭错题库失败：${e.message}。原有页面内容仍保留，可以重试。`);
         return null;
     }
 }
@@ -6429,7 +6432,8 @@ function prepareKnowledgePractice(knowledgePoint, subject) {
         && item.subject === subject
     ));
     if (!studentName || !grade || !relatedQuestions.length) {
-        alert('请重新查询家庭错题库后再生成专项练习');
+        openWrongBankQuery();
+        document.getElementById('wrongBankStatus').textContent = '当前错题证据已失效，请重新查询家庭错题库后再生成专项练习。';
         return;
     }
     const pendingQuestions = relatedQuestions.filter(item => wrongQuestionMasteryStatus(item) === 'pending');
@@ -6702,7 +6706,7 @@ function prepareHistoryPractice(id) {
     const record = historyRecords.find(item => item.id === id);
     const data = record ? historyAnalysisData(record) : null;
     if (!record?.serverId || !data || !recordWeakPoints(record).length) {
-        alert('这条记录暂时没有可用于出题的薄弱知识点');
+        setHistorySyncStatus('error', '这条记录暂时没有可用于出题的薄弱知识点。请先重新分析原卷，或选择其他已完成诊断的记录。');
         return;
     }
     currentAnalysisData = {

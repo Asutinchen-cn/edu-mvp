@@ -300,6 +300,25 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotIn("alert('示例：请上传一张清晰的试卷照片", HTML)
         self.assertNotIn("alert('使用指南：", HTML)
 
+    def test_parent_flows_never_use_blocking_browser_alerts(self):
+        self.assertNotRegex(HTML, r"\balert\(")
+
+        knowledge_practice = re.search(
+            r"function prepareKnowledgePractice\(knowledgePoint, subject\) \{(?P<body>.*?)\n\}\n\nasync function openQuestionSourceExam",
+            HTML,
+            re.S,
+        )
+        history_practice = re.search(
+            r"function prepareHistoryPractice\(id\) \{(?P<body>.*?)\n\}\n\nfunction filterHistory",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(knowledge_practice)
+        self.assertIsNotNone(history_practice)
+        self.assertIn("openWrongBankQuery()", knowledge_practice.group("body"))
+        self.assertIn("wrongBankStatus", knowledge_practice.group("body"))
+        self.assertIn("setHistorySyncStatus('error'", history_practice.group("body"))
+
     def test_mobile_history_filters_have_comfortable_touch_targets(self):
         filter_style = re.search(r"\.filter-tab\s*\{(?P<body>[^}]*)\}", HTML)
         history_view_style = re.search(r"\.history-view-button\s*\{(?P<body>[^}]*)\}", HTML)
