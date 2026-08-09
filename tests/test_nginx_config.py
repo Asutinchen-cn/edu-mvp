@@ -65,6 +65,15 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
                 config,
             )
 
+    def test_old_index_backups_redirect_to_the_current_app(self):
+        fallback = (PROJECT_ROOT / "nginx" / "nginx.http-fallback.conf").read_text(
+            encoding="utf-8"
+        )
+        redirect_rule = r"location ~ ^/index\.html\.(?:bak|backup)(?:-|$)"
+        for config in (NGINX_CONFIG, fallback):
+            self.assertIn(redirect_rule, config)
+            self.assertIn("return 302 /;", config)
+
     def test_private_and_generated_learning_data_is_never_cached(self):
         fallback = (PROJECT_ROOT / "nginx" / "nginx.http-fallback.conf").read_text(
             encoding="utf-8"
