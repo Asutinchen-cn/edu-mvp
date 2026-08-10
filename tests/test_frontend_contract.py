@@ -624,6 +624,20 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("输入访问码查看今日复习", HTML)
         self.assertIn("尚未查询家庭错题库", HTML)
 
+    def test_unqueried_wrong_bank_has_only_one_primary_query_action(self):
+        render_history = re.search(
+            r"function renderHistory\(\) \{(?P<body>.*?)\n\}\n\nasync function toggleRecord",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(render_history)
+        body = render_history.group("body")
+        self.assertIn("const hasUnqueriedServerHistory", body)
+        self.assertIn("wrongBankQueryButton.hidden = hasUnqueriedServerHistory", body)
+        self.assertIn("使用上方按钮输入家庭访问码", body)
+        self.assertNotIn("openWrongBankQuery()", body)
+        self.assertIn('href="#analysis"', body)
+
     def test_history_records_render_readable_diagnosis_and_actions(self):
         self.assertIn("function renderHistoryDiagnosis(record)", HTML)
         self.assertIn("async function loadHistoryDetail(id)", HTML)
