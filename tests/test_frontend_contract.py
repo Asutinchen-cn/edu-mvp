@@ -20,6 +20,10 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("worksheetMeta = data.meta || null", HTML)
         self.assertIn("worksheetMeta?.verified_on", HTML)
         self.assertIn("worksheetMeta?.catalog_status_note", HTML)
+        self.assertIn("worksheetMeta?.catalog_basis_note", HTML)
+        self.assertIn("worksheetMeta?.outline_basis_note", HTML)
+        self.assertIn("册次与版本", HTML)
+        self.assertIn("单元与考点", HTML)
         self.assertIn("目录最近核验", HTML)
         self.assertGreaterEqual(len(re.findall(r"renderWorksheetSource\(\)", HTML)), 2)
 

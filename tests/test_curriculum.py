@@ -56,8 +56,18 @@ class CurriculumUnitsTest(unittest.TestCase):
         self.assertTrue(
             all("2026 年春季教学用书目录" in unit["source_note"] for unit in second_semester_units)
         )
-        self.assertEqual(CURRICULUM_META["verified_on"], "2026-07-24")
+        self.assertEqual(CURRICULUM_META["verified_on"], "2026-08-10")
         self.assertIn("2026 年秋季目录尚未发布", CURRICULUM_META["catalog_status_note"])
+
+    def test_curriculum_metadata_distinguishes_official_catalog_from_manual_outline(self):
+        self.assertEqual(
+            CURRICULUM_META["catalog_basis_note"],
+            "上海市教委目录用于核对教材册次、版本和使用年级。",
+        )
+        self.assertEqual(
+            CURRICULUM_META["outline_basis_note"],
+            "单元标题与知识点标签依据公开教材目录页人工整理，不代表市教委目录逐项列示。",
+        )
 
     def test_math_matches_current_shanghai_sixth_grade_chapters(self):
         first_titles = [unit["title"] for unit in self.units_for("math", "first")]
