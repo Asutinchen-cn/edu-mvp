@@ -583,23 +583,6 @@
         }
         .dropzone-text { font-size: 15px; color: var(--ink); font-weight: 800; }
         .dropzone-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
-        .upload-btn {
-            display: block;
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 14px;
-            background: linear-gradient(135deg, var(--brand-blue), var(--brand-blue-2));
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.15s, box-shadow 0.15s;
-        }
-        .upload-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 12px 24px rgba(23, 105, 232, 0.22);
-        }
         .example-link {
             display: block;
             min-height: 40px;
@@ -2990,10 +2973,6 @@
         <input type="file" id="fileInput" accept="image/jpeg,image/png,application/pdf" multiple style="display:none">
 
         <div class="file-preview" id="filePreview" aria-label="已选择的试卷文件，按当前顺序分析" role="list" aria-live="polite"></div>
-
-        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-            ☁️ 选择试卷图片
-        </button>
 
         <button type="button" class="example-link" onclick="loadExample()">示例：点击查看上传示例</button>
 

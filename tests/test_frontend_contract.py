@@ -285,6 +285,10 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('<label class="visually-hidden" for="dateTo">结束日期</label>', HTML)
         self.assertIn(".visually-hidden {", HTML)
 
+    def test_upload_form_has_a_single_file_picker_action(self):
+        self.assertEqual(HTML.count("document.getElementById('fileInput').click()"), 1)
+        self.assertNotIn('class="upload-btn"', HTML)
+
     def test_first_time_help_uses_an_accessible_in_page_dialog(self):
         self.assertIn(
             '<dialog class="help-dialog" id="helpDialog" aria-labelledby="helpDialogTitle" aria-describedby="helpDialogDescription">',
