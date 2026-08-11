@@ -381,6 +381,22 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertRegex(filter_style.group("body"), r"min-height:\s*40px")
         self.assertRegex(history_view_style.group("body"), r"min-height:\s*40px")
 
+    def test_mobile_core_parent_actions_have_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        for selector in (
+            '.guide-btn,',
+            '.hero-link.quiet,',
+            '.form-group input[type="password"],',
+            '.access-code-action,',
+            '.family-data-manage,',
+            '.curriculum-source a,',
+            '.history-action { min-height: 44px; }',
+            '.remember-profile,',
+            '.worksheet-check { min-height: 44px; }',
+        ):
+            self.assertIn(selector, mobile_css)
+        self.assertIn('.curriculum-source a { display: inline-flex;', mobile_css)
+
     def test_analysis_details_and_practice_questions_are_keyboard_operable(self):
         self.assertIn(
             '<button type="button" class="detail-header" aria-expanded="false"',
