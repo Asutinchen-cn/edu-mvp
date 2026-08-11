@@ -144,6 +144,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         fetch_index = HTML.index("fetch('/generate-unit-worksheet'")
         self.assertLess(validation_index, fetch_index)
 
+    def test_worksheet_validates_the_pdf_title_before_fetching(self):
+        self.assertRegex(
+            HTML,
+            r'<input id="worksheetTitle"[^>]*required[^>]*maxlength="80"[^>]*aria-describedby="worksheetTitleHint"',
+        )
+        self.assertIn('id="worksheetTitleHint"', HTML)
+        self.assertIn('function validWorksheetTitle()', HTML)
+        self.assertIn('请填写 1-80 个字符的卷面标题。', HTML)
+        self.assertIn('title: worksheetTitle', HTML)
+        validation_index = HTML.index('请填写 1-80 个字符的卷面标题。')
+        fetch_index = HTML.index("fetch('/generate-unit-worksheet'")
+        self.assertLess(validation_index, fetch_index)
+
     def test_worksheet_output_clearly_separates_child_and_parent_pdfs(self):
         self.assertIn("给孩子作答 · 不含答案", HTML)
         self.assertIn("家长核对 · 含答案和解析", HTML)

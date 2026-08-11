@@ -3110,7 +3110,8 @@
         </div>
         <div class="worksheet-field full">
             <label for="worksheetTitle">卷面标题</label>
-            <input id="worksheetTitle" type="text" value="上海六年级单元复习卷">
+            <input id="worksheetTitle" type="text" value="上海六年级单元复习卷" required maxlength="80" aria-describedby="worksheetTitleHint">
+            <span class="field-hint" id="worksheetTitleHint">显示在题目卷和答案解析卷首页，最多 80 个字符</span>
         </div>
     </div>
     <div class="worksheet-plan-preview" id="worksheetPlanPreview" role="status" aria-live="polite">
@@ -3716,6 +3717,11 @@ function validWorksheetQuestionCount() {
         : null;
 }
 
+function validWorksheetTitle() {
+    const title = document.getElementById('worksheetTitle').value.trim();
+    return title && [...title].length <= 80 ? title : null;
+}
+
 function renderWorksheetPlanPreview() {
     const subject = document.getElementById('worksheetSubject').value;
     const difficulty = document.getElementById('worksheetDifficulty').value;
@@ -3787,9 +3793,15 @@ async function generateUnitWorksheet() {
     const unitIds = [...document.querySelectorAll('input[name="worksheetUnit"]:checked')].map(el => el.value);
     const knowledgePoints = [...document.querySelectorAll('input[name="worksheetKnowledge"]:checked')].map(el => el.value);
     const questionCount = validWorksheetQuestionCount();
+    const worksheetTitle = validWorksheetTitle();
     if (questionCount === null) {
         setWorksheetStatus('error', '请输入 3-20 之间的整数题量。');
         document.getElementById('worksheetCount').focus();
+        return;
+    }
+    if (worksheetTitle === null) {
+        setWorksheetStatus('error', '请填写 1-80 个字符的卷面标题。');
+        document.getElementById('worksheetTitle').focus();
         return;
     }
     if (!unitIds.length || !knowledgePoints.length) {
@@ -3813,7 +3825,7 @@ async function generateUnitWorksheet() {
                 knowledge_points: knowledgePoints,
                 difficulty: document.getElementById('worksheetDifficulty').value,
                 question_count: questionCount,
-                title: document.getElementById('worksheetTitle').value,
+                title: worksheetTitle,
                 include_explanations: true
             })
         });
