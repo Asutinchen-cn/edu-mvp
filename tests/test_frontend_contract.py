@@ -286,6 +286,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         ):
             self.assertNotIn(f"alert('{message}')", HTML)
 
+    def test_analysis_waiting_overlay_shows_real_three_stage_progress(self):
+        self.assertIn('id="loadingStages"', HTML)
+        for stage in ('upload', 'analyze', 'plan'):
+            self.assertIn(f'data-analysis-stage="{stage}"', HTML)
+        self.assertIn('id="loadingDetail"', HTML)
+        self.assertIn('function setAnalysisLoadingStage(stage, text)', HTML)
+        self.assertIn("setAnalysisLoadingStage('upload'", HTML)
+        self.assertIn("setAnalysisLoadingStage('analyze'", HTML)
+        self.assertIn("setAnalysisLoadingStage('plan'", HTML)
+        self.assertIn("node.setAttribute('aria-current', 'step')", HTML)
+        self.assertIn('原卷已保存到家庭错题库', HTML)
+        self.assertIn('通常需要 30-90 秒，请保持页面打开', HTML)
+
     def test_multi_page_upload_preview_exposes_and_preserves_file_order(self):
         self.assertIn(
             'id="filePreview" aria-label="已选择的试卷文件，按当前顺序分析"',

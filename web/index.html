@@ -758,7 +758,10 @@
             z-index: 1000;
             flex-direction: column;
             align-items: center; justify-content: center;
-            gap: 16px;
+            gap: 14px;
+            padding: 24px;
+            text-align: center;
+            backdrop-filter: blur(5px);
         }
         .loading-overlay.show { display: flex; }
         .loader {
@@ -769,7 +772,30 @@
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-text { font-size: 16px; color: #333; font-weight: 500; }
+        .loading-text { font-size: 18px; color: var(--ink); font-weight: 800; }
+        .loading-stages {
+            width: min(520px, 100%);
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .loading-stage {
+            min-width: 0;
+            padding: 9px 6px;
+            border-bottom: 3px solid #dbe6f4;
+            color: #7b8ba3;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .loading-stage b { margin-right: 4px; }
+        .loading-stage.completed { border-bottom-color: var(--success); color: #167455; }
+        .loading-stage.active { border-bottom-color: var(--brand-blue); color: var(--brand-blue); }
+        .loading-detail {
+            max-width: 520px;
+            color: #52647f;
+            font-size: 13px;
+            line-height: 1.7;
+        }
 
         /* ===== HISTORY CARD ===== */
         .history-card {
@@ -3322,8 +3348,14 @@
 
 <!-- LOADING OVERLAY -->
 <div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite" aria-atomic="true">
-    <div class="loader"></div>
+    <div class="loader" aria-hidden="true"></div>
     <div class="loading-text" id="loadingText">AI 正在分析试卷...</div>
+    <div class="loading-stages" id="loadingStages" aria-label="分析进度">
+        <span class="loading-stage" data-analysis-stage="upload"><b>1</b>上传识别</span>
+        <span class="loading-stage" data-analysis-stage="analyze"><b>2</b>错题诊断</span>
+        <span class="loading-stage" data-analysis-stage="plan"><b>3</b>整理方案</span>
+    </div>
+    <div class="loading-detail" id="loadingDetail">通常需要 30-90 秒，请保持页面打开</div>
 </div>
 
 <!-- CONFIRM DIALOG -->
@@ -3896,6 +3928,37 @@ function setAnalysisStatus(type, message) {
     status.hidden = !message;
 }
 
+function setAnalysisLoadingStage(stage, text) {
+    const stageContent = {
+        upload: {
+            text: '正在上传并识别试卷...',
+            detail: '通常需要 30-90 秒，请保持页面打开'
+        },
+        analyze: {
+            text: '正在诊断错题与薄弱点...',
+            detail: '原卷已保存到家庭错题库，AI 正在逐题分析'
+        },
+        plan: {
+            text: '正在整理家长复习方案...',
+            detail: '诊断已完成，正在生成错因摘要与下一步练习建议'
+        }
+    };
+    const stages = ['upload', 'analyze', 'plan'];
+    const activeIndex = stages.indexOf(stage);
+    const content = stageContent[stage] || stageContent.upload;
+    document.getElementById('loadingText').textContent = text || content.text;
+    document.getElementById('loadingDetail').textContent = content.detail;
+    document.querySelectorAll('[data-analysis-stage]').forEach((node, index) => {
+        node.classList.toggle('completed', index < activeIndex);
+        node.classList.toggle('active', index === activeIndex);
+        if (index === activeIndex) {
+            node.setAttribute('aria-current', 'step');
+        } else {
+            node.removeAttribute('aria-current');
+        }
+    });
+}
+
 function selectedUploadSummary() {
     const totalBytes = uploadedFiles.reduce((sum, item) => sum + item.file.size, 0);
     const sizeMb = Math.max(0.1, totalBytes / 1024 / 1024).toFixed(1);
@@ -4238,7 +4301,7 @@ async function startAnalysis() {
     setAnalysisStatus('loading', '正在上传并识别整份试卷，请不要关闭页面。');
     document.getElementById('resultSection').classList.remove('show');
     document.getElementById('loadingOverlay').classList.add('show');
-    document.getElementById('loadingText').textContent = 'AI 正在识别试卷...';
+    setAnalysisLoadingStage('upload', `正在上传并识别 ${uploadedFiles.length} 页试卷...`);
 
     try {
         const fd = new FormData();
@@ -4249,14 +4312,13 @@ async function startAnalysis() {
             fd.append('files', current.file, current.name);
         });
 
-        document.getElementById('loadingText').textContent = `正在识别 ${uploadedFiles.length} 页试卷...`;
         const uploadJson = await requestJson('/upload-batch', {
             method: 'POST',
             headers: accessHeaders,
             body: fd
         });
         uploadedExam = uploadJson;
-        document.getElementById('loadingText').textContent = '正在分析整份试卷...';
+        setAnalysisLoadingStage('analyze');
         const params = new URLSearchParams({ grade: grade, student_name: name });
         const analysisJson = await requestJson(`/analyze/${uploadJson.id}?${params.toString()}`, {
             method: 'POST',
@@ -4267,7 +4329,7 @@ async function startAnalysis() {
             exam_ids: [analysisJson.exam_id || uploadJson.id]
         };
 
-        document.getElementById('loadingText').textContent = '正在整理学习方案...';
+        setAnalysisLoadingStage('plan');
         const analysisData = parseApiResponse(analysisPayload, name, grade, subject);
         if (!analysisData) throw new Error('分析结果格式异常，请重新上传清晰试卷后再试');
         rememberFamilyProfile(grade, name, document.getElementById('rememberFamilyProfile').checked);
