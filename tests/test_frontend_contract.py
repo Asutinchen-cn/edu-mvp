@@ -150,6 +150,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
     def test_wrong_bank_uses_a_family_access_code_without_persisting_it(self):
         self.assertIn('id="familyAccessCode"', HTML)
         self.assertIn('type="password"', HTML)
+        self.assertEqual(HTML.count('autocomplete="off"'), 2)
+        self.assertNotIn('autocomplete="current-password"', HTML)
+        self.assertIn('访问码无法找回，请妥善保存', HTML)
         self.assertIn("function familyAccessHeaders", HTML)
         self.assertIn("'X-Family-Code': familyCode", HTML)
         self.assertNotIn("localStorage.setItem('familyAccessCode'", HTML)

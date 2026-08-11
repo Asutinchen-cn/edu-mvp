@@ -2934,14 +2934,14 @@
                         minlength="8"
                         maxlength="32"
                         pattern="[A-Za-z0-9]{8,32}"
-                        autocomplete="current-password"
+                        autocomplete="off"
                         aria-describedby="familyAccessHint"
                     >
                     <button type="button" class="access-code-action" data-family-target="familyAccessCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('familyAccessCode', this)">显示</button>
                     <button type="button" class="access-code-action" aria-label="生成家庭访问码" onclick="generateFamilyAccessCode('familyAccessCode')">生成</button>
                     <button type="button" class="access-code-action" id="copyFamilyAccessCodeBtn" aria-label="复制家庭访问码" onclick="copyFamilyAccessCode('familyAccessCode', this)">复制</button>
                 </div>
-                <span class="field-hint" id="familyAccessHint" role="status" aria-live="polite">以后上传与查询都使用同一个访问码；本网站不会保存它</span>
+                <span class="field-hint" id="familyAccessHint" role="status" aria-live="polite">以后上传与查询都使用同一个访问码；访问码无法找回，请妥善保存</span>
                 <label class="remember-profile" for="rememberFamilyProfile">
                     <input type="checkbox" id="rememberFamilyProfile" checked>
                     <span>在这台设备记住年级和姓名</span>
@@ -3242,11 +3242,11 @@
                         minlength="8"
                         maxlength="32"
                         pattern="[A-Za-z0-9]{8,32}"
-                        autocomplete="current-password"
+                        autocomplete="off"
                     >
                     <button type="button" class="access-code-action" data-family-target="wrongBankFamilyCode" aria-label="显示家庭访问码" onclick="toggleFamilyCodeVisibility('wrongBankFamilyCode', this)">显示</button>
                 </div>
-                <span class="field-hint">错题内容仅在验证访问码后显示；访问码和错题内容不会长期保存在浏览器</span>
+                <span class="field-hint">错题内容仅在验证访问码后显示；访问码无法找回，请妥善保存</span>
             </div>
             <div class="wrong-bank-field full">
                 <label class="remember-profile" for="wrongBankRememberProfile">
@@ -3930,7 +3930,7 @@ function setupFamilyAccessCodeGuard() {
         if (!generatedFamilyAccessCode || currentCode === generatedFamilyAccessCode) return;
         generatedFamilyAccessCode = '';
         copiedFamilyAccessCode = '';
-        setFamilyAccessHint('以后上传与查询都使用同一个访问码；本网站不会保存它');
+        setFamilyAccessHint('以后上传与查询都使用同一个访问码；访问码无法找回，请妥善保存');
     });
 }
 
