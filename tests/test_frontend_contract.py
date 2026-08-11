@@ -201,6 +201,17 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("await setHistoryView('exams');", HTML)
         self.assertNotIn("window.setTimeout(() => firstEmptyField.focus()", HTML)
 
+    def test_header_family_shortcut_is_a_real_keyboard_operable_action(self):
+        self.assertIn('id="familyReviewShortcut"', HTML)
+        self.assertRegex(
+            HTML,
+            r'<button[^>]*id="familyReviewShortcut"[^>]*aria-label="查看今日复习"[^>]*onclick="goToTodayReview\(\)"',
+        )
+        self.assertIn('title="查看今日复习"', HTML)
+        self.assertIn('.family-shortcut:focus-visible', HTML)
+        self.assertIn('.family-shortcut { display: none; }', HTML)
+        self.assertNotIn('<div class="user-avatar">', HTML)
+
     def test_wrong_bank_remember_profile_stays_inside_the_dialog(self):
         self.assertIn('.wrong-bank-field input:not([type="checkbox"])', HTML)
         self.assertNotIn(".wrong-bank-field input {", HTML)
