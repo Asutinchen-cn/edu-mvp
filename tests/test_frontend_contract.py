@@ -298,6 +298,9 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("node.setAttribute('aria-current', 'step')", HTML)
         self.assertIn('原卷已保存到家庭错题库', HTML)
         self.assertIn('通常需要 30-90 秒，请保持页面打开', HTML)
+        loading_style = re.search(r"\.loading-overlay\s*\{(?P<body>[^}]*)\}", HTML)
+        self.assertIsNotNone(loading_style)
+        self.assertRegex(loading_style.group('body'), r"z-index:\s*1200")
 
     def test_multi_page_upload_preview_exposes_and_preserves_file_order(self):
         self.assertIn(
