@@ -413,6 +413,18 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             self.assertIn(selector, mobile_css)
         self.assertIn('.curriculum-source a { display: inline-flex;', mobile_css)
 
+    def test_mobile_analysis_result_actions_have_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertIn(
+            '.result-section .close-result { min-width: 44px; min-height: 44px;',
+            mobile_css,
+        )
+        self.assertIn(
+            '.result-section .parent-practice-button,\n'
+            '            .result-section .generate-btn { min-height: 44px; }',
+            mobile_css,
+        )
+
     def test_analysis_details_and_practice_questions_are_keyboard_operable(self):
         self.assertIn(
             '<button type="button" class="detail-header" aria-expanded="false"',
