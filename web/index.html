@@ -1158,6 +1158,26 @@
             font-size: 12px;
             line-height: 1.6;
         }
+        .review-task-more {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .review-task-more-button {
+            flex: 0 0 auto;
+            min-height: 36px;
+            padding: 0 12px;
+            border: 1px solid rgba(23, 105, 232, 0.25);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .review-task-more-button:hover { background: #edf5ff; }
         .review-upcoming-row {
             display: grid;
             grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2793,6 +2813,8 @@
             }
             .review-task-row { grid-template-columns: 1fr; gap: 8px; padding: 12px 0; }
             .review-task-action { width: 100%; }
+            .review-task-more { align-items: stretch; flex-direction: column; }
+            .review-task-more-button { width: 100%; }
             .review-upcoming-row { grid-template-columns: 1fr; gap: 3px; }
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
             .history-view-switch { display: grid; width: 100%; }
@@ -2833,6 +2855,9 @@
             .history-action { min-height: 44px; }
             .remember-profile,
             .worksheet-check { min-height: 44px; }
+            .review-report-btn,
+            .review-task-action,
+            .review-task-more-button { min-height: 44px; }
             .curriculum-source a { display: inline-flex; align-items: center; }
             .mobile-quick-nav {
                 position: fixed;
@@ -3440,6 +3465,7 @@ let wrongQuestionBank = {
     subjectArchive: { all: 0, math: 0, english: 0 }
 };
 let familyReportExporting = false;
+let reviewTasksExpanded = false;
 let selectedRecordId = null;
 let pendingDeleteId = null;
 let deleteSaving = false;
@@ -6099,8 +6125,8 @@ function renderReviewDashboard(records) {
         return;
     }
     const summary = buildReviewDashboard(records);
-    const visibleTasks = summary.todayTasks.slice(0, 3);
-    const remainingTaskCount = Math.max(0, summary.todayTasks.length - visibleTasks.length);
+    const hiddenTaskCount = Math.max(0, summary.todayTasks.length - 3);
+    const visibleTasks = reviewTasksExpanded ? summary.todayTasks : summary.todayTasks.slice(0, 3);
     const nextUpcomingTask = summary.upcomingTasks[0] || null;
     const scopeLabel = currentSubjectArchive === 'all'
         ? '当前筛选：全部学科'
@@ -6145,23 +6171,31 @@ function renderReviewDashboard(records) {
                 <h5>今日复习清单</h5>
                 <span class="review-task-count">${summary.todayTasks.length} 项今日处理</span>
             </div>
-            ${visibleTasks.length ? visibleTasks.map(task => `
-                <div class="review-task-row">
-                    <div class="review-task-main">
-                        <div class="review-task-title">${escapeHtml(task.focus)}</div>
-                        <div class="review-task-meta">
-                            <span class="review-task-subject">${escapeHtml(task.subject)}</span>
-                            <span class="review-task-due ${task.timing.rank === 0 ? 'urgent' : ''}">${escapeHtml(task.timing.label)}</span>
-                            ${task.mode === 'knowledge'
-                                ? `<span>待复习错题 ${task.pendingCount} 道</span><span>来自 ${task.sourceExamCount} 份试卷</span>`
-                                : `<span>下一步：${escapeHtml(task.nextStep)}</span><span>完成 ${task.completedCount}/${task.total}</span>`}
+            <div id="reviewTaskItems">
+                ${visibleTasks.length ? visibleTasks.map(task => `
+                    <div class="review-task-row">
+                        <div class="review-task-main">
+                            <div class="review-task-title">${escapeHtml(task.focus)}</div>
+                            <div class="review-task-meta">
+                                <span class="review-task-subject">${escapeHtml(task.subject)}</span>
+                                <span class="review-task-due ${task.timing.rank === 0 ? 'urgent' : ''}">${escapeHtml(task.timing.label)}</span>
+                                ${task.mode === 'knowledge'
+                                    ? `<span>待复习错题 ${task.pendingCount} 道</span><span>来自 ${task.sourceExamCount} 份试卷</span>`
+                                    : `<span>下一步：${escapeHtml(task.nextStep)}</span><span>完成 ${task.completedCount}/${task.total}</span>`}
+                            </div>
                         </div>
-                    </div>
-                    ${task.mode === 'knowledge'
-                        ? `<button type="button" class="review-task-action" onclick="openKnowledgeReviewTask(${escapeHtml(JSON.stringify(task.subjectKey))}, ${escapeHtml(JSON.stringify(task.focus))})">查看错题 →</button>`
-                        : `<button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">开始${escapeHtml(task.nextStep)} →</button>`}
-                </div>`).join('') : '<p class="review-task-empty">今天没有到期任务，不用提前做隔天回测。</p>'}
-            ${remainingTaskCount ? `<p class="review-task-more">还有 ${remainingTaskCount} 项今日任务，可在下方“待复习”列表中继续。</p>` : ''}
+                        ${task.mode === 'knowledge'
+                            ? `<button type="button" class="review-task-action" onclick="openKnowledgeReviewTask(${escapeHtml(JSON.stringify(task.subjectKey))}, ${escapeHtml(JSON.stringify(task.focus))})">查看错题 →</button>`
+                            : `<button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">开始${escapeHtml(task.nextStep)} →</button>`}
+                    </div>`).join('') : '<p class="review-task-empty">今天没有到期任务，不用提前做隔天回测。</p>'}
+            </div>
+            ${hiddenTaskCount ? `
+                <div class="review-task-more">
+                    <span>${reviewTasksExpanded ? `已显示全部 ${summary.todayTasks.length} 项今日任务。` : `还有 ${hiddenTaskCount} 项今日任务。`}</span>
+                    <button type="button" class="review-task-more-button" id="reviewTaskToggle"
+                        aria-expanded="${reviewTasksExpanded ? 'true' : 'false'}" aria-controls="reviewTaskItems"
+                        onclick="toggleReviewTaskExpansion()">${reviewTasksExpanded ? '收起任务' : `展开其余 ${hiddenTaskCount} 项`}</button>
+                </div>` : ''}
             ${nextUpcomingTask ? `
                 <div class="review-upcoming-row">
                     <span class="review-upcoming-label">下一次安排</span>
@@ -6171,6 +6205,12 @@ function renderReviewDashboard(records) {
         </section>
         <p class="review-evidence">数据来自服务器保存的试卷与逐题复习状态，不代表考试成绩；“反复薄弱点”仅按同名知识点统计。</p>
     `;
+}
+
+function toggleReviewTaskExpansion() {
+    reviewTasksExpanded = !reviewTasksExpanded;
+    renderHistory();
+    window.requestAnimationFrame(() => document.getElementById('reviewTaskToggle')?.focus());
 }
 
 async function openReviewTask(id) {

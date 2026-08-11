@@ -920,6 +920,28 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("继续复习", HTML)
         self.assertIn("setMasteryFilter('pending')", HTML)
 
+    def test_parent_dashboard_can_expand_every_due_task_in_place(self):
+        self.assertIn("let reviewTasksExpanded = false", HTML)
+        self.assertIn(
+            "reviewTasksExpanded ? summary.todayTasks : summary.todayTasks.slice(0, 3)",
+            HTML,
+        )
+        self.assertIn('id="reviewTaskToggle"', HTML)
+        self.assertIn("function toggleReviewTaskExpansion()", HTML)
+        self.assertIn("reviewTasksExpanded = !reviewTasksExpanded", HTML)
+        self.assertIn("展开其余", HTML)
+        self.assertIn("已显示全部", HTML)
+
+    def test_mobile_review_dashboard_actions_have_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertIn(
+            '.review-report-btn,\n'
+            '            .review-task-action,\n'
+            '            .review-task-more-button { min-height: 44px; }',
+            mobile_css,
+        )
+        self.assertIn('.review-task-more-button { width: 100%; }', mobile_css)
+
     def test_parent_dashboard_respects_spaced_review_due_dates(self):
         self.assertIn("function normalizeReviewSchedule", HTML)
         self.assertIn("function reviewTaskTiming", HTML)
