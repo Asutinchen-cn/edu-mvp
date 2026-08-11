@@ -2135,6 +2135,30 @@
             background: #edf5ff;
             color: var(--brand-blue);
         }
+        .worksheet-plan-preview {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 24px;
+            margin-top: 18px;
+            padding: 14px 0;
+            border-top: 1px solid #e6eef9;
+            border-bottom: 1px solid #e6eef9;
+        }
+        .worksheet-plan-block { min-width: 0; }
+        .worksheet-plan-label {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .worksheet-plan-block strong {
+            color: var(--ink);
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+        }
+        .worksheet-plan-time { min-width: 190px; text-align: right; }
         .worksheet-catalog-state {
             width: 100%;
             display: flex;
@@ -2688,6 +2712,8 @@
             }
             .worksheet-grid { grid-template-columns: 1fr; }
             .worksheet-field.full { grid-column: auto; }
+            .worksheet-plan-preview { grid-template-columns: 1fr; gap: 10px; }
+            .worksheet-plan-time { min-width: 0; text-align: left; }
             .worksheet-downloads { grid-template-columns: 1fr; }
             .curriculum-source { align-items: flex-start; flex-direction: column; }
             .practice-header, .history-header {
@@ -3079,6 +3105,16 @@
             <input id="worksheetTitle" type="text" value="上海六年级单元复习卷">
         </div>
     </div>
+    <div class="worksheet-plan-preview" id="worksheetPlanPreview" role="status" aria-live="polite">
+        <div class="worksheet-plan-block">
+            <span class="worksheet-plan-label">本卷题型</span>
+            <strong id="worksheetPlanTypes">正在计算题型安排...</strong>
+        </div>
+        <div class="worksheet-plan-block worksheet-plan-time">
+            <span class="worksheet-plan-label">预计用时</span>
+            <strong id="worksheetPlanTime">正在计算...</strong>
+        </div>
+    </div>
     <div class="worksheet-actions">
         <button class="generate-btn" id="worksheetGenerateBtn" aria-busy="false" onclick="generateUnitWorksheet()">✨ 生成题目卷和答案卷</button>
     </div>
@@ -3357,6 +3393,19 @@ const WORKSHEET_CATALOG_RETRY_DELAYS = [0, 1000, 3000];
 const WORKSHEET_CATALOG_TIMEOUT_MS = 30000;
 const WORKSHEET_CATALOG_CACHE_KEY = 'edu.curriculum-catalog.v1';
 const WORKSHEET_CATALOG_RECOVERY_DELAY_MS = 15000;
+const WORKSHEET_QUESTION_CYCLES = {
+    math: {
+        basic: ['选择题', '填空题', '应用题'],
+        advanced: ['填空题', '选择题', '解答题', '应用题'],
+        challenge: ['解答题', '应用题', '选择题', '探究题']
+    },
+    english: {
+        basic: ['词汇选择', '语法选择', '阅读理解'],
+        advanced: ['词汇选择', '语法选择', '阅读理解', '书面表达'],
+        challenge: ['阅读推断', '句型改写', '书面表达', '语法选择']
+    }
+};
+const WORKSHEET_MINUTES_PER_QUESTION = { basic: 2.5, advanced: 3.5, challenge: 5 };
 let worksheetCatalogRecoveryTimer = null;
 let helpDialogReturnFocus = null;
 let generatedFamilyAccessCode = '';
@@ -3581,6 +3630,7 @@ function renderWorksheetUnits() {
     document.getElementById('worksheetGenerateBtn').disabled = !units.length;
     renderWorksheetSource();
     renderWorksheetKnowledge();
+    renderWorksheetPlanPreview();
 }
 
 function worksheetUnitsForSelection(grade, subject, semester) {
@@ -3651,6 +3701,43 @@ function renderWorksheetKnowledge() {
         </label>`).join('') || '请先选择单元';
 }
 
+function validWorksheetQuestionCount() {
+    const questionCount = Number(document.getElementById('worksheetCount').value);
+    return Number.isInteger(questionCount) && questionCount >= 3 && questionCount <= 20
+        ? questionCount
+        : null;
+}
+
+function renderWorksheetPlanPreview() {
+    const subject = document.getElementById('worksheetSubject').value;
+    const difficulty = document.getElementById('worksheetDifficulty').value;
+    const questionCount = validWorksheetQuestionCount();
+    const types = document.getElementById('worksheetPlanTypes');
+    const time = document.getElementById('worksheetPlanTime');
+    if (questionCount === null) {
+        types.textContent = '请输入 3-20 之间的整数题量';
+        time.textContent = '调整题量后计算';
+        return;
+    }
+
+    const cycle = WORKSHEET_QUESTION_CYCLES[subject][difficulty];
+    const distribution = new Map(cycle.map(type => [type, 0]));
+    for (let index = 0; index < questionCount; index += 1) {
+        const type = cycle[index % cycle.length];
+        distribution.set(type, distribution.get(type) + 1);
+    }
+    types.textContent = [...distribution.entries()]
+        .filter(([, count]) => count > 0)
+        .map(([type, count]) => `${type} ${count} 题`)
+        .join(' · ');
+
+    const minutesPerQuestion = WORKSHEET_MINUTES_PER_QUESTION[difficulty];
+    const expectedMinutes = Math.ceil((questionCount * minutesPerQuestion) / 5) * 5;
+    time.textContent = expectedMinutes > 45
+        ? `约 ${expectedMinutes} 分钟，建议分两次完成`
+        : `约 ${expectedMinutes} 分钟`;
+}
+
 function setWorksheetStatus(type, message) {
     const status = document.getElementById('worksheetStatus');
     status.className = `worksheet-status${type ? ` ${type}` : ''}`;
@@ -3669,8 +3756,12 @@ function clearWorksheetOutput() {
 }
 
 function setupWorksheetOutputInvalidation() {
+    renderWorksheetPlanPreview();
     document.getElementById('worksheet').addEventListener('input', event => {
         if (event.target.matches('select, input')) clearWorksheetOutput();
+        if (event.target.matches('#worksheetSubject, #worksheetDifficulty, #worksheetCount')) {
+            renderWorksheetPlanPreview();
+        }
     });
 }
 
@@ -3687,6 +3778,12 @@ function setWorksheetFormBusy(busy) {
 async function generateUnitWorksheet() {
     const unitIds = [...document.querySelectorAll('input[name="worksheetUnit"]:checked')].map(el => el.value);
     const knowledgePoints = [...document.querySelectorAll('input[name="worksheetKnowledge"]:checked')].map(el => el.value);
+    const questionCount = validWorksheetQuestionCount();
+    if (questionCount === null) {
+        setWorksheetStatus('error', '请输入 3-20 之间的整数题量。');
+        document.getElementById('worksheetCount').focus();
+        return;
+    }
     if (!unitIds.length || !knowledgePoints.length) {
         setWorksheetStatus('error', '请至少选择一个单元和一个知识点后再生成。');
         return;
@@ -3707,7 +3804,7 @@ async function generateUnitWorksheet() {
                 unit_ids: unitIds,
                 knowledge_points: knowledgePoints,
                 difficulty: document.getElementById('worksheetDifficulty').value,
-                question_count: Number(document.getElementById('worksheetCount').value),
+                question_count: questionCount,
                 title: document.getElementById('worksheetTitle').value,
                 include_explanations: true
             })

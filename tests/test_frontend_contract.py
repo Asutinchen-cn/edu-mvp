@@ -125,6 +125,25 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("setWorksheetStatus('error'", HTML)
         self.assertNotIn("alert('生成复习卷失败：' + e.message)", HTML)
 
+    def test_worksheet_previews_question_mix_and_estimated_workload(self):
+        self.assertIn('id="worksheetPlanPreview"', HTML)
+        self.assertIn('id="worksheetPlanTypes"', HTML)
+        self.assertIn('id="worksheetPlanTime"', HTML)
+        self.assertIn('const WORKSHEET_QUESTION_CYCLES', HTML)
+        self.assertIn("basic: ['选择题', '填空题', '应用题']", HTML)
+        self.assertIn("advanced: ['词汇选择', '语法选择', '阅读理解', '书面表达']", HTML)
+        self.assertIn('function renderWorksheetPlanPreview()', HTML)
+        self.assertIn('Math.ceil((questionCount * minutesPerQuestion) / 5) * 5', HTML)
+        self.assertIn('预计用时', HTML)
+        self.assertIn('建议分两次完成', HTML)
+
+    def test_worksheet_rejects_an_out_of_range_question_count_before_fetching(self):
+        self.assertIn('function validWorksheetQuestionCount()', HTML)
+        self.assertIn('请输入 3-20 之间的整数题量。', HTML)
+        validation_index = HTML.index('请输入 3-20 之间的整数题量。')
+        fetch_index = HTML.index("fetch('/generate-unit-worksheet'")
+        self.assertLess(validation_index, fetch_index)
+
     def test_worksheet_output_clearly_separates_child_and_parent_pdfs(self):
         self.assertIn("给孩子作答 · 不含答案", HTML)
         self.assertIn("家长核对 · 含答案和解析", HTML)
