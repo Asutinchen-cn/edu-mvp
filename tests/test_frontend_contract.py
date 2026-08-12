@@ -942,6 +942,15 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertIn('.review-task-more-button { width: 100%; }', mobile_css)
 
+    def test_mobile_knowledge_review_actions_have_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertIn(
+            '.knowledge-practice-button,\n'
+            '            .knowledge-source-button,\n'
+            '            .knowledge-mastery-button { min-height: 44px; }',
+            mobile_css,
+        )
+
     def test_parent_dashboard_respects_spaced_review_due_dates(self):
         self.assertIn("function normalizeReviewSchedule", HTML)
         self.assertIn("function reviewTaskTiming", HTML)
