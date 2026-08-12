@@ -974,8 +974,25 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("const retestLocked", HTML)
         self.assertIn("到期后自动开放", HTML)
 
+    def test_parent_dashboard_due_tasks_ignore_history_date_filters(self):
+        self.assertIn("function getReviewTaskRecords()", HTML)
+        self.assertIn(
+            "const scheduleKnowledgeSummary = buildKnowledgeReviewTasks({ ignoreDateFilter: true })",
+            HTML,
+        )
+        self.assertIn(
+            "ignoreDateFilter\n        ? [...wrongQuestionBank.questions]",
+            HTML,
+        )
+        self.assertIn("const recordPendingTasks = getReviewTaskRecords()", HTML)
+        self.assertIn(
+            "const pendingTasks = scheduleKnowledgeSummary",
+            HTML,
+        )
+        self.assertIn("全部历史中 ${summary.todayTasks.length} 项今日处理", HTML)
+
     def test_parent_dashboard_uses_question_mastery_for_knowledge_tasks(self):
-        self.assertIn("function buildKnowledgeReviewTasks()", HTML)
+        self.assertIn("function buildKnowledgeReviewTasks(options = {})", HTML)
         self.assertIn("wrongQuestionBank.loaded", HTML)
         self.assertIn("wrongQuestionMasteryStatus(question) === 'pending'", HTML)
         self.assertIn("sourceExamCount", HTML)

@@ -5891,10 +5891,13 @@ function recordWeakPoints(record) {
     return [...new Set(values.map(value => String(value || '').trim()).filter(value => value && !ignored.has(value)))];
 }
 
-function buildKnowledgeReviewTasks() {
+function buildKnowledgeReviewTasks(options = {}) {
     if (!wrongQuestionBank.loaded) return null;
 
-    let questions = getDateFilteredWrongQuestions();
+    const ignoreDateFilter = Boolean(options.ignoreDateFilter);
+    let questions = ignoreDateFilter
+        ? [...wrongQuestionBank.questions]
+        : getDateFilteredWrongQuestions();
     if (currentSubjectArchive !== 'all') {
         questions = questions.filter(question => question.subject === currentSubjectArchive);
     }
@@ -5996,9 +5999,17 @@ function buildKnowledgeReviewTasks() {
     };
 }
 
+function getReviewTaskRecords() {
+    if (currentSubjectArchive === 'all') return [...historyRecords];
+    return historyRecords.filter(record => (
+        (record.subject === 'english' ? 'english' : 'math') === currentSubjectArchive
+    ));
+}
+
 function buildReviewDashboard(records) {
     const safeRecords = Array.isArray(records) ? records : [];
     const knowledgeSummary = buildKnowledgeReviewTasks();
+    const scheduleKnowledgeSummary = buildKnowledgeReviewTasks({ ignoreDateFilter: true });
     const knownCounts = safeRecords.map(historyWrongCount).filter(count => count !== null);
     const confirmedWrongCount = knownCounts.reduce((sum, count) => sum + count, 0);
     const subjectCounts = safeRecords.reduce((counts, record) => {
@@ -6035,7 +6046,7 @@ function buildReviewDashboard(records) {
         .sort((a, b) => new Date(b.date) - new Date(a.date));
     const latestRecord = recordsByLatest[0] || null;
     const latestFocus = latestRecord ? recordWeakPoints(latestRecord)[0] : '';
-    const recordPendingTasks = recordsByLatest
+    const recordPendingTasks = getReviewTaskRecords()
         .filter(record => {
             const progress = normalizeReviewProgress(record.reviewProgress);
             return record.serverId && progress.completedCount < progress.total;
@@ -6060,9 +6071,15 @@ function buildReviewDashboard(records) {
         .sort((a, b) => a.timing.rank - b.timing.rank
             || a.timing.dueTime - b.timing.dueTime
             || new Date(b.date) - new Date(a.date));
-    const pendingTasks = knowledgeSummary ? knowledgeSummary.tasks : recordPendingTasks;
-    const todayTasks = knowledgeSummary ? knowledgeSummary.todayTasks : recordPendingTasks.filter(task => task.timing.bucket === 'today');
-    const upcomingTasks = knowledgeSummary ? knowledgeSummary.upcomingTasks : recordPendingTasks.filter(task => task.timing.bucket === 'upcoming');
+    const pendingTasks = scheduleKnowledgeSummary
+        ? scheduleKnowledgeSummary.tasks
+        : recordPendingTasks;
+    const todayTasks = scheduleKnowledgeSummary
+        ? scheduleKnowledgeSummary.todayTasks
+        : recordPendingTasks.filter(task => task.timing.bucket === 'today');
+    const upcomingTasks = scheduleKnowledgeSummary
+        ? scheduleKnowledgeSummary.upcomingTasks
+        : recordPendingTasks.filter(task => task.timing.bucket === 'upcoming');
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
@@ -6088,7 +6105,7 @@ function buildReviewDashboard(records) {
         const task = upcomingTasks[0];
         nextTitle = `${task.timing.label}：${task.nextStep}`;
         nextAction = `“${task.focus}”还没到回测时间，今天先休息，到期后再独立完成。`;
-    } else if (knowledgeSummary?.totalCount && knowledgeSummary.pendingCount === 0) {
+    } else if (scheduleKnowledgeSummary?.totalCount && scheduleKnowledgeSummary.pendingCount === 0) {
         nextTitle = '当前错题已全部掌握';
         nextAction = '今天没有待复习错题，可以上传最近试卷继续更新学情。';
     } else if (repeatedWeakPoint) {
@@ -6177,7 +6194,7 @@ function renderReviewDashboard(records) {
         <section class="review-task-list" aria-label="今日复习清单">
             <div class="review-task-head">
                 <h5>今日复习清单</h5>
-                <span class="review-task-count">${summary.todayTasks.length} 项今日处理</span>
+                <span class="review-task-count">全部历史中 ${summary.todayTasks.length} 项今日处理</span>
             </div>
             <div id="reviewTaskItems">
                 ${visibleTasks.length ? visibleTasks.map(task => `
