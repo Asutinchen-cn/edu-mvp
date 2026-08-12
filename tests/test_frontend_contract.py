@@ -951,6 +951,16 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             mobile_css,
         )
 
+    def test_mobile_practice_answer_controls_have_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertIn(
+            '.practice-section .q-option,\n'
+            '            .practice-section .q-action-btn,\n'
+            '            .practice-section input[type="text"],\n'
+            '            .practice-section .practice-result-action { min-height: 44px; }',
+            mobile_css,
+        )
+
     def test_parent_dashboard_respects_spaced_review_due_dates(self):
         self.assertIn("function normalizeReviewSchedule", HTML)
         self.assertIn("function reviewTaskTiming", HTML)
