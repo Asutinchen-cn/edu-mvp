@@ -1223,7 +1223,7 @@
         .review-task-more-button:hover { background: #edf5ff; }
         .review-upcoming-row {
             display: grid;
-            grid-template-columns: auto minmax(0, 1fr) auto;
+            grid-template-columns: auto minmax(0, 1fr) auto auto;
             align-items: center;
             gap: 10px;
             min-height: 46px;
@@ -1241,6 +1241,24 @@
             color: var(--ink);
             font-size: 12px;
             overflow-wrap: anywhere;
+        }
+        .review-calendar-button {
+            min-height: 36px;
+            padding: 0 12px;
+            border: 1px solid rgba(255, 122, 26, 0.3);
+            border-radius: 8px;
+            background: #fff8f2;
+            color: #b94f08;
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .review-calendar-button:hover,
+        .review-calendar-button:focus-visible {
+            background: #ffefe2;
+            outline: none;
         }
         .review-evidence { margin-top: 14px; }
 
@@ -2861,6 +2879,7 @@
             .review-task-more { align-items: stretch; flex-direction: column; }
             .review-task-more-button { width: 100%; }
             .review-upcoming-row { grid-template-columns: 1fr; gap: 3px; }
+            .review-calendar-button { width: 100%; }
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
             .history-view-switch { display: grid; width: 100%; }
             .knowledge-group-head { gap: 8px; }
@@ -2902,7 +2921,8 @@
             .worksheet-check { min-height: 44px; }
             .review-report-btn,
             .review-task-action,
-            .review-task-more-button { min-height: 44px; }
+            .review-task-more-button,
+            .review-calendar-button { min-height: 44px; }
             .knowledge-practice-button,
             .knowledge-source-button,
             .knowledge-mastery-button { min-height: 44px; }
@@ -5444,6 +5464,108 @@ function shanghaiDayNumber(value) {
     return Date.UTC(parts.year, parts.month - 1, parts.day) / 86400000;
 }
 
+function reviewCalendarDate(value) {
+    const dayNumber = shanghaiDayNumber(value);
+    if (dayNumber === null) return null;
+    const formatDay = number => {
+        const date = new Date(number * 86400000);
+        const year = String(date.getUTCFullYear());
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        return { compact: `${year}${month}${day}`, display: `${year}-${month}-${day}` };
+    };
+    const current = formatDay(dayNumber);
+    const next = formatDay(dayNumber + 1);
+    return { compact: current.compact, display: current.display, nextCompact: next.compact };
+}
+
+function escapeCalendarText(value) {
+    return String(value || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/\r?\n/g, '\\n')
+        .replace(/,/g, '\\,')
+        .replace(/;/g, '\\;');
+}
+
+function foldCalendarLine(value) {
+    const encoder = new TextEncoder();
+    const folded = [];
+    let current = '';
+    let byteLimit = 75;
+    for (const character of String(value)) {
+        if (current && encoder.encode(current + character).length > byteLimit) {
+            folded.push(current);
+            current = character;
+            byteLimit = 74;
+        } else {
+            current += character;
+        }
+    }
+    folded.push(current);
+    return folded.map((line, index) => index ? ` ${line}` : line).join('\r\n');
+}
+
+function reviewCalendarUid(task, compactDate) {
+    const value = `${task.subject || ''}|${task.focus || ''}|${task.nextStep || ''}|${compactDate}`;
+    let hash = 2166136261;
+    for (const character of value) {
+        hash ^= character.codePointAt(0);
+        hash = Math.imul(hash, 16777619);
+    }
+    return `review-${compactDate}-${(hash >>> 0).toString(16)}@xiahunao.local`;
+}
+
+function buildReviewCalendarFile(task, now = new Date()) {
+    const calendarDate = reviewCalendarDate(task?.dueAt);
+    if (!calendarDate) throw new Error('缺少有效的复习日期');
+    const timestamp = Number.isNaN(new Date(now).getTime()) ? new Date() : new Date(now);
+    const dtstamp = timestamp.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    const subject = String(task?.subject || '学科').trim().slice(0, 20);
+    const focus = String(task?.focus || '错题').trim().slice(0, 60);
+    const nextStep = String(task?.nextStep || '继续复习').trim().slice(0, 40);
+    const lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Xia Hunao//Shanghai Review//CN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${reviewCalendarUid({ subject: subject, focus: focus, nextStep: nextStep }, calendarDate.compact)}`,
+        `DTSTAMP:${dtstamp}`,
+        `DTSTART;VALUE=DATE:${calendarDate.compact}`,
+        `DTEND;VALUE=DATE:${calendarDate.nextCompact}`,
+        `SUMMARY:${escapeCalendarText(`复习安排：${focus}`)}`,
+        `DESCRIPTION:${escapeCalendarText(`${subject} · ${nextStep}。先独立完成，再核对答案。`)}`,
+        'TRANSP:TRANSPARENT',
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ];
+    return {
+        filename: `复习安排-${calendarDate.display}.ics`,
+        displayDate: calendarDate.display,
+        content: `${lines.map(foldCalendarLine).join('\r\n')}\r\n`
+    };
+}
+
+function downloadReviewCalendar(button) {
+    try {
+        const task = JSON.parse(button?.dataset.reviewCalendar || '{}');
+        const calendar = buildReviewCalendarFile(task);
+        const blob = new Blob([calendar.content], { type: 'text/calendar;charset=utf-8' });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = calendar.filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+        setHistorySyncStatus('success', `${calendar.displayDate} 的复习安排已下载，可用手机或电脑日历打开。`);
+    } catch (error) {
+        setHistorySyncStatus('error', `日历事项生成失败：${error.message || '复习日期无效'}。请刷新后重试。`);
+    }
+}
+
 function reviewTaskTiming(schedule, now = new Date()) {
     const normalized = normalizeReviewSchedule(schedule);
     const dueDay = shanghaiDayNumber(normalized.dueAt);
@@ -6011,6 +6133,7 @@ function buildKnowledgeReviewTasks(options = {}) {
                 if (reopened) {
                     return {
                         nextStep: '重新巩固',
+                        dueAt: null,
                         timing: { bucket: 'today', label: '今天重新巩固', rank: 1, dueTime: 0 }
                     };
                 }
@@ -6025,11 +6148,13 @@ function buildKnowledgeReviewTasks(options = {}) {
                 const nextDefinition = REVIEW_STEP_DEFINITIONS.find(step => step.id === nextStepId);
                 return {
                     nextStep: nextDefinition?.label || '继续复习',
+                    dueAt: schedule.dueAt,
                     timing: wrongQuestionReviewTiming(question)
                 };
             }).sort((a, b) => a.timing.rank - b.timing.rank || a.timing.dueTime - b.timing.dueTime);
             const next = candidates[0] || {
                 nextStep: '继续复习',
+                dueAt: null,
                 timing: { bucket: 'today', label: '今天完成', rank: 1, dueTime: 0 }
             };
             return {
@@ -6043,6 +6168,7 @@ function buildKnowledgeReviewTasks(options = {}) {
                 sourceExamCount: group.sourceExamCount,
                 latestDate: group.latestDate,
                 nextStep: next.nextStep,
+                dueAt: next.dueAt,
                 timing: next.timing
             };
         })
@@ -6133,6 +6259,7 @@ function buildReviewDashboard(records) {
                 nextStep: nextStep?.label || '继续复习',
                 date: record.date,
                 schedule: schedule,
+                dueAt: schedule.dueAt,
                 timing: timing
             };
         })
@@ -6250,6 +6377,14 @@ function renderReviewDashboard(records) {
     const hiddenTaskCount = Math.max(0, summary.todayTasks.length - 3);
     const visibleTasks = reviewTasksExpanded ? summary.todayTasks : summary.todayTasks.slice(0, 3);
     const nextUpcomingTask = summary.upcomingTasks[0] || null;
+    const nextCalendarTask = nextUpcomingTask?.dueAt
+        ? JSON.stringify({
+            subject: nextUpcomingTask.subject,
+            focus: nextUpcomingTask.focus,
+            nextStep: nextUpcomingTask.nextStep,
+            dueAt: nextUpcomingTask.dueAt
+        })
+        : '';
     const scopeLabel = currentSubjectArchive === 'all'
         ? '当前筛选：全部学科'
         : `当前筛选：${currentSubjectArchive === 'english' ? '英语' : '数学'}`;
@@ -6337,6 +6472,9 @@ function renderReviewDashboard(records) {
                     <span class="review-upcoming-label">下一次安排</span>
                     <strong>${escapeHtml(nextUpcomingTask.timing.label)} · ${escapeHtml(nextUpcomingTask.focus)}</strong>
                     <span>${escapeHtml(nextUpcomingTask.nextStep)}</span>
+                    ${nextCalendarTask ? `<button type="button" class="review-calendar-button"
+                        data-review-calendar="${escapeHtml(nextCalendarTask)}"
+                        onclick="downloadReviewCalendar(this)">加入日历</button>` : ''}
                 </div>` : ''}
         </section>
         <p class="review-evidence">数据来自服务器保存的试卷与逐题复习状态，不代表考试成绩；“反复薄弱点”仅按同名知识点统计。</p>

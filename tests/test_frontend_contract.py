@@ -937,10 +937,12 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn(
             '.review-report-btn,\n'
             '            .review-task-action,\n'
-            '            .review-task-more-button { min-height: 44px; }',
+            '            .review-task-more-button,\n'
+            '            .review-calendar-button { min-height: 44px; }',
             mobile_css,
         )
         self.assertIn('.review-task-more-button { width: 100%; }', mobile_css)
+        self.assertIn('.review-calendar-button { width: 100%; }', mobile_css)
 
     def test_mobile_knowledge_review_actions_have_44px_touch_targets(self):
         mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
@@ -1039,6 +1041,24 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('role="progressbar"', HTML)
         self.assertIn('aria-valuetext="${escapeHtml(summary.dayProgressTitle)}', HTML)
         self.assertIn("data.mastered_at || null", HTML)
+
+    def test_parent_can_add_the_next_review_to_a_private_all_day_calendar_event(self):
+        self.assertIn("dueAt: next.dueAt", HTML)
+        self.assertIn('data-review-calendar=', HTML)
+        self.assertIn('class="review-calendar-button"', HTML)
+        self.assertIn("加入日历", HTML)
+        self.assertIn("function buildReviewCalendarFile(task, now = new Date())", HTML)
+        self.assertIn("DTSTART;VALUE=DATE:${calendarDate.compact}", HTML)
+        self.assertIn("DTEND;VALUE=DATE:${calendarDate.nextCompact}", HTML)
+        self.assertIn("TRANSP:TRANSPARENT", HTML)
+        self.assertIn("text/calendar;charset=utf-8", HTML)
+        self.assertIn("function downloadReviewCalendar(button)", HTML)
+        calendar_builder = HTML.split(
+            "function buildReviewCalendarFile(task, now = new Date())",
+            1,
+        )[1].split("function downloadReviewCalendar(button)", 1)[0]
+        self.assertNotIn("studentName", calendar_builder)
+        self.assertNotIn("wrongBankStudentName", calendar_builder)
 
     def test_parent_can_export_a_protected_seven_day_review_report(self):
         self.assertIn("function exportFamilyReviewReport()", HTML)
