@@ -523,7 +523,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(today_review)
         today_review_body = today_review.group("body")
-        self.assertIn("setHistoryFilter('all')", today_review_body)
+        self.assertIn("resetHistoryDateFilters()", today_review_body)
         self.assertIn("currentSubjectArchive = 'all'", today_review_body)
         self.assertIn("currentMasteryFilter = 'pending'", today_review_body)
         self.assertIn("renderHistory()", today_review_body)
@@ -990,6 +990,23 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             HTML,
         )
         self.assertIn("全部历史中 ${summary.todayTasks.length} 项今日处理", HTML)
+
+    def test_today_review_navigation_clears_hidden_date_filters(self):
+        self.assertIn("function resetHistoryDateFilters()", HTML)
+        self.assertIn("document.getElementById('dateFrom').value = ''", HTML)
+        self.assertIn("document.getElementById('dateTo').value = ''", HTML)
+        self.assertRegex(
+            HTML,
+            r"(?s)async function openReviewTask\(id\) \{.*?resetHistoryDateFilters\(\);",
+        )
+        self.assertRegex(
+            HTML,
+            r"(?s)async function openKnowledgeReviewTask\(subject, knowledgePoint\) \{.*?resetHistoryDateFilters\(\);",
+        )
+        self.assertRegex(
+            HTML,
+            r"(?s)function goToTodayReview\(\) \{.*?resetHistoryDateFilters\(\);",
+        )
 
     def test_parent_dashboard_uses_question_mastery_for_knowledge_tasks(self):
         self.assertIn("function buildKnowledgeReviewTasks(options = {})", HTML)

@@ -6241,6 +6241,7 @@ function toggleReviewTaskExpansion() {
 async function openReviewTask(id) {
     const record = historyRecords.find(item => item.id === id);
     if (!record) return;
+    resetHistoryDateFilters();
     setMasteryFilter('pending');
     selectedRecordId = id;
     renderHistory();
@@ -6253,6 +6254,7 @@ async function openReviewTask(id) {
 }
 
 async function openKnowledgeReviewTask(subject, knowledgePoint) {
+    resetHistoryDateFilters();
     setSubjectArchive(subject);
     setMasteryFilter('pending');
     await setHistoryView('knowledge');
@@ -6274,6 +6276,12 @@ function setHistoryFilter(filter) {
     document.querySelectorAll('.filter-tab[data-filter]').forEach(t => {
         t.classList.toggle('active', t.dataset.filter === filter);
     });
+}
+
+function resetHistoryDateFilters() {
+    setHistoryFilter('all');
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
 }
 
 async function setHistoryView(view) {
@@ -6318,7 +6326,7 @@ function goToTodayReview() {
         openWrongBankQuery();
         return;
     }
-    setHistoryFilter('all');
+    resetHistoryDateFilters();
     currentSubjectArchive = 'all';
     document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.subjectFilter === 'all');
