@@ -831,6 +831,45 @@ class FamilyAccessEndpointTest(unittest.TestCase):
             "mastered": True,
         }])
 
+    def test_family_review_report_uses_the_shanghai_calendar_window_boundary(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.created_at = datetime(2026, 8, 6, 16, 0)
+        db.commit()
+        db.close()
+
+        now = datetime(2026, 8, 13, 15, 30, tzinfo=timezone.utc)
+        with (
+            patch("api.main._utc_now", return_value=now),
+            patch("api.main.generate_family_review_report_pdf", return_value=b"%PDF-test") as render_pdf,
+        ):
+            included = asyncio.run(export_family_review_report(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(included.status_code, 200)
+        self.assertEqual(len(render_pdf.call_args.kwargs["records"]), 1)
+
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.created_at = datetime(2026, 8, 6, 15, 59, 59)
+        db.commit()
+        db.close()
+
+        with patch("api.main._utc_now", return_value=now):
+            excluded = asyncio.run(export_family_review_report(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(excluded.status_code, 400)
+        self.assertIn("近 7 天暂无", json.loads(excluded.body)["error"])
+
     def test_every_record_operation_rejects_the_wrong_family_code(self):
         calls = [
             lambda: analyze_exam(

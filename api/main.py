@@ -3078,6 +3078,19 @@ def _format_utc_datetime(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _family_report_window_start(now: datetime | None = None) -> datetime:
+    """返回含今天在内 7 个上海自然日的 UTC 起点。"""
+    current_time = _parse_review_datetime(now) or _utc_now()
+    shanghai_today = current_time.astimezone(SHANGHAI_TIMEZONE)
+    shanghai_start = shanghai_today.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    ) - timedelta(days=6)
+    return shanghai_start.astimezone(timezone.utc)
+
+
 def _normalize_review_progress(raw_value: str | dict | None) -> dict:
     """把复习打卡整理成稳定的三步进度结构。"""
     if isinstance(raw_value, dict):
@@ -4363,6 +4376,7 @@ def generate_family_review_report_pdf(
     student_name: str,
     grade: str,
     records: list[dict],
+    report_now: datetime | None = None,
 ) -> bytes:
     """把近 7 天已保存的错题摘要整理成家长复习报告。"""
     from fpdf import FPDF
@@ -4406,8 +4420,8 @@ def generate_family_review_report_pdf(
 
     summary = _summarize_family_review_records(records)
     subject_counts = summary["subject_exam_counts"]
-    now = datetime.now(SHANGHAI_TIMEZONE)
-    period_start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    now = (_parse_review_datetime(report_now) or _utc_now()).astimezone(SHANGHAI_TIMEZONE)
+    period_start = (now - timedelta(days=6)).strftime("%Y-%m-%d")
     period_end = now.strftime("%Y-%m-%d")
 
     def write_text(value, line_height=7, bold=False, color=(21, 34, 58)):
@@ -4825,7 +4839,8 @@ async def export_family_review_report(
             status_code=403,
         )
 
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+    report_now = _utc_now()
+    cutoff = _family_report_window_start(report_now).replace(tzinfo=None)
     recent_exams = [
         exam for exam in accessible_exams
         if exam.created_at and exam.created_at >= cutoff
@@ -4873,6 +4888,7 @@ async def export_family_review_report(
             student_name=student_name,
             grade=grade,
             records=records,
+            report_now=report_now,
         )
     except Exception as e:
         return JSONResponse(

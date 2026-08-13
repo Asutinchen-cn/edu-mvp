@@ -12,6 +12,7 @@ from api.main import (
     _analysis_history_detail,
     _analysis_history_summary,
     _build_review_schedule,
+    _family_report_window_start,
     _normalize_ai_analysis,
     _normalize_review_progress,
     _summarize_family_review_records,
@@ -442,6 +443,13 @@ class CorrectionSheetPdfTest(unittest.TestCase):
 
 
 class FamilyReviewReportPdfTest(unittest.TestCase):
+    def test_report_window_covers_seven_complete_shanghai_calendar_days(self):
+        now = datetime(2026, 8, 13, 15, 30, tzinfo=timezone.utc)
+
+        cutoff = _family_report_window_start(now)
+
+        self.assertEqual(cutoff, datetime(2026, 8, 6, 16, 0, tzinfo=timezone.utc))
+
     def test_weekly_summary_uses_question_mastery_and_groups_by_subject_and_point(self):
         summary = _summarize_family_review_records([
             {
@@ -501,6 +509,7 @@ class FamilyReviewReportPdfTest(unittest.TestCase):
         pdf_bytes = generate_family_review_report_pdf(
             student_name="小明",
             grade="六年级",
+            report_now=datetime(2026, 8, 13, 15, 30, tzinfo=timezone.utc),
             records=[{
                 "exam_id": 11,
                 "subject": "math",
@@ -515,6 +524,10 @@ class FamilyReviewReportPdfTest(unittest.TestCase):
         self.assertIsInstance(pdf_bytes, bytes)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertGreater(len(pdf_bytes), 5000)
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertIn("周期：2026-08-07 至 2026-08-13", text)
+        self.assertNotIn("周期：2026-08-06 至 2026-08-13", text)
 
 
 if __name__ == "__main__":
