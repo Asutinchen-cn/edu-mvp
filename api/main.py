@@ -3142,6 +3142,44 @@ def _normalize_wrong_question_mastery(raw_value: str | dict | None) -> dict[str,
     }
 
 
+def _normalize_wrong_question_mastery_times(raw_value: str | dict | None) -> dict[str, str]:
+    """读取逐题首次确认掌握时间，并忽略旧数据或失效元数据。"""
+    if isinstance(raw_value, dict):
+        value = raw_value
+    else:
+        value = _stored_json(raw_value, {})
+    if not isinstance(value, dict):
+        return {}
+
+    mastery = _normalize_wrong_question_mastery(value)
+    raw_times = value.get("_mastered_at", {})
+    if not isinstance(raw_times, dict):
+        return {}
+    normalized = {}
+    for question_number, raw_time in raw_times.items():
+        key = str(question_number)
+        parsed = _parse_review_datetime(raw_time)
+        if not mastery.get(key) or parsed is None:
+            continue
+        normalized[key] = _format_utc_datetime(parsed)
+    return normalized
+
+
+def _stored_wrong_question_mastery(
+    mastery: dict[str, bool],
+    mastered_at: dict[str, str],
+) -> str:
+    payload = dict(mastery)
+    valid_times = {
+        key: value
+        for key, value in mastered_at.items()
+        if mastery.get(key) and _parse_review_datetime(value) is not None
+    }
+    if valid_times:
+        payload["_mastered_at"] = valid_times
+    return json.dumps(payload, ensure_ascii=False)
+
+
 def _build_question_mastery_summary(exam: Exam, analysis: dict | None = None) -> dict:
     """汇总一份试卷中有明确题目证据的逐题掌握状态。"""
     detail = analysis or _analysis_history_detail(
@@ -3329,6 +3367,7 @@ async def list_wrong_questions(
         review_progress = _normalize_review_progress(exam.review_progress)
         review_schedule = _build_review_schedule(exam.created_at, review_progress)
         question_mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+        question_mastery_times = _normalize_wrong_question_mastery_times(exam.wrong_question_mastery)
         exam_mastered = review_progress["completed_count"] == review_progress["total"]
         for index, item in enumerate(analysis.get("wrong_questions", []), start=1):
             if not item.get("question"):
@@ -3338,6 +3377,7 @@ async def list_wrong_questions(
             archive[exam_subject] += 1
             if subject and exam_subject != subject:
                 continue
+            mastered = question_mastery.get(str(index), exam_mastered)
             questions.append({
                 "id": f"{exam.id}-{index}",
                 "exam_id": exam.id,
@@ -3348,7 +3388,8 @@ async def list_wrong_questions(
                 "student_answer": item["student_answer"],
                 "correct_answer": item["correct_answer"],
                 "knowledge_point": item.get("knowledge_point") or fallback_knowledge_point,
-                "mastered": question_mastery.get(str(index), exam_mastered),
+                "mastered": mastered,
+                "mastered_at": question_mastery_times.get(str(index)) if mastered else None,
                 "review_progress": review_progress,
                 "review_schedule": review_schedule,
                 "created": exam.created_at.isoformat() if exam.created_at else None,
@@ -3417,8 +3458,17 @@ async def update_wrong_question_mastery(
         return JSONResponse({"success": False, "error": "错题不存在"}, status_code=404)
 
     mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
-    mastery[str(question_number)] = body.mastered
-    exam.wrong_question_mastery = json.dumps(mastery, ensure_ascii=False)
+    mastery_times = _normalize_wrong_question_mastery_times(exam.wrong_question_mastery)
+    progress = _normalize_review_progress(exam.review_progress)
+    exam_mastered = progress["completed_count"] == progress["total"]
+    question_key = str(question_number)
+    current_value = mastery.get(question_key, exam_mastered)
+    mastery[question_key] = body.mastered
+    if body.mastered and not current_value:
+        mastery_times[question_key] = _format_utc_datetime(_utc_now())
+    elif not body.mastered:
+        mastery_times.pop(question_key, None)
+    exam.wrong_question_mastery = _stored_wrong_question_mastery(mastery, mastery_times)
     db.commit()
     db.close()
     return JSONResponse({
@@ -3426,6 +3476,7 @@ async def update_wrong_question_mastery(
         "exam_id": exam_id,
         "question_number": question_number,
         "mastered": body.mastered,
+        "mastered_at": mastery_times.get(question_key) if body.mastered else None,
     })
 
 
@@ -3475,6 +3526,8 @@ async def update_knowledge_point_mastery(
         matched_count = 0
         updated_count = 0
         source_exam_ids = []
+        question_updates = []
+        mastered_now = _format_utc_datetime(_utc_now())
         for exam in accessible_exams:
             analysis = _analysis_history_detail(
                 exam.ai_analysis,
@@ -3485,6 +3538,7 @@ async def update_knowledge_point_mastery(
             review_progress = _normalize_review_progress(exam.review_progress)
             exam_mastered = review_progress["completed_count"] == review_progress["total"]
             mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+            mastery_times = _normalize_wrong_question_mastery_times(exam.wrong_question_mastery)
             exam_matched = False
             for question_number, item in enumerate(analysis.get("wrong_questions", []), start=1):
                 if not item.get("question"):
@@ -3498,9 +3552,19 @@ async def update_knowledge_point_mastery(
                 if current_value != body.mastered:
                     updated_count += 1
                 mastery[str(question_number)] = body.mastered
+                question_key = str(question_number)
+                if body.mastered and not current_value:
+                    mastery_times[question_key] = mastered_now
+                elif not body.mastered:
+                    mastery_times.pop(question_key, None)
+                question_updates.append({
+                    "exam_id": exam.id,
+                    "question_number": question_number,
+                    "mastered_at": mastery_times.get(question_key) if body.mastered else None,
+                })
             if exam_matched:
                 source_exam_ids.append(exam.id)
-                exam.wrong_question_mastery = json.dumps(mastery, ensure_ascii=False)
+                exam.wrong_question_mastery = _stored_wrong_question_mastery(mastery, mastery_times)
 
         if not matched_count:
             return JSONResponse(
@@ -3517,6 +3581,7 @@ async def update_knowledge_point_mastery(
             "matched_count": matched_count,
             "updated_count": updated_count,
             "source_exam_ids": source_exam_ids,
+            "question_updates": question_updates,
         })
     except Exception as e:
         db.rollback()

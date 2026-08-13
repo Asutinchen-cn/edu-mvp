@@ -1024,6 +1024,22 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("data-knowledge-point=", HTML)
         self.assertIn("查看错题", HTML)
 
+    def test_parent_dashboard_closes_the_loop_with_real_daily_mastery_progress(self):
+        self.assertIn("今日完成度", HTML)
+        self.assertIn("function wrongQuestionMasteredToday(question, now = new Date())", HTML)
+        self.assertIn("function wrongQuestionReviewTiming(question)", HTML)
+        self.assertIn("question.mastered_at", HTML)
+        self.assertIn("completedTodayCount", HTML)
+        self.assertIn("duePendingCount", HTML)
+        self.assertIn("candidates.filter(candidate => candidate.timing.bucket === 'today').length", HTML)
+        self.assertIn("wrongQuestionReviewTiming(question).bucket === 'today'", HTML)
+        self.assertIn("今日任务已清零", HTML)
+        self.assertIn("今天没有到期错题", HTML)
+        self.assertIn('class="review-day-progress"', HTML)
+        self.assertIn('role="progressbar"', HTML)
+        self.assertIn('aria-valuetext="${escapeHtml(summary.dayProgressTitle)}', HTML)
+        self.assertIn("data.mastered_at || null", HTML)
+
     def test_parent_can_export_a_protected_seven_day_review_report(self):
         self.assertIn("function exportFamilyReviewReport()", HTML)
         self.assertIn("/family-review-report?${params.toString()}", HTML)

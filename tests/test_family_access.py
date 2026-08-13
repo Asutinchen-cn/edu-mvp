@@ -21,6 +21,8 @@ from api.main import (
     _detect_ocr_subject,
     _exam_has_family_access,
     _hash_family_access_code,
+    _normalize_wrong_question_mastery,
+    _normalize_wrong_question_mastery_times,
     _validate_family_access_code,
     _verify_family_access_code,
     ai_analyze,
@@ -275,6 +277,76 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertFalse(json.loads(pending.body)["mastered"])
         self.assertFalse(json.loads(relisted.body)["questions"][0]["mastered"])
 
+    def test_mastery_time_is_saved_only_for_a_real_pending_to_mastered_transition(self):
+        mastered_at = datetime(2026, 8, 13, 12, 30, tzinfo=timezone.utc)
+        with patch("api.main._utc_now", return_value=mastered_at):
+            mastered = asyncio.run(update_wrong_question_mastery(
+                self.first_exam_id,
+                1,
+                WrongQuestionMasteryRequest(mastered=True),
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+        first_payload = json.loads(mastered.body)
+
+        with patch("api.main._utc_now", return_value=datetime(2026, 8, 14, 9, 0, tzinfo=timezone.utc)):
+            repeated = asyncio.run(update_wrong_question_mastery(
+                self.first_exam_id,
+                1,
+                WrongQuestionMasteryRequest(mastered=True),
+                "六年级",
+                "小明",
+                family_code="Home2026A",
+            ))
+        repeated_payload = json.loads(repeated.body)
+        listed = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertEqual(first_payload["mastered_at"], "2026-08-13T12:30:00Z")
+        self.assertEqual(repeated_payload["mastered_at"], "2026-08-13T12:30:00Z")
+        self.assertEqual(
+            json.loads(listed.body)["questions"][0]["mastered_at"],
+            "2026-08-13T12:30:00Z",
+        )
+
+        pending = asyncio.run(update_wrong_question_mastery(
+            self.first_exam_id,
+            1,
+            WrongQuestionMasteryRequest(mastered=False),
+            "六年级",
+            "小明",
+            family_code="Home2026A",
+        ))
+        relisted = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+
+        self.assertIsNone(json.loads(pending.body)["mastered_at"])
+        self.assertIsNone(json.loads(relisted.body)["questions"][0]["mastered_at"])
+
+    def test_legacy_boolean_mastery_remains_compatible_with_timestamp_metadata(self):
+        raw = {
+            "1": True,
+            "2": False,
+            "_mastered_at": {
+                "1": "2026-08-13T12:30:00Z",
+                "2": "2026-08-13T12:31:00Z",
+                "bad": "not-a-date",
+            },
+        }
+
+        self.assertEqual(_normalize_wrong_question_mastery(raw), {"1": True, "2": False})
+        self.assertEqual(
+            _normalize_wrong_question_mastery_times(raw),
+            {"1": "2026-08-13T12:30:00Z"},
+        )
+
     def test_knowledge_point_mastery_updates_only_matching_accessible_questions(self):
         db = self.session_factory()
         first_exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
@@ -306,14 +378,18 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         second_exam_id = second_exam.id
         db.close()
 
-        response = asyncio.run(update_knowledge_point_mastery(
-            WrongQuestionMasteryRequest(mastered=True),
-            grade="六年级",
-            student_name="小明",
-            subject="math",
-            knowledge_point="一元一次方程",
-            family_code="Home2026A",
-        ))
+        with patch(
+            "api.main._utc_now",
+            return_value=datetime(2026, 8, 13, 12, 30, tzinfo=timezone.utc),
+        ):
+            response = asyncio.run(update_knowledge_point_mastery(
+                WrongQuestionMasteryRequest(mastered=True),
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                knowledge_point="一元一次方程",
+                family_code="Home2026A",
+            ))
         payload = json.loads(response.body)
 
         self.assertEqual(response.status_code, 200)
@@ -324,8 +400,44 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         first_mastery = json.loads(db.query(Exam).filter(Exam.id == self.first_exam_id).one().wrong_question_mastery)
         second_mastery = json.loads(db.query(Exam).filter(Exam.id == second_exam_id).one().wrong_question_mastery)
         db.close()
-        self.assertEqual(first_mastery, {"1": True})
-        self.assertEqual(second_mastery, {"1": True})
+        expected_mastery = {
+            "1": True,
+            "_mastered_at": {"1": "2026-08-13T12:30:00Z"},
+        }
+        self.assertEqual(first_mastery, expected_mastery)
+        self.assertEqual(second_mastery, expected_mastery)
+        self.assertEqual(payload["question_updates"], [
+            {
+                "exam_id": second_exam_id,
+                "question_number": 1,
+                "mastered_at": "2026-08-13T12:30:00Z",
+            },
+            {
+                "exam_id": self.first_exam_id,
+                "question_number": 1,
+                "mastered_at": "2026-08-13T12:30:00Z",
+            },
+        ])
+
+        with patch(
+            "api.main._utc_now",
+            return_value=datetime(2026, 8, 14, 12, 30, tzinfo=timezone.utc),
+        ):
+            repeated = asyncio.run(update_knowledge_point_mastery(
+                WrongQuestionMasteryRequest(mastered=True),
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                knowledge_point="一元一次方程",
+                family_code="Home2026A",
+            ))
+        repeated_payload = json.loads(repeated.body)
+
+        self.assertEqual(repeated_payload["updated_count"], 0)
+        self.assertTrue(all(
+            item["mastered_at"] == "2026-08-13T12:30:00Z"
+            for item in repeated_payload["question_updates"]
+        ))
 
     def test_knowledge_point_mastery_rejects_wrong_code_and_unknown_point(self):
         wrong_code = asyncio.run(update_knowledge_point_mastery(

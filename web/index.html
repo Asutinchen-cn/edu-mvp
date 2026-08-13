@@ -1020,6 +1020,49 @@
             grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
             align-items: stretch;
         }
+        .review-day-progress {
+            display: grid;
+            grid-template-columns: minmax(170px, auto) minmax(180px, 1fr) auto;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 18px;
+            padding: 14px 0;
+            border-top: 1px solid rgba(23, 105, 232, 0.1);
+            border-bottom: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .review-day-copy strong {
+            display: block;
+            color: var(--ink);
+            font-size: 15px;
+            line-height: 1.5;
+        }
+        .review-day-copy span,
+        .review-day-counts {
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .review-day-track {
+            height: 8px;
+            overflow: hidden;
+            border-radius: 4px;
+            background: #e7edf5;
+        }
+        .review-day-track span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--success);
+            transition: width 0.2s ease;
+        }
+        .review-day-counts {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            white-space: nowrap;
+        }
+        .review-day-counts strong { color: #147557; font-size: 13px; }
         .review-metrics {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2799,6 +2842,8 @@
             .review-report-btn { flex: 1 1 160px; }
             .review-dashboard-gate { align-items: flex-start; flex-direction: column; gap: 12px; }
             .review-dashboard-gate .history-action { width: 100%; }
+            .review-day-progress { grid-template-columns: 1fr; gap: 8px; }
+            .review-day-counts { justify-content: space-between; }
             .review-dashboard-body { grid-template-columns: 1fr; }
             .review-metrics { grid-template-columns: 1fr; }
             .review-metric { padding: 12px 0; }
@@ -5135,7 +5180,14 @@ async function confirmKnowledgeMastery() {
             if (
                 question.subject === currentAnalysisData.subject
                 && question.knowledge_point === currentAnalysisData.practiceKnowledgePoint
-            ) question.mastered = true;
+            ) {
+                question.mastered = true;
+                const update = (data.question_updates || []).find(item => (
+                    Number(item.exam_id) === Number(question.exam_id)
+                    && Number(item.question_number) === Number(question.question_number)
+                ));
+                question.mastered_at = update?.mastered_at || question.mastered_at || null;
+            }
         });
         refreshHistoryQuestionMasteryFromBank(new Set(
             wrongQuestionBank.questions
@@ -5973,7 +6025,7 @@ function buildKnowledgeReviewTasks(options = {}) {
                 const nextDefinition = REVIEW_STEP_DEFINITIONS.find(step => step.id === nextStepId);
                 return {
                     nextStep: nextDefinition?.label || '继续复习',
-                    timing: reviewTaskTiming(schedule)
+                    timing: wrongQuestionReviewTiming(question)
                 };
             }).sort((a, b) => a.timing.rank - b.timing.rank || a.timing.dueTime - b.timing.dueTime);
             const next = candidates[0] || {
@@ -5986,6 +6038,7 @@ function buildKnowledgeReviewTasks(options = {}) {
                 subject: group.subject,
                 focus: group.focus,
                 pendingCount: group.pendingCount,
+                duePendingCount: candidates.filter(candidate => candidate.timing.bucket === 'today').length,
                 totalCount: group.totalCount,
                 sourceExamCount: group.sourceExamCount,
                 latestDate: group.latestDate,
@@ -6095,6 +6148,29 @@ function buildReviewDashboard(records) {
     const upcomingTasks = scheduleKnowledgeSummary
         ? scheduleKnowledgeSummary.upcomingTasks
         : recordPendingTasks.filter(task => task.timing.bucket === 'upcoming');
+    const completedTodayCount = wrongQuestionBank.loaded
+        ? wrongQuestionBank.questions.filter(question => {
+            const subject = question.subject === 'english' ? 'english' : 'math';
+            return (currentSubjectArchive === 'all' || subject === currentSubjectArchive)
+                && wrongQuestionMasteredToday(question)
+                && wrongQuestionReviewTiming(question).bucket === 'today';
+        }).length
+        : 0;
+    const duePendingCount = scheduleKnowledgeSummary
+        ? scheduleKnowledgeSummary.todayTasks.reduce((sum, task) => sum + task.duePendingCount, 0)
+        : todayTasks.length;
+    const dayTaskCount = completedTodayCount + duePendingCount;
+    const dayProgressPercent = dayTaskCount
+        ? Math.round((completedTodayCount / dayTaskCount) * 100)
+        : 100;
+    const dayProgressTitle = duePendingCount
+        ? `今天还剩 ${duePendingCount} 道错题`
+        : (completedTodayCount ? '今日任务已清零' : '今天没有到期错题');
+    const dayProgressNote = duePendingCount
+        ? '完成后从错题详情标记掌握，进度会立即更新。'
+        : (completedTodayCount
+            ? `今天已确认掌握 ${completedTodayCount} 道，可以按下一次安排复习。`
+            : '不用提前做未到期的隔天回测。');
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
@@ -6144,6 +6220,12 @@ function buildReviewDashboard(records) {
             : (topWeakPoint ? '目前每个薄弱点只出现 1 次' : '需要更多分析记录'),
         nextTitle: nextTitle,
         nextAction: nextAction,
+        completedTodayCount: completedTodayCount,
+        duePendingCount: duePendingCount,
+        dayTaskCount: dayTaskCount,
+        dayProgressPercent: dayProgressPercent,
+        dayProgressTitle: dayProgressTitle,
+        dayProgressNote: dayProgressNote,
         pendingTasks: pendingTasks,
         todayTasks: todayTasks,
         upcomingTasks: upcomingTasks
@@ -6180,6 +6262,20 @@ function renderReviewDashboard(records) {
             <div class="review-dashboard-actions">
                 <span class="review-scope">${escapeHtml(scopeLabel)}</span>
                 <button type="button" class="review-report-btn" onclick="exportFamilyReviewReport()" ${!summary.analysisCount || familyReportExporting ? 'disabled' : ''}>${familyReportExporting ? '正在导出...' : '导出近 7 天报告'}</button>
+            </div>
+        </div>
+        <div class="review-day-progress" role="progressbar"
+            aria-label="今日复习完成度" aria-valuemin="0" aria-valuemax="${summary.dayTaskCount}"
+            aria-valuenow="${summary.completedTodayCount}"
+            aria-valuetext="${escapeHtml(summary.dayProgressTitle)}，今日掌握 ${summary.completedTodayCount} 道，待完成 ${summary.duePendingCount} 道">
+            <div class="review-day-copy">
+                <strong>今日完成度 · ${escapeHtml(summary.dayProgressTitle)}</strong>
+                <span>${escapeHtml(summary.dayProgressNote)}</span>
+            </div>
+            <div class="review-day-track" aria-hidden="true"><span style="width:${summary.dayProgressPercent}%"></span></div>
+            <div class="review-day-counts">
+                <span>今日掌握 <strong>${summary.completedTodayCount}</strong> 道</span>
+                <span>待完成 <strong>${summary.duePendingCount}</strong> 道</span>
             </div>
         </div>
         <div class="review-dashboard-body">
@@ -6610,6 +6706,29 @@ function wrongQuestionMasteryStatus(question) {
     return progress.completedCount === progress.total ? 'mastered' : 'pending';
 }
 
+function wrongQuestionMasteredToday(question, now = new Date()) {
+    if (wrongQuestionMasteryStatus(question) !== 'mastered' || !question.mastered_at) return false;
+    const masteredDay = shanghaiDayNumber(question.mastered_at);
+    const today = shanghaiDayNumber(now);
+    return masteredDay !== null && today !== null && masteredDay === today;
+}
+
+function wrongQuestionReviewTiming(question) {
+    const progress = normalizeReviewProgress(question.review_progress);
+    const savedSchedule = normalizeReviewSchedule(question.review_schedule);
+    if (savedSchedule.status === 'completed' || (!savedSchedule.nextStep && !progress.nextStep)) {
+        return { bucket: 'today', label: '今天重新巩固', rank: 1, dueTime: 0 };
+    }
+    const schedule = savedSchedule.dueAt
+        ? savedSchedule
+        : recordReviewSchedule({
+            date: question.created,
+            reviewProgress: progress,
+            reviewSchedule: savedSchedule
+        }, progress);
+    return reviewTaskTiming(schedule);
+}
+
 function getFilteredWrongQuestions() {
     let questions = getDateFilteredWrongQuestions();
     if (currentSubjectArchive !== 'all') {
@@ -6767,6 +6886,7 @@ async function toggleWrongQuestionMastery(questionId) {
             body: JSON.stringify({ mastered: mastered })
         });
         item.mastered = Boolean(data.mastered);
+        item.mastered_at = data.mastered_at || null;
         refreshHistoryQuestionMasteryFromBank(new Set([item.exam_id]));
         setHistorySyncStatus('success', item.mastered
             ? '这道错题已标记为“已掌握”，可在已掌握筛选中查看。'
