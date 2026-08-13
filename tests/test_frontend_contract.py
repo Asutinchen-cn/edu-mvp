@@ -964,6 +964,12 @@ class FrontendCurriculumContractTest(unittest.TestCase):
     def test_parent_dashboard_respects_spaced_review_due_dates(self):
         self.assertIn("function normalizeReviewSchedule", HTML)
         self.assertIn("function reviewTaskTiming", HTML)
+        self.assertIn("const SHANGHAI_TIME_ZONE = 'Asia/Shanghai'", HTML)
+        self.assertIn("function shanghaiDayNumber(value)", HTML)
+        self.assertIn("if (value === null || value === undefined || value === '') return null", HTML)
+        self.assertIn("timeZone: SHANGHAI_TIME_ZONE", HTML)
+        self.assertIn("const dueDay = shanghaiDayNumber(normalized.dueAt)", HTML)
+        self.assertIn("const today = shanghaiDayNumber(now)", HTML)
         self.assertIn("建议优先", HTML)
         self.assertIn("今天完成", HTML)
         self.assertIn("明天回测", HTML)

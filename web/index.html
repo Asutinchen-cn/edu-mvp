@@ -3496,6 +3496,13 @@ const WORKSHEET_QUESTION_CYCLES = {
     }
 };
 const WORKSHEET_MINUTES_PER_QUESTION = { basic: 2.5, advanced: 3.5, challenge: 5 };
+const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
+const SHANGHAI_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SHANGHAI_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+});
 let worksheetCatalogRecoveryTimer = null;
 let helpDialogReturnFocus = null;
 let generatedFamilyAccessCode = '';
@@ -5373,33 +5380,41 @@ function normalizeReviewSchedule(value) {
     };
 }
 
-function localDayStart(value) {
+function shanghaiDayNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return null;
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const parts = Object.fromEntries(SHANGHAI_DAY_FORMATTER
+        .formatToParts(date)
+        .filter(part => part.type !== 'literal')
+        .map(part => [part.type, Number(part.value)]));
+    if (!parts.year || !parts.month || !parts.day) return null;
+    return Date.UTC(parts.year, parts.month - 1, parts.day) / 86400000;
 }
 
 function reviewTaskTiming(schedule, now = new Date()) {
     const normalized = normalizeReviewSchedule(schedule);
-    const dueDay = localDayStart(normalized.dueAt);
-    const today = localDayStart(now);
-    if (!dueDay || !today) {
+    const dueDay = shanghaiDayNumber(normalized.dueAt);
+    const today = shanghaiDayNumber(now);
+    if (dueDay === null || today === null) {
         return { bucket: 'today', label: '今天完成', rank: 1, dueTime: 0 };
     }
 
-    const dayDifference = Math.round((dueDay - today) / 86400000);
+    const dueTime = new Date(normalized.dueAt).getTime();
+    const dayDifference = dueDay - today;
     if (dayDifference < 0) {
-        return { bucket: 'today', label: '建议优先', rank: 0, dueTime: dueDay.getTime() };
+        return { bucket: 'today', label: '建议优先', rank: 0, dueTime: dueTime };
     }
     if (dayDifference === 0) {
         const label = normalized.nextStep === 'retested' ? '今天回测' : '今天完成';
-        return { bucket: 'today', label: label, rank: 1, dueTime: dueDay.getTime() };
+        return { bucket: 'today', label: label, rank: 1, dueTime: dueTime };
     }
     if (dayDifference === 1 && normalized.nextStep === 'retested') {
-        return { bucket: 'upcoming', label: '明天回测', rank: 2, dueTime: dueDay.getTime() };
+        return { bucket: 'upcoming', label: '明天回测', rank: 2, dueTime: dueTime };
     }
-    const dateLabel = `${dueDay.getMonth() + 1}月${dueDay.getDate()}日`;
-    return { bucket: 'upcoming', label: `${dateLabel}安排`, rank: 2, dueTime: dueDay.getTime() };
+    const dueDate = new Date(dueDay * 86400000);
+    const dateLabel = `${dueDate.getUTCMonth() + 1}月${dueDate.getUTCDate()}日`;
+    return { bucket: 'upcoming', label: `${dateLabel}安排`, rank: 2, dueTime: dueTime };
 }
 
 function recordReviewSchedule(record, progress = normalizeReviewProgress(record?.reviewProgress)) {
@@ -5413,7 +5428,7 @@ function recordReviewSchedule(record, progress = normalizeReviewProgress(record?
     } else if (progress.nextStep === 'retested') {
         const practiceAt = new Date(progress.completedAt.practiced || progress.updatedAt || dueAt);
         if (!Number.isNaN(practiceAt.getTime())) {
-            practiceAt.setDate(practiceAt.getDate() + 1);
+            practiceAt.setTime(practiceAt.getTime() + 86400000);
             dueAt = practiceAt.toISOString();
         }
     }
