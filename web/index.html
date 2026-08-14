@@ -1063,6 +1063,103 @@
             white-space: nowrap;
         }
         .review-day-counts strong { color: #147557; font-size: 13px; }
+        .review-weekly-trend {
+            margin-top: 18px;
+            padding: 16px 0;
+            border-top: 1px solid rgba(23, 105, 232, 0.1);
+            border-bottom: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .review-weekly-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 14px;
+        }
+        .review-weekly-head h5 {
+            color: var(--ink);
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .review-weekly-head p,
+        .review-weekly-note {
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .review-weekly-summary {
+            color: var(--ink);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .review-week-legend {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+        .review-week-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .review-week-legend i {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            background: var(--brand-blue-2);
+        }
+        .review-week-legend .mastered i { background: var(--success); }
+        .review-week-chart {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 8px;
+            min-height: 112px;
+        }
+        .review-week-day {
+            min-width: 0;
+            display: grid;
+            grid-template-rows: 70px 18px 18px;
+            align-items: end;
+            text-align: center;
+        }
+        .review-week-bars {
+            height: 70px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 4px;
+            padding: 0 5px;
+            border-bottom: 1px solid #dfe8f5;
+        }
+        .review-week-bars span {
+            width: min(16px, 38%);
+            border-radius: 3px 3px 0 0;
+            background: var(--brand-blue-2);
+        }
+        .review-week-bars .mastered { background: var(--success); }
+        .review-week-values {
+            display: flex;
+            justify-content: center;
+            gap: 7px;
+            color: var(--brand-blue);
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 18px;
+        }
+        .review-week-values .mastered { color: #147557; }
+        .review-week-date {
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 10px;
+            line-height: 18px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .review-weekly-note { margin-top: 8px; }
         .review-metrics {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2862,6 +2959,12 @@
             .review-dashboard-gate .history-action { width: 100%; }
             .review-day-progress { grid-template-columns: 1fr; gap: 8px; }
             .review-day-counts { justify-content: space-between; }
+            .review-weekly-head { flex-direction: column; gap: 5px; }
+            .review-weekly-summary { white-space: normal; }
+            .review-week-chart { gap: 4px; }
+            .review-week-bars { gap: 2px; padding: 0 2px; }
+            .review-week-values { gap: 4px; }
+            .review-week-date { font-size: 9px; }
             .review-dashboard-body { grid-template-columns: 1fr; }
             .review-metrics { grid-template-columns: 1fr; }
             .review-metric { padding: 12px 0; }
@@ -5464,6 +5567,48 @@ function shanghaiDayNumber(value) {
     return Date.UTC(parts.year, parts.month - 1, parts.day) / 86400000;
 }
 
+function serverUtcTimestamp(value) {
+    if (typeof value !== 'string') return value;
+    const normalized = value.trim();
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(normalized)
+        ? `${normalized}Z`
+        : normalized;
+}
+
+function buildWeeklyMasteryTrend(questions, now = new Date()) {
+    const today = shanghaiDayNumber(now);
+    if (today === null) {
+        return { days: [], recordedCount: 0, masteredCount: 0, maxCount: 1 };
+    }
+    const days = Array.from({ length: 7 }, (_, index) => {
+        const dayNumber = today - 6 + index;
+        const date = new Date(dayNumber * 86400000);
+        return {
+            dayNumber: dayNumber,
+            label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}`,
+            recordedCount: 0,
+            masteredCount: 0
+        };
+    });
+    const dayMap = new Map(days.map(day => [day.dayNumber, day]));
+    (Array.isArray(questions) ? questions : []).forEach(question => {
+        const recordedDay = shanghaiDayNumber(serverUtcTimestamp(question.created));
+        if (dayMap.has(recordedDay)) dayMap.get(recordedDay).recordedCount += 1;
+        if (wrongQuestionMasteryStatus(question) !== 'mastered' || !question.mastered_at) return;
+        const masteredDay = shanghaiDayNumber(serverUtcTimestamp(question.mastered_at));
+        if (dayMap.has(masteredDay)) dayMap.get(masteredDay).masteredCount += 1;
+    });
+    const recordedCount = days.reduce((sum, day) => sum + day.recordedCount, 0);
+    const masteredCount = days.reduce((sum, day) => sum + day.masteredCount, 0);
+    const maxCount = Math.max(1, ...days.flatMap(day => [day.recordedCount, day.masteredCount]));
+    return {
+        days: days,
+        recordedCount: recordedCount,
+        masteredCount: masteredCount,
+        maxCount: maxCount
+    };
+}
+
 function reviewCalendarDate(value) {
     const dayNumber = shanghaiDayNumber(value);
     if (dayNumber === null) return null;
@@ -6298,6 +6443,21 @@ function buildReviewDashboard(records) {
         : (completedTodayCount
             ? `今天已确认掌握 ${completedTodayCount} 道，可以按下一次安排复习。`
             : '不用提前做未到期的隔天回测。');
+    const weeklyQuestions = wrongQuestionBank.loaded
+        ? wrongQuestionBank.questions.filter(question => {
+            const subject = question.subject === 'english' ? 'english' : 'math';
+            return currentSubjectArchive === 'all' || subject === currentSubjectArchive;
+        })
+        : [];
+    const weeklyArchiveCount = wrongQuestionBank.loaded
+        ? Number(wrongQuestionBank.subjectArchive?.[currentSubjectArchive] || 0)
+        : 0;
+    const weeklyTrend = wrongQuestionBank.loaded
+        ? {
+            ...buildWeeklyMasteryTrend(weeklyQuestions),
+            partial: weeklyArchiveCount > weeklyQuestions.length
+        }
+        : null;
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
@@ -6353,6 +6513,7 @@ function buildReviewDashboard(records) {
         dayProgressPercent: dayProgressPercent,
         dayProgressTitle: dayProgressTitle,
         dayProgressNote: dayProgressNote,
+        weeklyTrend: weeklyTrend,
         pendingTasks: pendingTasks,
         todayTasks: todayTasks,
         upcomingTasks: upcomingTasks
@@ -6384,6 +6545,13 @@ function renderReviewDashboard(records) {
             nextStep: nextUpcomingTask.nextStep,
             dueAt: nextUpcomingTask.dueAt
         })
+        : '';
+    const weeklyTrend = summary.weeklyTrend;
+    const weeklyBarHeight = count => count
+        ? Math.max(12, Math.round((count / weeklyTrend.maxCount) * 100))
+        : 0;
+    const weeklyTrendLabel = weeklyTrend
+        ? `近 7 天新录入 ${weeklyTrend.recordedCount} 道，已掌握 ${weeklyTrend.masteredCount} 道。${weeklyTrend.days.map(day => `${day.label} 新录入 ${day.recordedCount} 道，已掌握 ${day.masteredCount} 道`).join('；')}`
         : '';
     const scopeLabel = currentSubjectArchive === 'all'
         ? '当前筛选：全部学科'
@@ -6437,6 +6605,35 @@ function renderReviewDashboard(records) {
                 <p>${escapeHtml(summary.nextAction)}</p>
             </div>
         </div>
+        ${weeklyTrend ? `
+            <section class="review-weekly-trend" aria-labelledby="reviewWeeklyTitle">
+                <div class="review-weekly-head">
+                    <div>
+                        <h5 id="reviewWeeklyTitle">近 7 天错题消化</h5>
+                        <p>看得见这周记录了多少，也看得见确认掌握了多少。</p>
+                    </div>
+                    <strong class="review-weekly-summary">新录入 ${weeklyTrend.recordedCount} 道 · 已掌握 ${weeklyTrend.masteredCount} 道</strong>
+                </div>
+                <div class="review-week-legend" aria-hidden="true">
+                    <span><i></i>新录入</span>
+                    <span class="mastered"><i></i>已掌握</span>
+                </div>
+                <div class="review-week-chart" role="img" aria-label="${escapeHtml(weeklyTrendLabel)}">
+                    ${weeklyTrend.days.map(day => `
+                        <div class="review-week-day">
+                            <div class="review-week-bars" aria-hidden="true">
+                                <span style="height:${weeklyBarHeight(day.recordedCount)}%"></span>
+                                <span class="mastered" style="height:${weeklyBarHeight(day.masteredCount)}%"></span>
+                            </div>
+                            <div class="review-week-values" aria-hidden="true">
+                                <span>${day.recordedCount}</span>
+                                <span class="mastered">${day.masteredCount}</span>
+                            </div>
+                            <span class="review-week-date" aria-hidden="true">${escapeHtml(day.label)}</span>
+                        </div>`).join('')}
+                </div>
+                <p class="review-weekly-note">分别按录入日和标记掌握日统计，已掌握仅计当前仍为掌握状态的错题，不代表同一批错题或考试分数。${weeklyTrend.partial ? '错题较多时，当前趋势仅覆盖最近 200 道。' : ''}</p>
+            </section>` : ''}
         <section class="review-task-list" aria-label="今日复习清单">
             <div class="review-task-head">
                 <h5>今日复习清单</h5>

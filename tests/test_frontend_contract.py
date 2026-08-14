@@ -1042,6 +1042,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn('aria-valuetext="${escapeHtml(summary.dayProgressTitle)}', HTML)
         self.assertIn("data.mastered_at || null", HTML)
 
+    def test_parent_dashboard_shows_a_subject_filtered_seven_day_mastery_trend(self):
+        self.assertIn("function buildWeeklyMasteryTrend(questions, now = new Date())", HTML)
+        self.assertIn("Array.from({ length: 7 }", HTML)
+        self.assertIn("const today = shanghaiDayNumber(now)", HTML)
+        self.assertIn("recordedCount", HTML)
+        self.assertIn("masteredCount", HTML)
+        self.assertIn("currentSubjectArchive === 'all'", HTML)
+        self.assertIn('class="review-weekly-trend"', HTML)
+        self.assertIn('class="review-week-chart"', HTML)
+        self.assertIn('role="img"', HTML)
+        self.assertIn("近 7 天错题消化", HTML)
+        self.assertIn("分别按录入日和标记掌握日统计", HTML)
+        self.assertIn("新录入", HTML)
+        self.assertIn("已掌握", HTML)
+
     def test_parent_can_add_the_next_review_to_a_private_all_day_calendar_event(self):
         self.assertIn("dueAt: next.dueAt", HTML)
         self.assertIn('data-review-calendar=', HTML)
