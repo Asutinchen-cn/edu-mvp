@@ -750,6 +750,42 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("function openQuestionSourceExam(examId)", HTML)
         self.assertIn("按知识点", HTML)
 
+    def test_wrong_bank_can_search_questions_locally_without_transmitting_keywords(self):
+        self.assertIn('id="wrongQuestionSearchField" hidden', HTML)
+        self.assertIn('id="wrongQuestionSearch"', HTML)
+        self.assertIn('搜索知识点、题目或错因', HTML)
+        self.assertIn('id="wrongQuestionSearchClear"', HTML)
+        self.assertIn("let wrongQuestionSearchQuery = ''", HTML)
+        self.assertIn("function updateWrongQuestionSearch(value)", HTML)
+        self.assertIn("function clearWrongQuestionSearch()", HTML)
+        self.assertIn(
+            "wrongQuestionSearchField.hidden = currentHistoryView !== 'knowledge' || !wrongQuestionBank.loaded",
+            HTML,
+        )
+        self.assertIn("searchableValues", HTML)
+        self.assertIn("item.knowledge_point", HTML)
+        self.assertIn("item.question", HTML)
+        self.assertIn("item.error_type", HTML)
+        self.assertIn("value.toLocaleLowerCase('zh-CN').includes(query)", HTML)
+        self.assertIn("没有找到“${escapeHtml(wrongQuestionSearchQuery.trim())}”", HTML)
+
+        search_handler = re.search(
+            r"function updateWrongQuestionSearch\(value\) \{(?P<body>.*?)\n\}",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(search_handler)
+        self.assertNotIn("requestJson", search_handler.group("body"))
+        self.assertNotIn("fetch(", search_handler.group("body"))
+
+    def test_mobile_wrong_question_search_has_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertIn(
+            '.wrong-question-search input,\n'
+            '            .wrong-question-search-clear { min-height: 44px; }',
+            mobile_css,
+        )
+
     def test_knowledge_view_total_count_is_not_double_counted(self):
         count_updater = re.search(
             r"const subjectCounts = datedQuestions\.reduce\(\(counts, item\) => "

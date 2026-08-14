@@ -918,6 +918,59 @@
             color: var(--brand-blue);
             box-shadow: 0 2px 8px rgba(23, 105, 232, 0.1);
         }
+        .wrong-question-search {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) 40px;
+            align-items: center;
+            gap: 10px;
+            margin: -2px 0 16px;
+            padding: 10px 12px;
+            border: 1px solid rgba(23, 105, 232, 0.14);
+            border-radius: 8px;
+            background: #f8fbff;
+        }
+        .wrong-question-search[hidden],
+        .wrong-question-search-clear[hidden] { display: none; }
+        .wrong-question-search label {
+            color: var(--ink);
+            font-size: 13px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .wrong-question-search input {
+            width: 100%;
+            min-width: 0;
+            min-height: 40px;
+            padding: 0 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--ink);
+            font: inherit;
+            font-size: 13px;
+            outline: none;
+        }
+        .wrong-question-search input:focus {
+            border-color: var(--brand-blue);
+            box-shadow: 0 0 0 3px rgba(23, 105, 232, 0.1);
+        }
+        .wrong-question-search-clear {
+            width: 40px;
+            min-height: 40px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--muted);
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .wrong-question-search-clear:hover,
+        .wrong-question-search-clear:focus-visible {
+            border-color: rgba(23, 105, 232, 0.35);
+            color: var(--brand-blue);
+            outline: none;
+        }
         .date-range {
             display: flex; align-items: center; gap: 6px;
             margin-left: auto;
@@ -2985,6 +3038,15 @@
             .review-calendar-button { width: 100%; }
             .history-item-meta { flex-wrap: wrap; gap: 6px; }
             .history-view-switch { display: grid; width: 100%; }
+            .wrong-question-search {
+                width: 100%;
+                grid-template-columns: 1fr 44px;
+                gap: 8px;
+                padding: 10px;
+            }
+            .wrong-question-search label { grid-column: 1 / -1; }
+            .wrong-question-search input,
+            .wrong-question-search-clear { min-height: 44px; }
             .knowledge-group-head { gap: 8px; }
             .knowledge-group-actions { align-items: flex-end; flex-direction: column; gap: 6px; }
             .knowledge-question-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
@@ -3389,6 +3451,13 @@
         <button type="button" class="history-view-button active" data-history-view="exams" aria-pressed="true" onclick="setHistoryView('exams')">按试卷</button>
         <button type="button" class="history-view-button" data-history-view="knowledge" aria-pressed="false" onclick="setHistoryView('knowledge')">按知识点</button>
     </div>
+    <div class="wrong-question-search" id="wrongQuestionSearchField" hidden>
+        <label for="wrongQuestionSearch">搜索错题</label>
+        <input type="search" id="wrongQuestionSearch" placeholder="搜索知识点、题目或错因"
+            oninput="updateWrongQuestionSearch(this.value)">
+        <button type="button" class="wrong-question-search-clear" id="wrongQuestionSearchClear" hidden
+            aria-label="清除错题搜索" title="清除" onclick="clearWrongQuestionSearch()">×</button>
+    </div>
     <section class="review-dashboard" id="reviewDashboard" aria-live="polite"></section>
     <div class="history-sync-status" id="historySyncStatus" role="status" aria-live="polite"></div>
     <div class="history-subjects">
@@ -3631,6 +3700,7 @@ let currentFilter = 'week';
 let currentSubjectArchive = 'all';
 let currentMasteryFilter = 'pending';
 let currentHistoryView = 'exams';
+let wrongQuestionSearchQuery = '';
 let sourceExamLoadingId = null;
 let wrongQuestionBank = {
     loaded: false,
@@ -6767,6 +6837,21 @@ function setMasteryFilter(status) {
     renderHistory();
 }
 
+function updateWrongQuestionSearch(value) {
+    wrongQuestionSearchQuery = String(value || '');
+    document.getElementById('wrongQuestionSearchClear').hidden = !wrongQuestionSearchQuery.trim();
+    renderHistory();
+}
+
+function clearWrongQuestionSearch() {
+    wrongQuestionSearchQuery = '';
+    const input = document.getElementById('wrongQuestionSearch');
+    input.value = '';
+    document.getElementById('wrongQuestionSearchClear').hidden = true;
+    renderHistory();
+    input.focus();
+}
+
 function goToTodayReview() {
     if (!wrongQuestionBank.loaded && historyRecords.length === 0) {
         openWrongBankQuery();
@@ -7072,6 +7157,14 @@ function getFilteredWrongQuestions() {
     if (currentMasteryFilter !== 'all') {
         questions = questions.filter(item => wrongQuestionMasteryStatus(item) === currentMasteryFilter);
     }
+    const query = wrongQuestionSearchQuery.trim().toLocaleLowerCase('zh-CN');
+    if (query) {
+        questions = questions.filter(item => {
+            const searchableValues = [item.knowledge_point, item.question, item.error_type]
+                .map(value => String(value || ''));
+            return searchableValues.some(value => value.toLocaleLowerCase('zh-CN').includes(query));
+        });
+    }
     return questions;
 }
 
@@ -7137,10 +7230,16 @@ function renderKnowledgeQuestionBank() {
     document.getElementById('historyCount').textContent = `${questions.length} 道错题 · ${groupedQuestions.length} 个知识点`;
 
     if (!groupedQuestions.length) {
+        const hasSearchQuery = Boolean(wrongQuestionSearchQuery.trim());
         list.innerHTML = `
             <div class="empty-state">
-                <div class="empty-title">当前筛选下没有错题</div>
-                <div class="empty-desc">可以切换学科、复习状态或日期范围继续查看。</div>
+                <div class="empty-title">${hasSearchQuery
+                    ? `没有找到“${escapeHtml(wrongQuestionSearchQuery.trim())}”`
+                    : '当前筛选下没有错题'}</div>
+                <div class="empty-desc">${hasSearchQuery
+                    ? '可以换一个关键词，或清除搜索查看当前筛选下的全部错题。'
+                    : '可以切换学科、复习状态或日期范围继续查看。'}</div>
+                ${hasSearchQuery ? '<button type="button" class="history-action" onclick="clearWrongQuestionSearch()">清除搜索</button>' : ''}
             </div>`;
         return;
     }
@@ -7350,7 +7449,9 @@ function renderHistory() {
     const scopeRecords = getHistoryScopeRecords();
     const hasUnqueriedServerHistory = !wrongQuestionBank.loaded && historyRecords.length === 0;
     const wrongBankQueryButton = document.getElementById('wrongBankQueryButton');
+    const wrongQuestionSearchField = document.getElementById('wrongQuestionSearchField');
     wrongBankQueryButton.hidden = hasUnqueriedServerHistory;
+    wrongQuestionSearchField.hidden = currentHistoryView !== 'knowledge' || !wrongQuestionBank.loaded;
     renderReviewDashboard(scopeRecords);
     if (currentHistoryView === 'knowledge') {
         renderKnowledgeQuestionBank();
