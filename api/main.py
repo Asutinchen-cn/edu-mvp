@@ -2329,6 +2329,27 @@ ANALYSIS_CROSS_SUBJECT_TERMS = {
     "math": ("英语", "语法", "词汇", "时态", "介词", "冠词", "拼写", "阅读理解"),
 }
 
+ANALYSIS_UNKNOWN_QUESTION_NUMBERS = {
+    "unknown",
+    "null",
+    "none",
+    "n/a",
+    "未识别",
+    "无法识别",
+    "题号未识别",
+    "不清楚",
+}
+
+
+def _normalize_source_question_number(value) -> str:
+    """保留原卷上可确认的短题号，不用内部错题顺序冒充。"""
+    if isinstance(value, (dict, list, tuple, set)):
+        return ""
+    normalized = " ".join(str(value or "").split())
+    if normalized.casefold() in ANALYSIS_UNKNOWN_QUESTION_NUMBERS:
+        return ""
+    return normalized[:40]
+
 
 def _analysis_text_matches_subject(value, subject: str) -> bool:
     text_value = str(value or "").strip().lower()
@@ -2390,13 +2411,20 @@ def _normalize_ai_analysis(raw_analysis, subject: str) -> dict:
             filtered_count += 1
             continue
         normalized_item = {
+            "source_question_number": _normalize_source_question_number(
+                item.get("source_question_number")
+            ),
             "question": str(item.get("question") or "").strip(),
             "error_type": str(item.get("error_type") or "待确认").strip(),
             "student_answer": str(item.get("student_answer") or "").strip(),
             "correct_answer": str(item.get("correct_answer") or "").strip(),
             "knowledge_point": str(item.get("knowledge_point") or "").strip(),
         }
-        evidence_text = " ".join(normalized_item.values())
+        evidence_text = " ".join(
+            value
+            for key, value in normalized_item.items()
+            if key != "source_question_number"
+        )
         if not normalized_item["question"] or not _analysis_text_matches_subject(evidence_text, subject):
             filtered_count += 1
             continue
@@ -2483,14 +2511,15 @@ async def ai_analyze(ocr_text: str, subject: str, grade: str) -> dict:
 1. 只根据 OCR 中能看见的题目、作答、批改痕迹进行分析，不要编造不存在的错题。
 2. 如果 OCR 信息不足，请在 root_cause 说明“识别内容不足”，weak_points 给出可确认的少量方向。
 3. weak_points 必须符合当前学科；英语卷不得出现“小数、面积、分数”等数学知识点。
-4. recommendations 要能直接指导家长或学生复习。
+4. source_question_number 只能抄录原卷中这道题旁边清晰可见的题号（如“12”“三、2”“阅读理解第3小题”）；看不清或无法确认时返回空字符串，不得用错题列表顺序代替原卷题号。
+5. recommendations 要能直接指导家长或学生复习。
 
 请按以下JSON格式返回分析结果（不要包含其他文字，只返回JSON）：
 {{
     "subject": "{subject}",
     "wrong_questions": [
-        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案", "knowledge_point": "这道题对应的具体知识点"}},
-        {{"question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案", "knowledge_point": "这道题对应的具体知识点"}}
+        {{"source_question_number": "原卷可见题号或空字符串", "question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案", "knowledge_point": "这道题对应的具体知识点"}},
+        {{"source_question_number": "原卷可见题号或空字符串", "question": "错题内容摘要", "error_type": "错误类型", "student_answer": "学生作答", "correct_answer": "正确答案", "knowledge_point": "这道题对应的具体知识点"}}
     ],
     "error_types": ["错误类型1", "错误类型2"],
     "weak_points": ["薄弱知识点1", "薄弱知识点2"],
@@ -2969,6 +2998,9 @@ def _analysis_history_detail(
         if not isinstance(item, dict):
             continue
         wrong_questions.append({
+            "source_question_number": _normalize_source_question_number(
+                item.get("source_question_number")
+            ),
             "question": str(item.get("question") or "").strip(),
             "error_type": str(item.get("error_type") or "待确认").strip(),
             "student_answer": str(item.get("student_answer") or "").strip(),
@@ -3389,6 +3421,7 @@ async def list_wrong_questions(
                 "id": f"{exam.id}-{index}",
                 "exam_id": exam.id,
                 "question_number": index,
+                "source_question_number": item.get("source_question_number") or "",
                 "subject": exam_subject,
                 "question": item["question"],
                 "error_type": item["error_type"],
@@ -4295,6 +4328,16 @@ def generate_correction_sheet_pdf(
     subject_label = SUBJECT_LABELS.get(subject, "数学")
     created_label = clean(created_at)[:10] or "未记录"
 
+    def question_label(question, index):
+        source_number = _normalize_source_question_number(
+            question.get("source_question_number")
+        )
+        return (
+            f"原卷题号：{source_number}"
+            if source_number
+            else f"错题 {index}（原卷题号未识别）"
+        )
+
     pdf.add_page()
     pdf.set_font(document_font, "B", 20)
     pdf.set_text_color(21, 34, 58)
@@ -4336,7 +4379,7 @@ def generate_correction_sheet_pdf(
         pdf.multi_cell(
             pdf.epw,
             8,
-            f"第 {index} 题  ·  {error_type}",
+            f"{question_label(question, index)}  ·  {error_type}",
             fill=True,
             new_x="LMARGIN",
             new_y="NEXT",
@@ -4387,7 +4430,13 @@ def generate_correction_sheet_pdf(
             pdf.add_page()
         pdf.set_font(document_font, "B", 11)
         pdf.set_text_color(23, 105, 232)
-        pdf.cell(0, 7, f"第 {index} 题参考答案", new_x="LMARGIN", new_y="NEXT")
+        pdf.multi_cell(
+            pdf.epw,
+            7,
+            f"{question_label(question, index)} · 参考答案",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
         pdf.set_font(document_font, "", 11)
         pdf.set_text_color(21, 34, 58)
         pdf.multi_cell(

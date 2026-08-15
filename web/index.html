@@ -1594,6 +1594,10 @@
             font-size: 12px;
             line-height: 1.55;
         }
+        .knowledge-question-source {
+            color: var(--brand-blue);
+            font-weight: 800;
+        }
         .knowledge-question-meta .mastery-state {
             color: var(--brand-orange);
             font-weight: 800;
@@ -4913,6 +4917,13 @@ function buildErrorTypeStats(wrongQuestions, providedStats = []) {
     });
 }
 
+function originalQuestionNumberLabel(value, fallbackNumber) {
+    const sourceQuestionNumber = String(value || '').trim();
+    return sourceQuestionNumber
+        ? `原卷题号：${sourceQuestionNumber}`
+        : `错题 ${fallbackNumber} · 原卷题号未识别`;
+}
+
 function parseApiResponse(json, name, grade, subject) {
     // Try to parse API response into structured data
     try {
@@ -4947,6 +4958,7 @@ function parseApiResponse(json, name, grade, subject) {
             })),
             wrongQuestions: wq.map((q, i) => ({
                 num: i + 1,
+                sourceQuestionNumber: q.source_question_number || '',
                 reason: `${q.error_type || '错因'}: ${q.question || '题目摘要未识别'}`,
                 correctAnswer: q.correct_answer || '见解析',
                 tag: q.error_type || '待确认'
@@ -5085,7 +5097,7 @@ function renderAnalysisResult(data) {
                 ${data.wrongQuestions.map(q => `
                     <div class="wrong-q-item">
                         <div class="wrong-q-top">
-                            <span class="wrong-q-num">第 ${q.num} 题</span>
+                            <span class="wrong-q-num">${escapeHtml(originalQuestionNumberLabel(q.sourceQuestionNumber, q.num))}</span>
                             <span class="wrong-q-tag">${escapeHtml(q.tag)}</span>
                         </div>
                         <div class="wrong-q-reason">原因：${escapeHtml(q.reason)}</div>
@@ -6168,6 +6180,7 @@ function renderHistoryDiagnosis(record) {
     const wrongQuestions = Array.isArray(raw.wrong_questions) && raw.wrong_questions.length
         ? raw.wrong_questions.map((item, index) => ({
             number: index + 1,
+            sourceQuestionNumber: item.source_question_number || '',
             question: item.question || '题目摘要未识别',
             errorType: item.error_type || '错因待确认',
             studentAnswer: item.student_answer || '',
@@ -6175,6 +6188,7 @@ function renderHistoryDiagnosis(record) {
         }))
         : (data.wrongQuestions || []).map((item, index) => ({
             number: index + 1,
+            sourceQuestionNumber: item.sourceQuestionNumber || '',
             question: item.reason || '题目摘要未识别',
             errorType: item.tag || '错因待确认',
             studentAnswer: '',
@@ -6211,7 +6225,7 @@ function renderHistoryDiagnosis(record) {
             ${wrongQuestions.length ? `<div class="history-wrong-list">${wrongQuestions.map(item => `
                 <div class="history-wrong-row">
                     <div>
-                        <div class="history-wrong-title">第 ${item.number} 题：${escapeHtml(item.question)}</div>
+                        <div class="history-wrong-title">${escapeHtml(originalQuestionNumberLabel(item.sourceQuestionNumber, item.number))}：${escapeHtml(item.question)}</div>
                         <div class="history-wrong-type">错因：${escapeHtml(item.errorType)}</div>
                     </div>
                     <div>
@@ -7607,7 +7621,12 @@ function getFilteredWrongQuestions() {
     const query = wrongQuestionSearchQuery.trim().toLocaleLowerCase('zh-CN');
     if (query) {
         questions = questions.filter(item => {
-            const searchableValues = [item.knowledge_point, item.question, item.error_type]
+            const searchableValues = [
+                item.knowledge_point,
+                item.question,
+                item.error_type,
+                item.source_question_number
+            ]
                 .map(value => String(value || ''));
             return searchableValues.some(value => value.toLocaleLowerCase('zh-CN').includes(query));
         });
@@ -7741,6 +7760,7 @@ function renderKnowledgeQuestionBank() {
                                 <div class="knowledge-question-body">
                                     <div class="knowledge-question-prompt">${escapeHtml(item.question)}</div>
                                     <div class="knowledge-question-meta">
+                                        <span class="knowledge-question-source">${escapeHtml(originalQuestionNumberLabel(item.source_question_number, item.question_number))}</span>
                                         <span>错因：${escapeHtml(item.error_type || '待确认')}</span>
                                         ${studentAnswer}
                                         <span class="mastery-state ${mastered ? 'mastered' : ''}">${reviewStatus}</span>
@@ -7831,6 +7851,7 @@ function prepareKnowledgePractice(knowledgePoint, subject) {
         })),
         wrongQuestions: practiceEvidence.map((item, index) => ({
             num: index + 1,
+            sourceQuestionNumber: item.source_question_number || '',
             reason: `${item.error_type || '待确认'}: ${item.question}`,
             correctAnswer: item.correct_answer || '见原记录',
             tag: item.error_type || '待确认'

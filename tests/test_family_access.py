@@ -125,6 +125,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
                 ocr_text="第一份试卷",
                 ai_analysis=json.dumps({
                     "wrong_questions": [{
+                        "source_question_number": "三、2",
                         "question": "解方程 2x + 3 = 9",
                         "error_type": "移项符号错误",
                         "student_answer": "x = 6",
@@ -199,6 +200,10 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(payload["questions"][0]["id"], f"{self.first_exam_id}-1")
         self.assertEqual(payload["questions"][0]["exam_id"], self.first_exam_id)
         self.assertEqual(payload["questions"][0]["question_number"], 1)
+        self.assertEqual(
+            payload["questions"][0]["source_question_number"],
+            "三、2",
+        )
         self.assertEqual(payload["questions"][0]["knowledge_point"], "一元一次方程")
         self.assertFalse(payload["questions"][0]["mastered"])
         self.assertEqual(payload["questions"][0]["review_schedule"]["next_step"], "corrected")

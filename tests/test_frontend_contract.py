@@ -172,6 +172,25 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("预览 ${data.questions.length} 道题目与考点", HTML)
         self.assertIn("previewDetails.open = false", HTML)
 
+    def test_wrong_question_views_distinguish_original_exam_numbers_from_internal_order(self):
+        self.assertIn("source_question_number", HTML)
+        self.assertIn("sourceQuestionNumber", HTML)
+        self.assertIn("function originalQuestionNumberLabel", HTML)
+        self.assertIn("原卷题号：", HTML)
+        self.assertIn("原卷题号未识别", HTML)
+        self.assertIn(
+            "sourceQuestionNumber: q.source_question_number || ''",
+            HTML,
+        )
+        self.assertIn(
+            "sourceQuestionNumber: item.source_question_number || ''",
+            HTML,
+        )
+        self.assertIn(
+            "originalQuestionNumberLabel(item.sourceQuestionNumber, item.number)",
+            HTML,
+        )
+
     def test_analysis_grade_selector_is_focused_on_junior_middle_school(self):
         for grade in ("六年级", "七年级", "八年级", "九年级"):
             self.assertIn(f'<option value="{grade}"', HTML)

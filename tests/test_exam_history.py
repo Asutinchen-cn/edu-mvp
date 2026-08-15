@@ -16,6 +16,7 @@ from api.main import (
     _family_report_window_start,
     _normalize_ai_analysis,
     _normalize_review_progress,
+    ai_analyze,
     _summarize_family_review_records,
     ai_generate_questions,
     generate_correction_sheet_pdf,
@@ -25,6 +26,89 @@ from api.main import (
 
 
 class AiAnalysisNormalizationTest(unittest.TestCase):
+    def test_preserves_only_a_compact_original_exam_question_number(self):
+        analysis = _normalize_ai_analysis({
+            "subject": "math",
+            "wrong_questions": [
+                {
+                    "source_question_number": "  三、2  ",
+                    "question": "解方程 2x + 3 = 9",
+                    "error_type": "移项符号错误",
+                },
+                {
+                    "question": "计算 -3 + 5",
+                    "error_type": "符号错误",
+                },
+            ],
+            "weak_points": ["一元一次方程"],
+            "root_cause": "没有理解移项规则。",
+            "recommendations": ["回到原题订正。"],
+        }, "math")
+
+        self.assertEqual(
+            analysis["wrong_questions"][0]["source_question_number"],
+            "三、2",
+        )
+        self.assertEqual(
+            analysis["wrong_questions"][1]["source_question_number"],
+            "",
+        )
+
+    def test_original_question_number_does_not_decide_the_question_subject(self):
+        analysis = _normalize_ai_analysis({
+            "subject": "math",
+            "wrong_questions": [{
+                "source_question_number": "英语部分第1题",
+                "question": "解方程 2x + 3 = 9",
+                "error_type": "移项符号错误",
+                "student_answer": "x = 6",
+                "correct_answer": "x = 3",
+                "knowledge_point": "一元一次方程",
+            }],
+            "weak_points": ["一元一次方程"],
+            "root_cause": "移项规则不熟悉。",
+            "recommendations": ["回到原题订正。"],
+        }, "math")
+
+        self.assertEqual(len(analysis["wrong_questions"]), 1)
+        self.assertEqual(
+            analysis["wrong_questions"][0]["source_question_number"],
+            "英语部分第1题",
+        )
+
+    def test_analysis_prompt_does_not_invent_original_question_numbers(self):
+        model = AsyncMock(return_value=json.dumps({
+            "subject": "math",
+            "wrong_questions": [{
+                "source_question_number": "12（2）",
+                "question": "解方程 2x + 3 = 9",
+                "error_type": "移项符号错误",
+                "student_answer": "x = 6",
+                "correct_answer": "x = 3",
+                "knowledge_point": "一元一次方程",
+            }],
+            "error_types": ["移项符号错误"],
+            "weak_points": ["一元一次方程"],
+            "root_cause": "移项规则不熟悉。",
+            "recommendations": ["回到原题订正。"],
+        }, ensure_ascii=False))
+
+        with patch("api.main.call_deepseek", model):
+            analysis = asyncio.run(ai_analyze(
+                "12（2）解方程 2x + 3 = 9，学生答 x = 6，批改为错误。",
+                "math",
+                "六年级",
+            ))
+
+        prompt = model.await_args.args[0]
+        self.assertIn('"source_question_number"', prompt)
+        self.assertIn("看不清或无法确认时返回空字符串", prompt)
+        self.assertIn("不得用错题列表顺序代替原卷题号", prompt)
+        self.assertEqual(
+            analysis["wrong_questions"][0]["source_question_number"],
+            "12（2）",
+        )
+
     def test_error_distribution_uses_saved_wrong_question_counts(self):
         analysis = _normalize_ai_analysis({
             "subject": "math",
@@ -212,6 +296,7 @@ class AnalysisHistoryDetailTest(unittest.TestCase):
     def test_returns_parent_readable_saved_analysis(self):
         detail = _analysis_history_detail(json.dumps({
             "wrong_questions": [{
+                "source_question_number": "三、2",
                 "question": "解方程 2x + 3 = 9",
                 "error_type": "移项符号错误",
                 "student_answer": "x = 6",
@@ -225,6 +310,10 @@ class AnalysisHistoryDetailTest(unittest.TestCase):
         }, ensure_ascii=False))
 
         self.assertEqual(detail["wrong_questions"][0]["student_answer"], "x = 6")
+        self.assertEqual(
+            detail["wrong_questions"][0]["source_question_number"],
+            "三、2",
+        )
         self.assertEqual(detail["wrong_questions"][0]["knowledge_point"], "一元一次方程")
         self.assertEqual(detail["weak_points"], ["一元一次方程"])
         self.assertEqual(detail["root_cause"], "没有理解移项要改变符号。")
@@ -427,6 +516,7 @@ class CorrectionSheetPdfTest(unittest.TestCase):
             created_at="2026-07-16",
             analysis={
                 "wrong_questions": [{
+                    "source_question_number": "三、2",
                     "question": "解方程 2x + 3 = 9",
                     "error_type": "移项符号错误",
                     "student_answer": "x = 6",
@@ -441,6 +531,35 @@ class CorrectionSheetPdfTest(unittest.TestCase):
         self.assertIsInstance(pdf_bytes, bytes)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertGreater(len(pdf_bytes), 5000)
+        text = "\n".join(
+            page.extract_text() or ""
+            for page in PdfReader(io.BytesIO(pdf_bytes)).pages
+        )
+        self.assertIn("原卷题号：三、2", text)
+        self.assertNotIn("第 1 题参考答案", text)
+
+    def test_correction_sheet_marks_unknown_original_question_numbers(self):
+        pdf_bytes = generate_correction_sheet_pdf(
+            student_name="小明",
+            grade="六年级",
+            subject="math",
+            created_at="2026-07-16",
+            analysis={
+                "wrong_questions": [{
+                    "question": "计算 -3 + 5",
+                    "error_type": "符号错误",
+                    "student_answer": "-8",
+                    "correct_answer": "2",
+                }],
+                "weak_points": ["有理数加法"],
+            },
+        )
+
+        text = "\n".join(
+            page.extract_text() or ""
+            for page in PdfReader(io.BytesIO(pdf_bytes)).pages
+        )
+        self.assertIn("错题 1（原卷题号未识别）", text)
 
 
 class FamilyReviewReportPdfTest(unittest.TestCase):
