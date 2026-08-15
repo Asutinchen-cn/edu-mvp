@@ -4355,12 +4355,21 @@ def _summarize_family_review_records(records: list[dict]) -> dict:
     grouped_points = {}
     question_count = 0
     mastered_count = 0
+    new_exam_count = 0
+    recorded_question_count = 0
+    mastered_this_week_count = 0
+    pending_recorded_count = 0
+    reviewed_old_exam_ids = set()
 
     for record_index, record in enumerate(safe_records):
         subject = record.get("subject")
         if subject not in subject_exam_counts:
             subject = "math"
         subject_exam_counts[subject] += 1
+        has_window_metadata = "created_in_window" in record
+        created_in_window = record.get("created_in_window", True) is True
+        if created_in_window:
+            new_exam_count += 1
         weak_points = record.get("weak_points", [])
         fallback_point = next(
             (
@@ -4373,6 +4382,7 @@ def _summarize_family_review_records(records: list[dict]) -> dict:
         source_exam = record.get("exam_id") or f"record-{record_index + 1}"
         raw_questions = record.get("wrong_questions", [])
         questions = raw_questions if isinstance(raw_questions, list) else []
+        old_exam_reviewed = False
 
         for question in questions:
             if not isinstance(question, dict):
@@ -4381,9 +4391,24 @@ def _summarize_family_review_records(records: list[dict]) -> dict:
                 question.get("knowledge_point") or fallback_point
             ).strip() or "待归类"
             mastered = question.get("mastered") is True
+            recorded_in_window = question.get(
+                "recorded_in_window", created_in_window
+            ) is True
+            mastered_in_window = question.get(
+                "mastered_in_window",
+                mastered if not has_window_metadata else False,
+            ) is True
             question_count += 1
             if mastered:
                 mastered_count += 1
+            if recorded_in_window:
+                recorded_question_count += 1
+                if not mastered:
+                    pending_recorded_count += 1
+            if mastered_in_window:
+                mastered_this_week_count += 1
+                if not created_in_window:
+                    old_exam_reviewed = True
 
             key = (subject, knowledge_point)
             group = grouped_points.setdefault(key, {
@@ -4397,6 +4422,8 @@ def _summarize_family_review_records(records: list[dict]) -> dict:
             group["wrong_count"] += 1
             group["mastered_count" if mastered else "pending_count"] += 1
             group["source_exam_ids"].add(str(source_exam))
+        if old_exam_reviewed:
+            reviewed_old_exam_ids.add(str(source_exam))
 
     knowledge_points = [
         {
@@ -4431,6 +4458,11 @@ def _summarize_family_review_records(records: list[dict]) -> dict:
         "question_count": question_count,
         "mastered_count": mastered_count,
         "pending_count": question_count - mastered_count,
+        "new_exam_count": new_exam_count,
+        "recorded_question_count": recorded_question_count,
+        "mastered_this_week_count": mastered_this_week_count,
+        "pending_recorded_count": pending_recorded_count,
+        "reviewed_old_exam_count": len(reviewed_old_exam_ids),
         "subject_exam_counts": subject_exam_counts,
         "knowledge_points": knowledge_points,
         "priority_tasks": priority_tasks,
@@ -4500,6 +4532,7 @@ def generate_family_review_report_pdf(
             pdf.epw,
             line_height,
             text_value,
+            align="L",
             new_x="LMARGIN",
             new_y="NEXT",
         )
@@ -4529,10 +4562,10 @@ def generate_family_review_report_pdf(
 
     section_title("本周概览")
     metrics = [
-        f"试卷 {summary['exam_count']} 份",
-        f"错题 {summary['question_count']} 道",
-        f"已掌握 {summary['mastered_count']} 道",
-        f"待复习 {summary['pending_count']} 道",
+        f"新分析 {summary['new_exam_count']} 份",
+        f"新录错题 {summary['recorded_question_count']} 道",
+        f"本周掌握 {summary['mastered_this_week_count']} 道",
+        f"新增待复习 {summary['pending_recorded_count']} 道",
     ]
     metric_width = pdf.epw / len(metrics)
     pdf.set_fill_color(241, 247, 255)
@@ -4555,15 +4588,21 @@ def generate_family_review_report_pdf(
         subject_summary.append(f"数学 {subject_counts['math']} 份")
     if subject_counts["english"]:
         subject_summary.append(f"英语 {subject_counts['english']} 份")
-    write_text("学科分布：" + ("、".join(subject_summary) or "暂无"), 7)
+    write_text("本周涉及：" + ("、".join(subject_summary) or "暂无"), 7)
+    if summary["reviewed_old_exam_count"]:
+        write_text(
+            f"其中 {summary['reviewed_old_exam_count']} 份旧试卷有错题在本周标记掌握，且当前仍为掌握状态。",
+            7,
+            color=(33, 166, 122),
+        )
 
     section_title("知识点掌握情况")
     if summary["knowledge_points"]:
         for index, point in enumerate(summary["knowledge_points"][:5], start=1):
             subject_label = SUBJECT_LABELS.get(point["subject"], "数学")
             write_text(
-                f"{index}. [{subject_label}] {point['name']}：错题 {point['wrong_count']} 道，"
-                f"待复习 {point['pending_count']} 道（来自 {point['source_exam_count']} 份试卷）",
+                f"{index}. [{subject_label}] {point['name']}：本周涉及 {point['wrong_count']} 道，"
+                f"当前待复习 {point['pending_count']} 道（来自 {point['source_exam_count']} 份试卷）",
                 7,
             )
     else:
@@ -4578,8 +4617,10 @@ def generate_family_review_report_pdf(
                 f"（待复习 {task['pending_count']} 道，来自 {task['source_exam_count']} 份试卷）",
                 7,
             )
-    elif summary["question_count"]:
-        write_text("近 7 天记录中的错题均已标记为已掌握。", 7, color=(33, 166, 122))
+    elif summary["recorded_question_count"]:
+        write_text("本周新录错题均已标记为已掌握。", 7, color=(33, 166, 122))
+    elif summary["mastered_this_week_count"]:
+        write_text("本周没有新增待复习错题，已完成旧错题巩固。", 7, color=(33, 166, 122))
     else:
         write_text("暂无可安排的逐题任务，请先上传清晰试卷并完成错题分析。", 7, color=(65, 81, 107))
 
@@ -4591,7 +4632,7 @@ def generate_family_review_report_pdf(
 
     pdf.ln(4)
     write_text(
-        "说明：本报告只统计已保存且可确认的逐题错题及掌握状态，不代表考试成绩；没有逐题证据时不做推算。",
+        "说明：本报告分别统计近 7 个上海自然日新录入的错题，以及本周标记掌握且当前仍为掌握状态的旧错题；只使用已保存的逐题证据，不代表考试成绩。",
         6,
         color=(100, 116, 139),
     )
@@ -4905,20 +4946,13 @@ async def export_family_review_report(
         )
 
     report_now = _utc_now()
-    cutoff = _family_report_window_start(report_now).replace(tzinfo=None)
-    recent_exams = [
-        exam for exam in accessible_exams
-        if exam.created_at and exam.created_at >= cutoff
-    ]
-    if not recent_exams:
-        db.close()
-        return JSONResponse(
-            {"success": False, "error": "近 7 天暂无可汇总的错题记录"},
-            status_code=400,
-        )
-
+    cutoff = _family_report_window_start(report_now)
     records = []
-    for exam in recent_exams:
+    for exam in accessible_exams:
+        created_at = _parse_review_datetime(exam.created_at)
+        created_in_window = bool(
+            created_at and cutoff <= created_at <= report_now
+        )
         summary = _analysis_history_summary(exam.ai_analysis, exam.weak_points)
         analysis = _analysis_history_detail(
             exam.ai_analysis,
@@ -4929,24 +4963,47 @@ async def export_family_review_report(
         review_progress = _normalize_review_progress(exam.review_progress)
         exam_mastered = review_progress["completed_count"] == review_progress["total"]
         question_mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+        question_mastery_times = _normalize_wrong_question_mastery_times(
+            exam.wrong_question_mastery
+        )
         wrong_questions = []
         for question_number, item in enumerate(analysis.get("wrong_questions", []), start=1):
             if not item.get("question"):
                 continue
+            question_key = str(question_number)
+            mastered = question_mastery.get(question_key, exam_mastered)
+            mastered_at = _parse_review_datetime(
+                question_mastery_times.get(question_key)
+            )
+            mastered_in_window = bool(
+                mastered and mastered_at and cutoff <= mastered_at <= report_now
+            )
+            if not created_in_window and not mastered_in_window:
+                continue
             wrong_questions.append({
                 "knowledge_point": item.get("knowledge_point") or fallback_point,
-                "mastered": question_mastery.get(str(question_number), exam_mastered),
+                "mastered": mastered,
+                "recorded_in_window": created_in_window,
+                "mastered_in_window": mastered_in_window,
             })
+        if not wrong_questions:
+            continue
         records.append({
             "exam_id": exam.id,
             "subject": exam.subject,
             "created_at": exam.created_at.isoformat(),
+            "created_in_window": created_in_window,
             "wrong_count": summary["wrong_count"],
             "weak_points": summary["weak_points"],
             "review_progress": review_progress,
             "wrong_questions": wrong_questions,
         })
     db.close()
+    if not records:
+        return JSONResponse(
+            {"success": False, "error": "近 7 天暂无可汇总的错题记录"},
+            status_code=400,
+        )
 
     try:
         pdf_bytes = generate_family_review_report_pdf(

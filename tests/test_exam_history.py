@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 from pypdf import PdfReader
+from pypdf.generic import ContentStream
 
 from api.main import (
     AnalysisServiceUnavailable,
@@ -505,6 +506,46 @@ class FamilyReviewReportPdfTest(unittest.TestCase):
         self.assertEqual(empty_summary["question_count"], 0)
         self.assertEqual(empty_summary["priority_tasks"], [])
 
+    def test_weekly_summary_separates_new_errors_from_mastered_old_questions(self):
+        summary = _summarize_family_review_records([
+            {
+                "exam_id": 21,
+                "subject": "math",
+                "created_in_window": True,
+                "wrong_questions": [
+                    {
+                        "knowledge_point": "一元一次方程",
+                        "mastered": True,
+                        "recorded_in_window": True,
+                        "mastered_in_window": False,
+                    },
+                    {
+                        "knowledge_point": "有理数加法",
+                        "mastered": False,
+                        "recorded_in_window": True,
+                        "mastered_in_window": False,
+                    },
+                ],
+            },
+            {
+                "exam_id": 22,
+                "subject": "math",
+                "created_in_window": False,
+                "wrong_questions": [{
+                    "knowledge_point": "一元一次方程",
+                    "mastered": True,
+                    "recorded_in_window": False,
+                    "mastered_in_window": True,
+                }],
+            },
+        ])
+
+        self.assertEqual(summary["new_exam_count"], 1)
+        self.assertEqual(summary["recorded_question_count"], 2)
+        self.assertEqual(summary["mastered_this_week_count"], 1)
+        self.assertEqual(summary["pending_recorded_count"], 1)
+        self.assertEqual(summary["reviewed_old_exam_count"], 1)
+
     def test_builds_a_weekly_report_from_saved_summary_evidence(self):
         pdf_bytes = generate_family_review_report_pdf(
             student_name="小明",
@@ -528,6 +569,55 @@ class FamilyReviewReportPdfTest(unittest.TestCase):
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
         self.assertIn("周期：2026-08-07 至 2026-08-13", text)
         self.assertNotIn("周期：2026-08-06 至 2026-08-13", text)
+
+    def test_weekly_report_labels_new_errors_and_this_week_mastery_separately(self):
+        pdf_bytes = generate_family_review_report_pdf(
+            student_name="小明",
+            grade="六年级",
+            report_now=datetime(2026, 8, 13, 15, 30, tzinfo=timezone.utc),
+            records=[
+                {
+                    "exam_id": 21,
+                    "subject": "math",
+                    "created_in_window": True,
+                    "wrong_questions": [
+                        {
+                            "knowledge_point": "一元一次方程",
+                            "mastered": True,
+                            "recorded_in_window": True,
+                            "mastered_in_window": False,
+                        },
+                        {
+                            "knowledge_point": "有理数加法",
+                            "mastered": False,
+                            "recorded_in_window": True,
+                            "mastered_in_window": False,
+                        },
+                    ],
+                },
+                {
+                    "exam_id": 22,
+                    "subject": "math",
+                    "created_in_window": False,
+                    "wrong_questions": [{
+                        "knowledge_point": "一元一次方程",
+                        "mastered": True,
+                        "recorded_in_window": False,
+                        "mastered_in_window": True,
+                    }],
+                },
+            ],
+        )
+
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertIn("新分析 1 份", text)
+        self.assertIn("新录错题 2 道", text)
+        self.assertIn("本周掌握 1 道", text)
+        self.assertIn("新增待复习 1 道", text)
+        self.assertIn("本周标记掌握且当前仍为掌握状态的旧错题", text)
+        content = ContentStream(reader.pages[0].get_contents(), reader)
+        self.assertNotIn(b"TJ", [operator for _, operator in content.operations])
 
 
 if __name__ == "__main__":

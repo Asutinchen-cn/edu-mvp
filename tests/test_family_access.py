@@ -941,7 +941,78 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(records[0]["wrong_questions"], [{
             "knowledge_point": "一元一次方程",
             "mastered": True,
+            "recorded_in_window": True,
+            "mastered_in_window": False,
         }])
+
+    def test_family_review_report_includes_an_old_question_mastered_this_week(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.created_at = datetime(2026, 7, 20, 8, 0)
+        exam.ai_analysis = json.dumps({
+            "wrong_questions": [
+                {
+                    "question": "解方程 2x + 3 = 9",
+                    "knowledge_point": "一元一次方程",
+                },
+                {
+                    "question": "计算 -3 + 5",
+                    "knowledge_point": "有理数加法",
+                },
+            ],
+            "weak_points": ["一元一次方程", "有理数加法"],
+        }, ensure_ascii=False)
+        exam.wrong_question_mastery = json.dumps({
+            "1": True,
+            "2": False,
+            "_mastered_at": {"1": "2026-08-06T16:00:00Z"},
+        }, ensure_ascii=False)
+        db.commit()
+        db.close()
+
+        now = datetime(2026, 8, 13, 15, 30, tzinfo=timezone.utc)
+        with (
+            patch("api.main._utc_now", return_value=now),
+            patch("api.main.generate_family_review_report_pdf", return_value=b"%PDF-test") as render_pdf,
+        ):
+            response = asyncio.run(export_family_review_report(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(response.status_code, 200)
+        records = render_pdf.call_args.kwargs["records"]
+        self.assertEqual(len(records), 1)
+        self.assertFalse(records[0]["created_in_window"])
+        self.assertEqual(records[0]["wrong_questions"], [{
+            "knowledge_point": "一元一次方程",
+            "mastered": True,
+            "recorded_in_window": False,
+            "mastered_in_window": True,
+        }])
+
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.wrong_question_mastery = json.dumps({
+            "1": True,
+            "2": False,
+            "_mastered_at": {"1": "2026-08-06T15:59:59Z"},
+        }, ensure_ascii=False)
+        db.commit()
+        db.close()
+
+        with patch("api.main._utc_now", return_value=now):
+            excluded = asyncio.run(export_family_review_report(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(excluded.status_code, 400)
+        self.assertIn("近 7 天暂无", json.loads(excluded.body)["error"])
 
     def test_family_review_report_uses_the_shanghai_calendar_window_boundary(self):
         db = self.session_factory()
