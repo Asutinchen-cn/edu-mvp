@@ -1038,6 +1038,48 @@
             font-size: 12px;
             line-height: 1.6;
         }
+        .review-coverage {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+            padding: 12px 14px;
+            border: 1px solid rgba(23, 105, 232, 0.18);
+            border-radius: 8px;
+            background: #f4f8ff;
+        }
+        .review-coverage-copy { min-width: 0; }
+        .review-coverage strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .review-coverage span {
+            display: block;
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .review-coverage-button {
+            flex: 0 0 auto;
+            min-height: 36px;
+            padding: 0 13px;
+            border: 1px solid rgba(23, 105, 232, 0.25);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .review-coverage-button:hover,
+        .review-coverage-button:focus-visible { background: #edf5ff; outline: none; }
+        .review-coverage-button:disabled { opacity: 0.6; cursor: wait; }
         .review-scope {
             flex-shrink: 0;
             color: var(--brand-blue);
@@ -3050,6 +3092,8 @@
             .review-dashboard-head { flex-direction: column; gap: 6px; }
             .review-dashboard-actions { width: 100%; justify-content: space-between; }
             .review-report-btn { flex: 1 1 160px; }
+            .review-coverage { align-items: stretch; flex-direction: column; }
+            .review-coverage-button { min-height: 44px; width: 100%; }
             .review-dashboard-gate { align-items: flex-start; flex-direction: column; gap: 12px; }
             .review-dashboard-gate .history-action { width: 100%; }
             .review-day-progress { grid-template-columns: 1fr; gap: 8px; }
@@ -3750,6 +3794,7 @@ let wrongQuestionBank = {
     loaded: false,
     loading: false,
     loadingMore: false,
+    loadingAllHistory: false,
     error: '',
     questions: [],
     knowledgePoints: [],
@@ -6467,6 +6512,25 @@ function buildReviewDashboard(records) {
     const safeRecords = Array.isArray(records) ? records : [];
     const knowledgeSummary = buildKnowledgeReviewTasks();
     const scheduleKnowledgeSummary = buildKnowledgeReviewTasks({ ignoreDateFilter: true });
+    const loadedQuestionCount = wrongQuestionBank.loaded
+        ? wrongQuestionBank.questions.filter(question => (
+            currentSubjectArchive === 'all' || question.subject === currentSubjectArchive
+        )).length
+        : 0;
+    const totalQuestionCount = wrongQuestionBank.loaded
+        ? Math.max(
+            loadedQuestionCount,
+            Number(currentSubjectArchive === 'all'
+                ? wrongQuestionBank.totalCount
+                : wrongQuestionBank.subjectArchive?.[currentSubjectArchive]) || 0
+        )
+        : 0;
+    const historyComplete = Boolean(
+        wrongQuestionBank.loaded && loadedQuestionCount >= totalQuestionCount
+    );
+    const historyScopeLabel = wrongQuestionBank.loaded
+        ? (historyComplete ? '全部历史' : `已加载 ${loadedQuestionCount}/${totalQuestionCount} 道`)
+        : '当前记录';
     const knownCounts = safeRecords.map(historyWrongCount).filter(count => count !== null);
     const confirmedWrongCount = knownCounts.reduce((sum, count) => sum + count, 0);
     const subjectCounts = safeRecords.reduce((counts, record) => {
@@ -6567,13 +6631,12 @@ function buildReviewDashboard(records) {
             return currentSubjectArchive === 'all' || subject === currentSubjectArchive;
         })
         : [];
-    const weeklyArchiveCount = wrongQuestionBank.loaded
-        ? Number(wrongQuestionBank.subjectArchive?.[currentSubjectArchive] || 0)
-        : 0;
     const weeklyTrend = wrongQuestionBank.loaded
         ? {
             ...buildWeeklyMasteryTrend(weeklyQuestions),
-            partial: weeklyArchiveCount > weeklyQuestions.length
+            partial: !historyComplete,
+            loadedCount: loadedQuestionCount,
+            totalCount: totalQuestionCount
         }
         : null;
     const canExportWeeklyReport = Boolean(weeklyTrend && (
@@ -6587,7 +6650,7 @@ function buildReviewDashboard(records) {
         subjectCounts.english ? `英语 ${subjectCounts.english} 份` : ''
     ].filter(Boolean).join(' · ') || '尚无学科记录';
     const countNote = knowledgeSummary
-        ? `服务器逐题状态：待复习 ${knowledgeSummary.pendingCount} 道 · 已掌握 ${knowledgeSummary.masteredCount} 道`
+        ? `服务器逐题状态：待复习 ${knowledgeSummary.pendingCount} 道 · 已掌握 ${knowledgeSummary.masteredCount} 道${historyComplete ? '' : ' · 当前仅覆盖已加载记录'}`
         : (knownCounts.length
             ? `${knownCounts.length === safeRecords.length ? '统计' : '仅统计'} ${knownCounts.length} 份有错题明细的记录`
             : '旧记录暂无错题数明细');
@@ -6626,8 +6689,8 @@ function buildReviewDashboard(records) {
         countNote: countNote,
         repeatedWeakPoint: repeatedWeakPoint?.name || '暂无重复',
         repeatedNote: repeatedWeakPoint
-            ? `在 ${repeatedWeakPoint.count} 份试卷中出现${Number.isFinite(repeatedWeakPoint.pendingCount) ? ` · 待复习 ${repeatedWeakPoint.pendingCount} 道` : ''}`
-            : (topWeakPoint ? '目前每个薄弱点只出现 1 次' : '需要更多分析记录'),
+            ? `在 ${repeatedWeakPoint.count} 份试卷中出现${Number.isFinite(repeatedWeakPoint.pendingCount) ? ` · 待复习 ${repeatedWeakPoint.pendingCount} 道` : ''}${historyComplete ? '' : ' · 基于已加载记录'}`
+            : (topWeakPoint ? `目前每个薄弱点只出现 1 次${historyComplete ? '' : ' · 基于已加载记录'}` : '需要更多分析记录'),
         nextTitle: nextTitle,
         nextAction: nextAction,
         completedTodayCount: completedTodayCount,
@@ -6638,6 +6701,10 @@ function buildReviewDashboard(records) {
         dayProgressNote: dayProgressNote,
         weeklyTrend: weeklyTrend,
         canExportWeeklyReport: canExportWeeklyReport,
+        historyComplete: historyComplete,
+        historyScopeLabel: historyScopeLabel,
+        loadedQuestionCount: loadedQuestionCount,
+        totalQuestionCount: totalQuestionCount,
         pendingTasks: pendingTasks,
         todayTasks: todayTasks,
         upcomingTasks: upcomingTasks
@@ -6694,6 +6761,16 @@ function renderReviewDashboard(records) {
                 <button type="button" class="review-report-btn" onclick="exportFamilyReviewReport()" title="${escapeHtml(reportButtonTitle)}" ${!summary.canExportWeeklyReport || familyReportExporting ? 'disabled' : ''}>${familyReportExporting ? '正在导出...' : '导出近 7 天报告'}</button>
             </div>
         </div>
+        ${wrongQuestionBank.loaded && !summary.historyComplete ? `
+            <div class="review-coverage" role="status">
+                <div class="review-coverage-copy">
+                    <strong>当前看板已加载 ${summary.loadedQuestionCount}/${summary.totalQuestionCount} 道错题</strong>
+                    <span>补齐后，今日任务、反复薄弱点和近 7 天趋势会按全部历史重新计算。</span>
+                </div>
+                <button type="button" class="review-coverage-button" onclick="loadCompleteWrongQuestionHistory()"
+                    aria-busy="${wrongQuestionBank.loadingAllHistory ? 'true' : 'false'}"
+                    ${wrongQuestionBank.loadingAllHistory ? 'disabled' : ''}>${wrongQuestionBank.loadingAllHistory ? '正在补齐...' : '补齐全部历史'}</button>
+            </div>` : ''}
         <div class="review-day-progress" role="progressbar"
             aria-label="今日复习完成度" aria-valuemin="0" aria-valuemax="${summary.dayTaskCount}"
             aria-valuenow="${summary.completedTodayCount}"
@@ -6759,12 +6836,12 @@ function renderReviewDashboard(records) {
                             <span class="review-week-date" aria-hidden="true">${escapeHtml(day.label)}</span>
                         </div>`).join('')}
                 </div>
-                <p class="review-weekly-note">分别按录入日和标记掌握日统计，已掌握仅计当前仍为掌握状态的错题，不代表同一批错题或考试分数。${weeklyTrend.partial ? '错题较多时，当前趋势仅覆盖最近 200 道。' : ''}</p>
+                <p class="review-weekly-note">分别按录入日和标记掌握日统计，已掌握仅计当前仍为掌握状态的错题，不代表同一批错题或考试分数。${weeklyTrend.partial ? `当前趋势覆盖已加载的 ${weeklyTrend.loadedCount}/${weeklyTrend.totalCount} 道错题。` : ''}</p>
             </section>` : ''}
         <section class="review-task-list" aria-label="今日复习清单">
             <div class="review-task-head">
                 <h5>今日复习清单</h5>
-                <span class="review-task-count">全部历史中 ${summary.todayTasks.length} 项今日处理</span>
+                <span class="review-task-count">${escapeHtml(summary.historyScopeLabel)} · ${summary.todayTasks.length} 项今日处理</span>
             </div>
             <div id="reviewTaskItems">
                 ${visibleTasks.length ? visibleTasks.map(task => `
@@ -7040,6 +7117,7 @@ async function loadWrongQuestionBank(options = {}) {
             loaded: true,
             loading: false,
             loadingMore: false,
+            loadingAllHistory: false,
             error: '',
             questions: questions,
             knowledgePoints: Array.isArray(data.knowledge_points) ? data.knowledge_points : [],
@@ -7065,11 +7143,13 @@ async function loadWrongQuestionBank(options = {}) {
     }
 }
 
-async function loadMoreWrongQuestions() {
-    if (!wrongQuestionBank.loaded || !wrongQuestionBank.hasMore || wrongQuestionBank.loadingMore) return;
+async function loadMoreWrongQuestions(options = {}) {
+    const quiet = Boolean(options.quiet);
+    if (!wrongQuestionBank.loaded || !wrongQuestionBank.hasMore || wrongQuestionBank.loadingMore) return false;
 
     const grade = document.getElementById('gradeSelect').value;
     const studentName = (document.getElementById('studentName').value || '').trim();
+    const previousOffset = wrongQuestionBank.nextOffset;
     wrongQuestionBank.loadingMore = true;
     wrongQuestionBank.error = '';
     renderHistory();
@@ -7080,8 +7160,16 @@ async function loadMoreWrongQuestions() {
             method: 'GET',
             headers: familyAccessHeaders()
         });
+        const pageQuestions = Array.isArray(data.questions) ? data.questions : [];
+        const responseHasMore = Boolean(data.has_more);
+        const responseNextOffset = data.next_offset !== null && Number.isInteger(Number(data.next_offset))
+            ? Number(data.next_offset)
+            : null;
+        if (responseHasMore && (!pageQuestions.length || responseNextOffset === null || responseNextOffset <= previousOffset)) {
+            throw new Error('服务器返回的历史分页位置无效');
+        }
         const questionMap = new Map(wrongQuestionBank.questions.map(question => [question.id, question]));
-        (Array.isArray(data.questions) ? data.questions : []).forEach(question => {
+        pageQuestions.forEach(question => {
             questionMap.set(question.id, question);
         });
         wrongQuestionBank.questions = [...questionMap.values()];
@@ -7094,17 +7182,39 @@ async function loadMoreWrongQuestions() {
             wrongQuestionBank.questions.length,
             Number(data.total_question_count) || wrongQuestionBank.totalCount
         );
-        wrongQuestionBank.hasMore = Boolean(data.has_more);
-        wrongQuestionBank.nextOffset = data.next_offset !== null && Number.isInteger(Number(data.next_offset))
-            ? Number(data.next_offset)
-            : wrongQuestionBank.questions.length;
+        wrongQuestionBank.hasMore = responseHasMore;
+        wrongQuestionBank.nextOffset = responseNextOffset ?? wrongQuestionBank.questions.length;
         refreshHistoryQuestionMasteryFromBank();
-        setHistorySyncStatus('success', `已加载 ${wrongQuestionBank.questions.length}/${wrongQuestionBank.totalCount} 道历史错题。`);
+        if (!quiet) {
+            setHistorySyncStatus('success', `已加载 ${wrongQuestionBank.questions.length}/${wrongQuestionBank.totalCount} 道历史错题。`);
+        }
+        return true;
     } catch (error) {
         wrongQuestionBank.error = error.message || '更早错题加载失败';
         setHistorySyncStatus('error', `加载更早错题失败：${wrongQuestionBank.error}。已显示的错题仍保留，可以重试。`);
+        return false;
     } finally {
         wrongQuestionBank.loadingMore = false;
+        renderHistory();
+    }
+}
+
+async function loadCompleteWrongQuestionHistory() {
+    if (!wrongQuestionBank.loaded || !wrongQuestionBank.hasMore || wrongQuestionBank.loadingAllHistory) return;
+
+    wrongQuestionBank.loadingAllHistory = true;
+    setHistorySyncStatus('', '');
+    renderHistory();
+    try {
+        while (wrongQuestionBank.hasMore) {
+            const pageLoaded = await loadMoreWrongQuestions({ quiet: true });
+            if (!pageLoaded) break;
+        }
+        if (!wrongQuestionBank.hasMore) {
+            setHistorySyncStatus('success', `已补齐全部 ${wrongQuestionBank.totalCount} 道历史错题，看板已重新计算。`);
+        }
+    } finally {
+        wrongQuestionBank.loadingAllHistory = false;
         renderHistory();
     }
 }

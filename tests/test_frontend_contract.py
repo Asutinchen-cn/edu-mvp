@@ -783,7 +783,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("totalCount: 0", HTML)
         self.assertIn("hasMore: false", HTML)
         self.assertIn("nextOffset: 0", HTML)
-        self.assertIn("function loadMoreWrongQuestions()", HTML)
+        self.assertIn("function loadMoreWrongQuestions(options = {})", HTML)
         self.assertIn("params.set('offset', String(wrongQuestionBank.nextOffset))", HTML)
         self.assertIn("new Map(wrongQuestionBank.questions.map(question => [question.id, question]))", HTML)
         self.assertIn("total_question_count", HTML)
@@ -791,7 +791,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("已加载 ${loadedQuestionCount}/${totalQuestionCount} 道历史错题", HTML)
 
         load_more = re.search(
-            r"async function loadMoreWrongQuestions\(\) \{(?P<body>.*?)\n\}",
+            r"async function loadMoreWrongQuestions\(options = \{\}\) \{(?P<body>.*?)\n\}",
             HTML,
             re.S,
         )
@@ -1068,6 +1068,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("historyComplete: historyComplete", HTML)
         self.assertIn("historyScopeLabel: historyScopeLabel", HTML)
         self.assertIn("当前看板已加载 ${summary.loadedQuestionCount}/${summary.totalQuestionCount} 道错题", HTML)
+        self.assertIn("wrongQuestionBank.loaded && !summary.historyComplete", HTML)
         self.assertIn("补齐全部历史", HTML)
         self.assertIn("补齐后，今日任务、反复薄弱点和近 7 天趋势会按全部历史重新计算。", HTML)
         self.assertIn("当前趋势覆盖已加载的 ${weeklyTrend.loadedCount}/${weeklyTrend.totalCount} 道错题", HTML)
