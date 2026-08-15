@@ -1122,6 +1122,16 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("近 7 天复习报告下载已开始", HTML)
         self.assertNotIn("alert(e.message || '导出近 7 天报告失败，请稍后重试')", HTML)
 
+    def test_weekly_report_export_uses_question_activity_instead_of_visible_exams(self):
+        self.assertIn("const canExportWeeklyReport = Boolean(weeklyTrend && (", HTML)
+        self.assertIn("weeklyTrend.recordedCount > 0", HTML)
+        self.assertIn("weeklyTrend.masteredCount > 0", HTML)
+        self.assertIn("weeklyTrend.partial", HTML)
+        self.assertIn("canExportWeeklyReport: canExportWeeklyReport", HTML)
+        self.assertIn("!summary.canExportWeeklyReport || familyReportExporting", HTML)
+        self.assertNotIn("!summary.analysisCount || familyReportExporting", HTML)
+        self.assertIn("近 7 天有新错题或掌握记录后可导出", HTML)
+
     def test_wrong_bank_records_are_not_persisted_in_browser_storage(self):
         self.assertIn("const LEGACY_HISTORY_STORAGE_KEY = 'xiahunao_history'", HTML)
         self.assertIn("localStorage.removeItem(LEGACY_HISTORY_STORAGE_KEY)", HTML)

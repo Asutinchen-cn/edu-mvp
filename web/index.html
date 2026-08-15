@@ -6528,6 +6528,11 @@ function buildReviewDashboard(records) {
             partial: weeklyArchiveCount > weeklyQuestions.length
         }
         : null;
+    const canExportWeeklyReport = Boolean(weeklyTrend && (
+        weeklyTrend.recordedCount > 0
+        || weeklyTrend.masteredCount > 0
+        || weeklyTrend.partial
+    ));
 
     const subjectSummary = [
         subjectCounts.math ? `数学 ${subjectCounts.math} 份` : '',
@@ -6584,6 +6589,7 @@ function buildReviewDashboard(records) {
         dayProgressTitle: dayProgressTitle,
         dayProgressNote: dayProgressNote,
         weeklyTrend: weeklyTrend,
+        canExportWeeklyReport: canExportWeeklyReport,
         pendingTasks: pendingTasks,
         todayTasks: todayTasks,
         upcomingTasks: upcomingTasks
@@ -6626,6 +6632,9 @@ function renderReviewDashboard(records) {
     const scopeLabel = currentSubjectArchive === 'all'
         ? '当前筛选：全部学科'
         : `当前筛选：${currentSubjectArchive === 'english' ? '英语' : '数学'}`;
+    const reportButtonTitle = summary.canExportWeeklyReport
+        ? '导出当前学科近 7 天家庭复习报告'
+        : '近 7 天有新错题或掌握记录后可导出';
     dashboard.innerHTML = `
         <div class="review-dashboard-head">
             <div>
@@ -6634,7 +6643,7 @@ function renderReviewDashboard(records) {
             </div>
             <div class="review-dashboard-actions">
                 <span class="review-scope">${escapeHtml(scopeLabel)}</span>
-                <button type="button" class="review-report-btn" onclick="exportFamilyReviewReport()" ${!summary.analysisCount || familyReportExporting ? 'disabled' : ''}>${familyReportExporting ? '正在导出...' : '导出近 7 天报告'}</button>
+                <button type="button" class="review-report-btn" onclick="exportFamilyReviewReport()" title="${escapeHtml(reportButtonTitle)}" ${!summary.canExportWeeklyReport || familyReportExporting ? 'disabled' : ''}>${familyReportExporting ? '正在导出...' : '导出近 7 天报告'}</button>
             </div>
         </div>
         <div class="review-day-progress" role="progressbar"
