@@ -658,6 +658,36 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("原记录仍保留，可以重试", HTML)
         self.assertNotIn("alert('删除服务器记录失败：' + e.message)", HTML)
 
+    def test_parent_can_delete_all_matching_family_data_after_typed_confirmation(self):
+        self.assertIn('id="familyDataDeleteButton"', HTML)
+        self.assertIn('id="familyDeleteDialog"', HTML)
+        self.assertIn('id="familyDeleteConfirmation"', HTML)
+        self.assertIn('请输入学生姓名确认', HTML)
+        self.assertIn("function openFamilyDeleteDialog()", HTML)
+        self.assertIn("function updateFamilyDeleteConfirmation()", HTML)
+        self.assertIn("async function confirmFamilyDataDeletion(event)", HTML)
+        self.assertIn("confirmation !== pendingFamilyDeletion.studentName", HTML)
+        self.assertIn("requestJson(`/family-records?${params.toString()}`", HTML)
+        self.assertIn("method: 'DELETE'", HTML)
+        self.assertIn("headers: familyAccessHeaders()", HTML)
+        self.assertIn("已删除 ${deletedExamCount} 份试卷和 ${deletedFileCount} 个原卷文件", HTML)
+        self.assertIn("删除全部数据失败", HTML)
+        self.assertIn("原有记录仍保留", HTML)
+
+    def test_family_data_delete_action_only_appears_after_a_verified_query(self):
+        self.assertIn("familyDataDeleteButton.hidden = !wrongQuestionBank.loaded", HTML)
+        self.assertIn("wrongQuestionBank.loadingAllHistory || wrongQuestionBank.loadingMore", HTML)
+        self.assertIn("删除该孩子全部数据", HTML)
+
+    def test_mobile_family_delete_controls_have_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertIn(
+            '.family-delete-trigger,\n'
+            '            .family-delete-dialog .dialog-button,\n'
+            '            .family-delete-dialog input { min-height: 44px; }',
+            mobile_css,
+        )
+
     def test_analysis_result_gives_parents_an_evidence_based_action_plan(self):
         self.assertIn("function buildParentReviewPlan(data)", HTML)
         self.assertIn("7 天复习安排", HTML)

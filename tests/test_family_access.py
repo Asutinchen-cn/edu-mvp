@@ -28,6 +28,7 @@ from api.main import (
     ai_analyze,
     analyze_exam,
     delete_exam,
+    delete_family_records,
     export_correction_sheet,
     export_family_review_report,
     export_practice_pdf,
@@ -1351,6 +1352,62 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         db = self.session_factory()
         self.assertIsNone(db.query(Exam).filter(Exam.id == self.first_exam_id).first())
         db.close()
+
+    def test_deleting_family_records_removes_only_matching_code_records_and_uploads(self):
+        second_page = Path(self.upload_dir.name) / "family-second.png"
+        third_page = Path(self.upload_dir.name) / "family-third.png"
+        second_page.write_bytes(b"second-family-page")
+        third_page.write_bytes(b"third-family-page")
+        db = self.session_factory()
+        first_exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        db.add(Exam(
+            grade="六年级",
+            subject="math",
+            student_name="小明",
+            access_code_salt=first_exam.access_code_salt,
+            access_code_hash=first_exam.access_code_hash,
+            image_path="/uploads/family-second.png",
+            image_paths=json.dumps([
+                "/uploads/family-second.png",
+                "/uploads/family-third.png",
+            ]),
+            ocr_text="同一家庭第二份试卷",
+        ))
+        db.commit()
+        db.close()
+
+        response = asyncio.run(delete_family_records(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+        ))
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["deleted_exam_count"], 2)
+        self.assertEqual(payload["deleted_file_count"], 3)
+        self.assertFalse((Path(self.upload_dir.name) / "protected.png").exists())
+        self.assertFalse(second_page.exists())
+        self.assertFalse(third_page.exists())
+        db = self.session_factory()
+        remaining = db.query(Exam).all()
+        db.close()
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].subject, "english")
+
+    def test_family_delete_rejects_unmatched_code_without_removing_anything(self):
+        response = asyncio.run(delete_family_records(
+            grade="六年级",
+            student_name="小明",
+            family_code="Wrong2026",
+        ))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue((Path(self.upload_dir.name) / "protected.png").exists())
+        db = self.session_factory()
+        count = db.query(Exam).count()
+        db.close()
+        self.assertEqual(count, 2)
 
     def test_upload_directory_is_not_publicly_mounted(self):
         mounted_paths = [getattr(route, "path", None) for route in app.routes]
