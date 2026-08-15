@@ -875,6 +875,17 @@
             color: var(--brand-blue);
             border-color: rgba(23, 105, 232, 0.38);
         }
+        .family-delete-trigger {
+            border-color: rgba(196, 62, 50, 0.28);
+            color: #a5392e;
+            font-weight: 800;
+        }
+        .family-delete-trigger:hover {
+            border-color: rgba(196, 62, 50, 0.42);
+            background: #fff2f0;
+            color: #a5392e;
+        }
+        .family-delete-trigger:disabled { cursor: wait; opacity: 0.58; }
         .history-sync-status {
             display: none;
             margin: 0 0 14px;
@@ -2966,7 +2977,18 @@
             cursor: pointer;
         }
         .dialog-button.primary { border-color: var(--brand-blue); background: var(--brand-blue); color: #fff; }
+        .dialog-button.danger { border-color: #c43e32; background: #c43e32; color: #fff; }
         .dialog-button:disabled { opacity: 0.6; cursor: wait; }
+        .family-delete-target {
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            border-left: 4px solid #c43e32;
+            background: #fff2f0;
+            color: #71342e;
+            font-size: 13px;
+            line-height: 1.65;
+        }
+        .family-delete-target strong { color: #8c2f27; }
 
         /* ===== CONFIRM DIALOG ===== */
         .confirm-dialog {
@@ -3156,6 +3178,10 @@
             .help-dialog-actions .dialog-button { width: 100%; }
             .wrong-bank-actions { align-items: stretch; }
             .dialog-button { flex: 1; }
+            .family-delete-trigger,
+            .family-delete-dialog .dialog-button,
+            .family-delete-dialog input { min-height: 44px; }
+            #familyDeleteConfirmation { min-height: 44px; }
             .family-data-note summary { align-items: flex-start; flex-wrap: wrap; padding: 10px 0; }
             .family-data-note summary::after { align-self: center; }
             .family-data-manage { width: 100%; text-align: left; }
@@ -3566,6 +3592,7 @@
         <button class="filter-tab" data-filter="month" onclick="filterHistory('month', this)">本月</button>
         <button class="filter-tab" data-filter="all" onclick="filterHistory('all', this)">全部</button>
         <button type="button" class="filter-tab sync-bank-btn" id="wrongBankQueryButton" onclick="openWrongBankQuery()">查询家庭错题库</button>
+        <button type="button" class="filter-tab family-delete-trigger" id="familyDataDeleteButton" hidden onclick="openFamilyDeleteDialog()">删除该孩子全部数据</button>
         <div class="date-range">
             <label class="visually-hidden" for="dateFrom">开始日期</label>
             <input type="date" id="dateFrom">
@@ -3707,6 +3734,29 @@
     </form>
 </dialog>
 
+<!-- FAMILY DATA DELETE DIALOG -->
+<dialog class="wrong-bank-dialog family-delete-dialog" id="familyDeleteDialog" aria-labelledby="familyDeleteDialogTitle" aria-describedby="familyDeleteTarget">
+    <form class="wrong-bank-form" novalidate onsubmit="confirmFamilyDataDeletion(event)">
+        <div class="wrong-bank-head">
+            <div>
+                <h2 id="familyDeleteDialogTitle">删除该孩子全部数据</h2>
+                <p>这是永久操作，只会删除当前家庭访问码有权访问的记录。</p>
+            </div>
+            <button type="button" class="dialog-close" aria-label="关闭删除确认窗口" onclick="closeFamilyDeleteDialog()">×</button>
+        </div>
+        <p class="family-delete-target" id="familyDeleteTarget"></p>
+        <div class="wrong-bank-field full">
+            <label for="familyDeleteConfirmation">请输入学生姓名确认</label>
+            <input type="text" id="familyDeleteConfirmation" oninput="updateFamilyDeleteConfirmation()">
+        </div>
+        <div class="wrong-bank-status" id="familyDeleteStatus" role="alert" aria-live="assertive"></div>
+        <div class="wrong-bank-actions">
+            <button type="button" class="dialog-button" onclick="closeFamilyDeleteDialog()">取消</button>
+            <button type="submit" class="dialog-button danger" id="familyDeleteConfirmButton" disabled>永久删除</button>
+        </div>
+    </form>
+</dialog>
+
 <!-- LOADING OVERLAY -->
 <div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite" aria-atomic="true">
     <div class="loader" aria-hidden="true"></div>
@@ -3808,6 +3858,9 @@ let reviewTasksExpanded = false;
 let selectedRecordId = null;
 let pendingDeleteId = null;
 let deleteSaving = false;
+let pendingFamilyDeletion = null;
+let familyDeleteSaving = false;
+let verifiedFamilyDeleteScope = null;
 let worksheetUnits = [];
 let worksheetMeta = null;
 const WORKSHEET_CATALOG_RETRY_DELAYS = [0, 1000, 3000];
@@ -3853,6 +3906,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDateFilters();
     setupMobileQuickNav();
     setupFamilyAccessCodeGuard();
+    setupFamilyDeleteVerificationGuard();
     setupWorksheetOutputInvalidation();
     loadWorksheetUnits();
     const wrongBankDialog = document.getElementById('wrongBankDialog');
@@ -3862,6 +3916,14 @@ document.addEventListener('DOMContentLoaded', () => {
     wrongBankDialog.addEventListener('cancel', event => {
         event.preventDefault();
         closeWrongBankQuery();
+    });
+    const familyDeleteDialog = document.getElementById('familyDeleteDialog');
+    familyDeleteDialog.addEventListener('click', event => {
+        if (event.target === familyDeleteDialog) closeFamilyDeleteDialog();
+    });
+    familyDeleteDialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        closeFamilyDeleteDialog();
     });
     const helpDialog = document.getElementById('helpDialog');
     helpDialog.addEventListener('click', event => {
@@ -4498,6 +4560,27 @@ function setupFamilyAccessCodeGuard() {
         generatedFamilyAccessCode = '';
         copiedFamilyAccessCode = '';
         setFamilyAccessHint('以后上传与查询都使用同一个访问码；访问码无法找回，请妥善保存');
+    });
+}
+
+function familyDataDeleteScopeMatchesCurrentInputs() {
+    return Boolean(
+        verifiedFamilyDeleteScope
+        && verifiedFamilyDeleteScope.grade === document.getElementById('gradeSelect').value
+        && verifiedFamilyDeleteScope.studentName === document.getElementById('studentName').value.trim()
+        && verifiedFamilyDeleteScope.familyCode === document.getElementById('familyAccessCode').value.trim()
+    );
+}
+
+function invalidateFamilyDeleteVerification() {
+    verifiedFamilyDeleteScope = null;
+    const button = document.getElementById('familyDataDeleteButton');
+    if (button) button.hidden = true;
+}
+
+function setupFamilyDeleteVerificationGuard() {
+    ['gradeSelect', 'studentName', 'familyAccessCode'].forEach(inputId => {
+        document.getElementById(inputId).addEventListener('input', invalidateFamilyDeleteVerification);
     });
 }
 
@@ -7036,6 +7119,146 @@ function closeWrongBankQuery() {
     document.getElementById('wrongBankStatus').textContent = '';
 }
 
+function openFamilyDeleteDialog() {
+    if (
+        !wrongQuestionBank.loaded
+        || !familyDataDeleteScopeMatchesCurrentInputs()
+        || wrongQuestionBank.loadingAllHistory
+        || wrongQuestionBank.loadingMore
+    ) return;
+    const grade = document.getElementById('gradeSelect').value;
+    const studentName = (document.getElementById('studentName').value || '').trim();
+    if (!grade || !studentName) return;
+
+    pendingFamilyDeletion = { grade: grade, studentName: studentName };
+    const dialog = document.getElementById('familyDeleteDialog');
+    document.getElementById('familyDeleteTarget').innerHTML = `将永久删除 <strong>${escapeHtml(studentName)}</strong>（${escapeHtml(grade)}）在当前访问码下的全部试卷、错题分析和原卷文件，且无法恢复。`;
+    document.getElementById('familyDeleteConfirmation').value = '';
+    document.getElementById('familyDeleteStatus').textContent = '';
+    updateFamilyDeleteConfirmation();
+    if (!dialog.open) dialog.showModal();
+    document.getElementById('familyDeleteConfirmation').focus();
+}
+
+function closeFamilyDeleteDialog() {
+    if (familyDeleteSaving) return;
+    const dialog = document.getElementById('familyDeleteDialog');
+    if (dialog.open) dialog.close();
+    pendingFamilyDeletion = null;
+    const confirmationInput = document.getElementById('familyDeleteConfirmation');
+    confirmationInput.value = '';
+    confirmationInput.disabled = false;
+    document.getElementById('familyDeleteStatus').textContent = '';
+    const confirmButton = document.getElementById('familyDeleteConfirmButton');
+    confirmButton.disabled = true;
+    confirmButton.textContent = '永久删除';
+}
+
+function updateFamilyDeleteConfirmation() {
+    const confirmation = document.getElementById('familyDeleteConfirmation').value.trim();
+    document.getElementById('familyDeleteConfirmButton').disabled = (
+        familyDeleteSaving
+        || !pendingFamilyDeletion
+        || confirmation !== pendingFamilyDeletion.studentName
+    );
+}
+
+async function confirmFamilyDataDeletion(event) {
+    event.preventDefault();
+    if (!pendingFamilyDeletion || familyDeleteSaving) return;
+    const confirmation = document.getElementById('familyDeleteConfirmation').value.trim();
+    if (confirmation !== pendingFamilyDeletion.studentName) {
+        document.getElementById('familyDeleteStatus').textContent = '输入的姓名不一致，请重新确认。';
+        return;
+    }
+
+    const target = { ...pendingFamilyDeletion };
+    const status = document.getElementById('familyDeleteStatus');
+    const confirmButton = document.getElementById('familyDeleteConfirmButton');
+    const confirmationInput = document.getElementById('familyDeleteConfirmation');
+    const params = new URLSearchParams({ grade: target.grade, student_name: target.studentName });
+    familyDeleteSaving = true;
+    status.textContent = '正在永久删除，请不要关闭页面...';
+    confirmButton.disabled = true;
+    confirmButton.textContent = '正在删除...';
+    confirmationInput.disabled = true;
+
+    let data;
+    try {
+        data = await requestJson(`/family-records?${params.toString()}`, {
+            method: 'DELETE',
+            headers: familyAccessHeaders()
+        });
+    } catch (error) {
+        familyDeleteSaving = false;
+        confirmationInput.disabled = false;
+        confirmButton.textContent = '永久删除';
+        updateFamilyDeleteConfirmation();
+        status.textContent = `删除全部数据失败：${error.message || '服务器暂时不可用'}。原有记录仍保留，可以重试。`;
+        return;
+    }
+
+    const deletedExamCount = Math.max(0, Number(data.deleted_exam_count) || 0);
+    const deletedFileCount = Math.max(0, Number(data.deleted_file_count) || 0);
+    historyRecords = [];
+    wrongQuestionBank = {
+        loaded: false,
+        loading: false,
+        loadingMore: false,
+        loadingAllHistory: false,
+        error: '',
+        questions: [],
+        knowledgePoints: [],
+        subjectArchive: { all: 0, math: 0, english: 0 },
+        totalCount: 0,
+        hasMore: false,
+        nextOffset: 0
+    };
+    selectedRecordId = null;
+    reviewTasksExpanded = false;
+    wrongQuestionSearchQuery = '';
+    currentHistoryView = 'exams';
+    currentSubjectArchive = 'all';
+    currentMasteryFilter = 'pending';
+    currentAnalysisData = null;
+    document.getElementById('resultSection').classList.remove('show');
+    document.getElementById('wrongQuestionSearch').value = '';
+    document.getElementById('wrongQuestionSearchClear').hidden = true;
+    document.getElementById('familyAccessCode').value = '';
+    document.getElementById('wrongBankFamilyCode').value = '';
+    document.getElementById('studentName').value = '';
+    document.getElementById('wrongBankStudentName').value = '';
+    document.getElementById('rememberFamilyProfile').checked = false;
+    document.getElementById('wrongBankRememberProfile').checked = false;
+    generatedFamilyAccessCode = '';
+    copiedFamilyAccessCode = '';
+    verifiedFamilyDeleteScope = null;
+    try {
+        rememberFamilyProfile('', '', false);
+    } catch (error) {
+        // Server deletion already succeeded; unavailable browser storage is non-fatal.
+    }
+    resetHistoryDateFilters();
+    document.querySelectorAll('[data-history-view]').forEach(button => {
+        const active = button.dataset.historyView === 'exams';
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-subject-filter]').forEach(button => {
+        button.classList.toggle('active', button.dataset.subjectFilter === 'all');
+    });
+    document.querySelectorAll('[data-mastery-filter]').forEach(button => {
+        const active = button.dataset.masteryFilter === 'pending';
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    familyDeleteSaving = false;
+    closeFamilyDeleteDialog();
+    renderHistory();
+    setHistorySyncStatus('success', `已删除 ${deletedExamCount} 份试卷和 ${deletedFileCount} 个原卷文件。家庭访问码已从当前页面清除。`);
+}
+
 async function submitWrongBankQuery(event) {
     event.preventDefault();
     const grade = document.getElementById('wrongBankGrade').value;
@@ -7241,6 +7464,7 @@ async function syncServerWrongBank(options = {}) {
         return null;
     }
 
+    invalidateFamilyDeleteVerification();
     const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '50' });
     try {
         const data = await requestJson(`/exams?${params.toString()}`, {
@@ -7293,6 +7517,11 @@ async function syncServerWrongBank(options = {}) {
             studentName: studentName,
             accessHeaders: accessHeaders
         });
+        verifiedFamilyDeleteScope = {
+            grade: grade,
+            studentName: studentName,
+            familyCode: document.getElementById('familyAccessCode').value.trim()
+        };
         setHistoryFilter('all');
         renderHistory();
         const subjectText = currentSubjectArchive === 'all' ? '全部学科' : (currentSubjectArchive === 'english' ? '英语' : '数学');
@@ -7682,8 +7911,12 @@ function renderHistory() {
     const scopeRecords = getHistoryScopeRecords();
     const hasUnqueriedServerHistory = !wrongQuestionBank.loaded && historyRecords.length === 0;
     const wrongBankQueryButton = document.getElementById('wrongBankQueryButton');
+    const familyDataDeleteButton = document.getElementById('familyDataDeleteButton');
     const wrongQuestionSearchField = document.getElementById('wrongQuestionSearchField');
     wrongBankQueryButton.hidden = hasUnqueriedServerHistory;
+    familyDataDeleteButton.hidden = !wrongQuestionBank.loaded;
+    if (!familyDataDeleteScopeMatchesCurrentInputs()) familyDataDeleteButton.hidden = true;
+    familyDataDeleteButton.disabled = wrongQuestionBank.loadingAllHistory || wrongQuestionBank.loadingMore;
     wrongQuestionSearchField.hidden = currentHistoryView !== 'knowledge' || !wrongQuestionBank.loaded;
     renderReviewDashboard(scopeRecords);
     if (currentHistoryView === 'knowledge') {

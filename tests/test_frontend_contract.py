@@ -679,6 +679,15 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("wrongQuestionBank.loadingAllHistory || wrongQuestionBank.loadingMore", HTML)
         self.assertIn("删除该孩子全部数据", HTML)
 
+    def test_family_data_delete_verification_is_revoked_when_identity_changes(self):
+        self.assertIn("let verifiedFamilyDeleteScope = null", HTML)
+        self.assertIn("function invalidateFamilyDeleteVerification()", HTML)
+        self.assertIn("['gradeSelect', 'studentName', 'familyAccessCode']", HTML)
+        self.assertIn("verifiedFamilyDeleteScope = {", HTML)
+        self.assertIn("familyCode: document.getElementById('familyAccessCode').value.trim()", HTML)
+        self.assertIn("verifiedFamilyDeleteScope = null", HTML)
+        self.assertIn("familyDataDeleteScopeMatchesCurrentInputs()", HTML)
+
     def test_mobile_family_delete_controls_have_44px_touch_targets(self):
         mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
         self.assertIn(

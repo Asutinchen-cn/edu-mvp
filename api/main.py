@@ -3796,6 +3796,64 @@ async def delete_exam(
     _delete_stored_uploads(stored_image_path, stored_image_paths)
     return JSONResponse({"success": True, "message": "已删除"})
 
+
+@app.delete("/family-records")
+async def delete_family_records(
+    grade: str = None,
+    student_name: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """删除当前家庭访问码有权访问的全部试卷与原卷文件。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+    db = SessionLocal()
+    candidates = db.query(Exam).filter(
+        Exam.grade == grade,
+        Exam.student_name == student_name,
+    ).all()
+    accessible_exams = [
+        exam for exam in candidates
+        if _exam_has_family_access(exam, grade, student_name, family_code)
+    ]
+    if not accessible_exams:
+        db.close()
+        return JSONResponse(
+            {"success": False, "error": FAMILY_ACCESS_DENIED_ERROR},
+            status_code=403,
+        )
+
+    stored_upload_urls = []
+    for exam in accessible_exams:
+        for stored_url in _stored_upload_urls(exam.image_path, exam.image_paths):
+            if stored_url not in stored_upload_urls:
+                stored_upload_urls.append(stored_url)
+        db.delete(exam)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        db.close()
+        return JSONResponse(
+            {"success": False, "error": "删除家庭数据失败，原有记录仍保留"},
+            status_code=500,
+        )
+    deleted_exam_count = len(accessible_exams)
+    db.close()
+
+    deleted_file_count = sum(
+        1 for stored_url in stored_upload_urls if _delete_stored_upload(stored_url)
+    )
+    return JSONResponse({
+        "success": True,
+        "deleted_exam_count": deleted_exam_count,
+        "deleted_file_count": deleted_file_count,
+    })
+
 @app.get("/logo.png", include_in_schema=False)
 async def serve_logo():
     """兼容直接通过 FastAPI 启动前端时的品牌图路径。"""
@@ -5065,7 +5123,8 @@ async def api_info():
             "family_review_report": "GET /family-review-report?grade=...&student_name=...（请求头 X-Family-Code）",
             "wrong_question_mastery": "PATCH /exams/{id}/wrong-questions/{question_number}/mastery（请求头 X-Family-Code）",
             "knowledge_point_mastery": "PATCH /wrong-questions/mastery-by-knowledge?grade=...&student_name=...&subject=...&knowledge_point=...（请求头 X-Family-Code）",
-            "delete": "DELETE /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）"
+            "delete": "DELETE /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）",
+            "delete_family_records": "DELETE /family-records?grade=...&student_name=...（请求头 X-Family-Code）"
         },
         "status": "OCR已接入百度试卷识别+通用识别，AI分析已接入DeepSeek",
         "database": "PostgreSQL" if "postgresql" in DATABASE_URL else "SQLite"
