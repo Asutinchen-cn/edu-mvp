@@ -1415,6 +1415,48 @@
         .knowledge-bank {
             border-top: 1px solid var(--line);
         }
+        .knowledge-archive-more {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 14px;
+            padding: 14px 0 0;
+            border-top: 1px solid rgba(23, 105, 232, 0.12);
+        }
+        .knowledge-archive-more-copy { min-width: 0; }
+        .knowledge-archive-more strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13px;
+        }
+        .knowledge-archive-more span {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .knowledge-archive-more-button {
+            flex: 0 0 auto;
+            min-height: 36px;
+            padding: 0 13px;
+            border: 1px solid rgba(23, 105, 232, 0.24);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .knowledge-archive-more-button:hover,
+        .knowledge-archive-more-button:focus-visible {
+            background: #edf5ff;
+            outline: none;
+        }
+        .knowledge-archive-more-button:disabled { cursor: wait; opacity: 0.68; }
         .knowledge-group {
             padding: 18px 0;
             border-bottom: 1px solid var(--line);
@@ -3047,6 +3089,8 @@
             .wrong-question-search label { grid-column: 1 / -1; }
             .wrong-question-search input,
             .wrong-question-search-clear { min-height: 44px; }
+            .knowledge-archive-more { align-items: stretch; flex-direction: column; }
+            .knowledge-archive-more-button { min-height: 44px; width: 100%; }
             .knowledge-group-head { gap: 8px; }
             .knowledge-group-actions { align-items: flex-end; flex-direction: column; gap: 6px; }
             .knowledge-question-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
@@ -3705,10 +3749,14 @@ let sourceExamLoadingId = null;
 let wrongQuestionBank = {
     loaded: false,
     loading: false,
+    loadingMore: false,
     error: '',
     questions: [],
     knowledgePoints: [],
-    subjectArchive: { all: 0, math: 0, english: 0 }
+    subjectArchive: { all: 0, math: 0, english: 0 },
+    totalCount: 0,
+    hasMore: false,
+    nextOffset: 0
 };
 let familyReportExporting = false;
 let reviewTasksExpanded = false;
@@ -6987,13 +7035,20 @@ async function loadWrongQuestionBank(options = {}) {
             method: 'GET',
             headers: accessHeaders
         });
+        const questions = Array.isArray(data.questions) ? data.questions : [];
         wrongQuestionBank = {
             loaded: true,
             loading: false,
+            loadingMore: false,
             error: '',
-            questions: Array.isArray(data.questions) ? data.questions : [],
+            questions: questions,
             knowledgePoints: Array.isArray(data.knowledge_points) ? data.knowledge_points : [],
-            subjectArchive: data.subject_archive || { all: 0, math: 0, english: 0 }
+            subjectArchive: data.subject_archive || { all: 0, math: 0, english: 0 },
+            totalCount: Math.max(questions.length, Number(data.total_question_count) || 0),
+            hasMore: Boolean(data.has_more),
+            nextOffset: data.next_offset !== null && Number.isInteger(Number(data.next_offset))
+                ? Number(data.next_offset)
+                : questions.length
         };
         refreshHistoryQuestionMasteryFromBank();
         renderHistory();
@@ -7007,6 +7062,50 @@ async function loadWrongQuestionBank(options = {}) {
             setHistorySyncStatus('error', `加载错题明细失败：${wrongQuestionBank.error}。可以重新查询家庭错题库。`);
         }
         throw error;
+    }
+}
+
+async function loadMoreWrongQuestions() {
+    if (!wrongQuestionBank.loaded || !wrongQuestionBank.hasMore || wrongQuestionBank.loadingMore) return;
+
+    const grade = document.getElementById('gradeSelect').value;
+    const studentName = (document.getElementById('studentName').value || '').trim();
+    wrongQuestionBank.loadingMore = true;
+    wrongQuestionBank.error = '';
+    renderHistory();
+    try {
+        const params = new URLSearchParams({ grade: grade, student_name: studentName, limit: '200' });
+        params.set('offset', String(wrongQuestionBank.nextOffset));
+        const data = await requestJson(`/wrong-questions?${params.toString()}`, {
+            method: 'GET',
+            headers: familyAccessHeaders()
+        });
+        const questionMap = new Map(wrongQuestionBank.questions.map(question => [question.id, question]));
+        (Array.isArray(data.questions) ? data.questions : []).forEach(question => {
+            questionMap.set(question.id, question);
+        });
+        wrongQuestionBank.questions = [...questionMap.values()];
+        wrongQuestionBank.knowledgePoints = [
+            ...wrongQuestionBank.knowledgePoints,
+            ...(Array.isArray(data.knowledge_points) ? data.knowledge_points : [])
+        ];
+        wrongQuestionBank.subjectArchive = data.subject_archive || wrongQuestionBank.subjectArchive;
+        wrongQuestionBank.totalCount = Math.max(
+            wrongQuestionBank.questions.length,
+            Number(data.total_question_count) || wrongQuestionBank.totalCount
+        );
+        wrongQuestionBank.hasMore = Boolean(data.has_more);
+        wrongQuestionBank.nextOffset = data.next_offset !== null && Number.isInteger(Number(data.next_offset))
+            ? Number(data.next_offset)
+            : wrongQuestionBank.questions.length;
+        refreshHistoryQuestionMasteryFromBank();
+        setHistorySyncStatus('success', `已加载 ${wrongQuestionBank.questions.length}/${wrongQuestionBank.totalCount} 道历史错题。`);
+    } catch (error) {
+        wrongQuestionBank.error = error.message || '更早错题加载失败';
+        setHistorySyncStatus('error', `加载更早错题失败：${wrongQuestionBank.error}。已显示的错题仍保留，可以重试。`);
+    } finally {
+        wrongQuestionBank.loadingMore = false;
+        renderHistory();
     }
 }
 
@@ -7222,6 +7321,18 @@ function renderKnowledgeQuestionBank() {
     }
 
     const questions = getFilteredWrongQuestions();
+    const loadedQuestionCount = wrongQuestionBank.questions.length;
+    const totalQuestionCount = Math.max(loadedQuestionCount, Number(wrongQuestionBank.totalCount) || 0);
+    const archiveHasMore = Boolean(wrongQuestionBank.hasMore && totalQuestionCount > loadedQuestionCount);
+    const archiveProgress = archiveHasMore ? `
+        <div class="knowledge-archive-more">
+            <div class="knowledge-archive-more-copy">
+                <strong>已加载 ${loadedQuestionCount}/${totalQuestionCount} 道历史错题</strong>
+                <span>可继续加载更早记录；搜索词始终只在当前浏览器中匹配，不会发送到服务器。</span>
+            </div>
+            <button type="button" class="knowledge-archive-more-button" onclick="loadMoreWrongQuestions()"
+                ${wrongQuestionBank.loadingMore ? 'disabled' : ''}>${wrongQuestionBank.loadingMore ? '正在加载...' : '加载更早错题'}</button>
+        </div>` : '';
     const groups = new Map();
     questions.forEach(item => {
         const knowledgePoint = item.knowledge_point || '待归类';
@@ -7246,9 +7357,12 @@ function renderKnowledgeQuestionBank() {
                     ? `没有找到“${escapeHtml(wrongQuestionSearchQuery.trim())}”`
                     : '当前筛选下没有错题'}</div>
                 <div class="empty-desc">${hasSearchQuery
-                    ? '可以换一个关键词，或清除搜索查看当前筛选下的全部错题。'
+                    ? (archiveHasMore
+                        ? '当前搜索只覆盖已加载记录；可以先加载更早错题，再继续使用同一关键词。'
+                        : '可以换一个关键词，或清除搜索查看当前筛选下的全部错题。')
                     : '可以切换学科、复习状态或日期范围继续查看。'}</div>
                 ${hasSearchQuery ? '<button type="button" class="history-action" onclick="clearWrongQuestionSearch()">清除搜索</button>' : ''}
+                ${archiveProgress}
             </div>`;
         return;
     }
@@ -7307,7 +7421,7 @@ function renderKnowledgeQuestionBank() {
                     }).join('')}
                 </div>
             </section>`;
-    }).join('') + '</div>';
+    }).join('') + `</div>${archiveProgress}`;
 }
 
 async function toggleWrongQuestionMastery(questionId) {

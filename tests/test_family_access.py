@@ -202,6 +202,49 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertFalse(payload["questions"][0]["mastered"])
         self.assertEqual(payload["questions"][0]["review_schedule"]["next_step"], "corrected")
 
+    def test_wrong_question_bank_paginates_complete_family_history(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        analysis = json.loads(exam.ai_analysis)
+        analysis["wrong_questions"].append({
+            "question": "计算 -3 + 5",
+            "error_type": "符号错误",
+            "student_answer": "-8",
+            "correct_answer": "2",
+            "knowledge_point": "有理数加法",
+        })
+        exam.ai_analysis = json.dumps(analysis, ensure_ascii=False)
+        db.commit()
+        db.close()
+
+        first_page = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+            limit=1,
+            offset=0,
+        ))
+        second_page = asyncio.run(list_wrong_questions(
+            grade="六年级",
+            student_name="小明",
+            family_code="Home2026A",
+            limit=1,
+            offset=1,
+        ))
+        first_payload = json.loads(first_page.body)
+        second_payload = json.loads(second_page.body)
+
+        self.assertEqual(first_payload["total_question_count"], 2)
+        self.assertEqual(first_payload["offset"], 0)
+        self.assertTrue(first_payload["has_more"])
+        self.assertEqual(first_payload["next_offset"], 1)
+        self.assertEqual(first_payload["questions"][0]["question_number"], 1)
+        self.assertEqual(second_payload["total_question_count"], 2)
+        self.assertEqual(second_payload["offset"], 1)
+        self.assertFalse(second_payload["has_more"])
+        self.assertIsNone(second_payload["next_offset"])
+        self.assertEqual(second_payload["questions"][0]["question_number"], 2)
+
     def test_each_wrong_question_can_be_marked_mastered_independently(self):
         db = self.session_factory()
         exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()

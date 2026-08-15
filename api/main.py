@@ -3326,6 +3326,7 @@ async def list_wrong_questions(
     student_name: str = None,
     subject: str = None,
     limit: int = 100,
+    offset: int = 0,
     family_code: str | None = Header(default=None, alias="X-Family-Code"),
 ):
     """按知识点返回当前家庭可访问的单题错题。"""
@@ -3357,6 +3358,8 @@ async def list_wrong_questions(
     archive = {"all": 0, "math": 0, "english": 0}
     questions = []
     max_questions = max(1, min(limit, 200))
+    question_offset = max(0, offset)
+    total_question_count = 0
     for exam in accessible_exams:
         analysis = _analysis_history_detail(
             exam.ai_analysis,
@@ -3377,6 +3380,10 @@ async def list_wrong_questions(
             archive[exam_subject] += 1
             if subject and exam_subject != subject:
                 continue
+            question_index = total_question_count
+            total_question_count += 1
+            if question_index < question_offset or len(questions) >= max_questions:
+                continue
             mastered = question_mastery.get(str(index), exam_mastered)
             questions.append({
                 "id": f"{exam.id}-{index}",
@@ -3395,8 +3402,6 @@ async def list_wrong_questions(
                 "created": exam.created_at.isoformat() if exam.created_at else None,
             })
 
-    questions = questions[:max_questions]
-
     knowledge_point_map = {}
     for question in questions:
         key = (question["subject"], question["knowledge_point"])
@@ -3409,8 +3414,14 @@ async def list_wrong_questions(
         summary["wrong_count"] += 1
 
     db.close()
+    next_offset = question_offset + len(questions)
+    has_more = next_offset < total_question_count
     return JSONResponse({
         "question_count": len(questions),
+        "total_question_count": total_question_count,
+        "offset": question_offset,
+        "has_more": has_more,
+        "next_offset": next_offset if has_more else None,
         "subject_archive": archive,
         "knowledge_points": list(knowledge_point_map.values()),
         "questions": questions,

@@ -778,12 +778,36 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertNotIn("requestJson", search_handler.group("body"))
         self.assertNotIn("fetch(", search_handler.group("body"))
 
+    def test_wrong_bank_can_load_older_pages_without_transmitting_search_terms(self):
+        self.assertIn("loadingMore: false", HTML)
+        self.assertIn("totalCount: 0", HTML)
+        self.assertIn("hasMore: false", HTML)
+        self.assertIn("nextOffset: 0", HTML)
+        self.assertIn("function loadMoreWrongQuestions()", HTML)
+        self.assertIn("params.set('offset', String(wrongQuestionBank.nextOffset))", HTML)
+        self.assertIn("new Map(wrongQuestionBank.questions.map(question => [question.id, question]))", HTML)
+        self.assertIn("total_question_count", HTML)
+        self.assertIn("加载更早错题", HTML)
+        self.assertIn("已加载 ${loadedQuestionCount}/${totalQuestionCount} 道历史错题", HTML)
+
+        load_more = re.search(
+            r"async function loadMoreWrongQuestions\(\) \{(?P<body>.*?)\n\}",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(load_more)
+        self.assertNotIn("wrongQuestionSearchQuery", load_more.group("body"))
+
     def test_mobile_wrong_question_search_has_44px_touch_targets(self):
         mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
         self.assertIn(
             '.wrong-question-search input,\n'
             '            .wrong-question-search-clear { min-height: 44px; }',
             mobile_css,
+        )
+        self.assertRegex(
+            mobile_css,
+            r"\.knowledge-archive-more-button\s*\{[^}]*min-height:\s*44px;[^}]*\}",
         )
 
     def test_knowledge_view_total_count_is_not_double_counted(self):
