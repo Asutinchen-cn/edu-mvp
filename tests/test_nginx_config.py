@@ -81,13 +81,25 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
         no_store_rule = (
             '~^/(upload|upload-batch|analyze|exams|wrong-questions|generate-practice|'
             'generate-knowledge-practice|generate-unit-worksheet|export-practice-pdf|'
-            'family-review-report|api-info)(?:/|$) "no-store";'
+            'family-review-report|family-records|api-info)(?:/|$) "no-store";'
         )
         for config in (NGINX_CONFIG, fallback):
             self.assertIn(no_store_rule, config)
             self.assertIn(
                 "add_header Cache-Control $edu_cache_control always;",
                 config,
+            )
+
+    def test_family_data_deletion_uses_the_rate_limited_private_proxy(self):
+        fallback = (PROJECT_ROOT / "nginx" / "nginx.http-fallback.conf").read_text(
+            encoding="utf-8"
+        )
+        for config in (NGINX_CONFIG, fallback):
+            self.assertRegex(
+                config,
+                r"location ~ \^/\(exams\|wrong-questions\|export-practice-pdf\|"
+                r"family-review-report\|family-records\)\(/\|\$\) \{"
+                r"[^}]*limit_req zone=edu_private",
             )
 
     def test_public_ip_uses_trusted_https_and_redirects_plain_http(self):
