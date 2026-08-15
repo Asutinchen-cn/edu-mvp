@@ -1057,7 +1057,28 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             "const pendingTasks = scheduleKnowledgeSummary",
             HTML,
         )
-        self.assertIn("全部历史中 ${summary.todayTasks.length} 项今日处理", HTML)
+        self.assertIn("${escapeHtml(summary.historyScopeLabel)} · ${summary.todayTasks.length} 项今日处理", HTML)
+
+    def test_parent_dashboard_discloses_and_can_complete_partial_history(self):
+        self.assertIn("loadingAllHistory: false", HTML)
+        self.assertIn("async function loadCompleteWrongQuestionHistory()", HTML)
+        self.assertIn("while (wrongQuestionBank.hasMore)", HTML)
+        self.assertIn("await loadMoreWrongQuestions({ quiet: true })", HTML)
+        self.assertIn("if (!pageLoaded) break", HTML)
+        self.assertIn("historyComplete: historyComplete", HTML)
+        self.assertIn("historyScopeLabel: historyScopeLabel", HTML)
+        self.assertIn("当前看板已加载 ${summary.loadedQuestionCount}/${summary.totalQuestionCount} 道错题", HTML)
+        self.assertIn("补齐全部历史", HTML)
+        self.assertIn("补齐后，今日任务、反复薄弱点和近 7 天趋势会按全部历史重新计算。", HTML)
+        self.assertIn("当前趋势覆盖已加载的 ${weeklyTrend.loadedCount}/${weeklyTrend.totalCount} 道错题", HTML)
+        self.assertNotIn("错题较多时，当前趋势仅覆盖最近 200 道。", HTML)
+
+    def test_mobile_complete_history_action_has_a_44px_touch_target(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertRegex(
+            mobile_css,
+            r"\.review-coverage-button\s*\{[^}]*min-height:\s*44px;[^}]*\}",
+        )
 
     def test_today_review_navigation_clears_hidden_date_filters(self):
         self.assertIn("function resetHistoryDateFilters()", HTML)
