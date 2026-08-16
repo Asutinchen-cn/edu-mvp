@@ -467,6 +467,26 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             self.assertIn(selector, mobile_css)
         self.assertIn('.curriculum-source a { display: inline-flex;', mobile_css)
 
+    def test_parent_dialog_controls_have_44px_touch_targets(self):
+        self.assertRegex(
+            HTML,
+            r"\.dialog-close\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;",
+        )
+        self.assertRegex(
+            HTML,
+            r"\.dialog-button\s*\{[^}]*min-height:\s*44px;",
+        )
+        self.assertRegex(
+            HTML,
+            r"\.wrong-bank-field select,\s*"
+            r"\.wrong-bank-field input:not\(\[type=\"checkbox\"\]\)\s*\{"
+            r"[^}]*min-height:\s*44px;",
+        )
+        self.assertRegex(
+            HTML,
+            r"\.confirm-actions button\s*\{[^}]*min-height:\s*44px;",
+        )
+
     def test_mobile_analysis_result_actions_have_44px_touch_targets(self):
         mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
         self.assertIn(
