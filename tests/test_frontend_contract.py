@@ -191,6 +191,22 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             HTML,
         )
 
+    def test_analysis_result_compares_the_child_answer_with_the_correct_answer(self):
+        self.assertIn("question: q.question || '题目摘要未识别'", HTML)
+        self.assertIn("studentAnswer: q.student_answer || ''", HTML)
+        self.assertIn("errorReason: q.error_type || '待确认'", HTML)
+        self.assertIn("孩子作答", HTML)
+        self.assertIn("正确答案", HTML)
+        self.assertIn("未识别到明确作答", HTML)
+        self.assertIn('class="wrong-q-question"', HTML)
+        self.assertIn('class="wrong-q-comparison"', HTML)
+        self.assertIn('class="wrong-q-student"', HTML)
+        self.assertIn('class="wrong-q-correct"', HTML)
+        self.assertIn(
+            "studentAnswer: item.student_answer || ''",
+            HTML,
+        )
+
     def test_analysis_grade_selector_is_focused_on_junior_middle_school(self):
         for grade in ("六年级", "七年级", "八年级", "九年级"):
             self.assertIn(f'<option value="{grade}"', HTML)

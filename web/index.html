@@ -2288,12 +2288,50 @@
             font-size: 11px; font-weight: 600;
             background: #fff3e0; color: #f57c00;
         }
+        .wrong-q-question {
+            margin-bottom: 6px;
+            color: var(--ink);
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.65;
+            overflow-wrap: anywhere;
+        }
         .wrong-q-reason {
-            font-size: 13px; color: #555; margin-bottom: 4px;
+            margin-bottom: 10px;
+            color: #555;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
         }
-        .wrong-q-answer {
-            font-size: 12px; color: #4DCB9D; font-weight: 600;
+        .wrong-q-comparison {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            border-top: 1px solid rgba(23, 105, 232, 0.1);
+            border-bottom: 1px solid rgba(23, 105, 232, 0.1);
         }
+        .wrong-q-comparison > div {
+            min-width: 0;
+            padding: 10px 12px;
+        }
+        .wrong-q-comparison > div:first-child {
+            border-right: 1px solid rgba(23, 105, 232, 0.1);
+        }
+        .wrong-q-comparison span {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+        .wrong-q-comparison strong {
+            display: block;
+            font-size: 13px;
+            line-height: 1.55;
+            overflow-wrap: anywhere;
+        }
+        .wrong-q-student span { color: #c65a16; }
+        .wrong-q-student strong { color: #74330c; }
+        .wrong-q-correct span { color: #19865e; }
+        .wrong-q-correct strong { color: #145c46; }
 
         /* Weak point detail cards */
         .weak-detail-card {
@@ -3108,6 +3146,11 @@
             .result-section .close-result { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
             .result-section .parent-practice-button,
             .result-section .generate-btn { min-height: 44px; }
+            .wrong-q-comparison { grid-template-columns: 1fr; }
+            .wrong-q-comparison > div:first-child {
+                border-right: 0;
+                border-bottom: 1px solid rgba(23, 105, 232, 0.1);
+            }
             .plan-step { margin-bottom: 14px; }
             .priority-label { white-space: normal; }
             .history-filters { align-items: flex-start; }
@@ -4959,6 +5002,9 @@ function parseApiResponse(json, name, grade, subject) {
             wrongQuestions: wq.map((q, i) => ({
                 num: i + 1,
                 sourceQuestionNumber: q.source_question_number || '',
+                question: q.question || '题目摘要未识别',
+                studentAnswer: q.student_answer || '',
+                errorReason: q.error_type || '待确认',
                 reason: `${q.error_type || '错因'}: ${q.question || '题目摘要未识别'}`,
                 correctAnswer: q.correct_answer || '见解析',
                 tag: q.error_type || '待确认'
@@ -5100,8 +5146,18 @@ function renderAnalysisResult(data) {
                             <span class="wrong-q-num">${escapeHtml(originalQuestionNumberLabel(q.sourceQuestionNumber, q.num))}</span>
                             <span class="wrong-q-tag">${escapeHtml(q.tag)}</span>
                         </div>
-                        <div class="wrong-q-reason">原因：${escapeHtml(q.reason)}</div>
-                        <div class="wrong-q-answer">✅ 正确答案：${escapeHtml(q.correctAnswer)}</div>
+                        <div class="wrong-q-question">${escapeHtml(q.question || q.reason || '题目摘要未识别')}</div>
+                        <div class="wrong-q-reason">错因：${escapeHtml(q.errorReason || q.tag || '待确认')}</div>
+                        <div class="wrong-q-comparison">
+                            <div class="wrong-q-student">
+                                <span>孩子作答</span>
+                                <strong>${escapeHtml(q.studentAnswer || '未识别到明确作答')}</strong>
+                            </div>
+                            <div class="wrong-q-correct">
+                                <span>正确答案</span>
+                                <strong>${escapeHtml(q.correctAnswer || '见解析')}</strong>
+                            </div>
+                        </div>
                     </div>
                 `).join('')}
             </div>
@@ -7852,6 +7908,9 @@ function prepareKnowledgePractice(knowledgePoint, subject) {
         wrongQuestions: practiceEvidence.map((item, index) => ({
             num: index + 1,
             sourceQuestionNumber: item.source_question_number || '',
+            question: item.question || '题目摘要未识别',
+            studentAnswer: item.student_answer || '',
+            errorReason: item.error_type || '待确认',
             reason: `${item.error_type || '待确认'}: ${item.question}`,
             correctAnswer: item.correct_answer || '见原记录',
             tag: item.error_type || '待确认'
