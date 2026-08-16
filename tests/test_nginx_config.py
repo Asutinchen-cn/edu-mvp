@@ -53,7 +53,8 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
             self.assertRegex(
                 config,
                 r"map \$uri \$edu_cache_control\s*\{[^}]*"
-                r'/index\.html\s+"no-cache, must-revalidate";',
+                r'/\s+"no-store";[^}]*'
+                r'/index\.html\s+"no-store";',
             )
             self.assertRegex(
                 config,
