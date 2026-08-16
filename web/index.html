@@ -4477,7 +4477,9 @@ function setupDropzone() {
 
 function setupFileInput() {
     document.getElementById('fileInput').addEventListener('change', function() {
-        handleFiles(this.files);
+        const selectedFiles = [...this.files];
+        this.value = '';
+        handleFiles(selectedFiles);
     });
 }
 
@@ -4495,6 +4497,16 @@ function handleFiles(files) {
         }
         if (f.size > 10 * 1024 * 1024) {
             errors.push(`${f.name} 超过单页 10MB 限制`);
+            continue;
+        }
+        const duplicate = uploadedFiles.some(current => (
+            current.file.name === f.name
+            && current.file.size === f.size
+            && current.file.type === f.type
+            && current.file.lastModified === f.lastModified
+        ));
+        if (duplicate) {
+            errors.push(`${f.name} 已在上传列表中，请勿重复添加同一页`);
             continue;
         }
         const totalBytes = uploadedFiles.reduce((sum, item) => sum + item.file.size, 0);

@@ -361,6 +361,24 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             r"uploadedFiles\.forEach\(current => \{\s*fd\.append\('files', current\.file, current\.name\)",
         )
 
+    def test_upload_picker_rejects_duplicate_pages_and_allows_reselect_after_removal(self):
+        setup = re.search(
+            r"function setupFileInput\(\) \{(?P<body>.*?)\n\}",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(setup)
+        setup_body = setup.group("body")
+        self.assertIn("const selectedFiles = [...this.files]", setup_body)
+        self.assertIn("this.value = ''", setup_body)
+        self.assertIn("handleFiles(selectedFiles)", setup_body)
+
+        self.assertIn("current.file.name === f.name", HTML)
+        self.assertIn("current.file.size === f.size", HTML)
+        self.assertIn("current.file.type === f.type", HTML)
+        self.assertIn("current.file.lastModified === f.lastModified", HTML)
+        self.assertIn("已在上传列表中，请勿重复添加同一页", HTML)
+
     def test_parent_forms_use_labels_and_keyboard_operable_upload_actions(self):
         for control_id in (
             "gradeSelect",
