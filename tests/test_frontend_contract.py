@@ -429,8 +429,27 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         history_view_style = re.search(r"\.history-view-button\s*\{(?P<body>[^}]*)\}", HTML)
         self.assertIsNotNone(filter_style)
         self.assertIsNotNone(history_view_style)
-        self.assertRegex(filter_style.group("body"), r"min-height:\s*40px")
-        self.assertRegex(history_view_style.group("body"), r"min-height:\s*40px")
+        self.assertRegex(filter_style.group("body"), r"min-height:\s*44px")
+        self.assertRegex(history_view_style.group("body"), r"min-height:\s*44px")
+
+    def test_mobile_upload_and_worksheet_controls_have_44px_touch_targets(self):
+        mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
+        self.assertIn('.hero-link { width: auto; min-height: 44px;', mobile_css)
+        for selector in (
+            '.example-link {',
+            '.date-range input[type="date"] {',
+            '.generate-btn {',
+        ):
+            style = re.search(rf"{re.escape(selector[:-2])}\s*\{{(?P<body>[^}}]*)\}}", HTML)
+            self.assertIsNotNone(style, selector)
+            self.assertRegex(style.group("body"), r"min-height:\s*44px")
+        worksheet_style = re.search(
+            r"\.worksheet-field select, \.worksheet-field input\[type=\"text\"\], "
+            r"\.worksheet-field input\[type=\"number\"\]\s*\{(?P<body>[^}]*)\}",
+            HTML,
+        )
+        self.assertIsNotNone(worksheet_style)
+        self.assertRegex(worksheet_style.group("body"), r"min-height:\s*44px")
 
     def test_mobile_core_parent_actions_have_44px_touch_targets(self):
         mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
