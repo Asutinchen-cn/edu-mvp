@@ -14,6 +14,7 @@ venv/
 ENV/
 .idea/
 .vscode/
+.worktrees/
 *.swp
 *.swo
 *~
