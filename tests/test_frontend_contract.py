@@ -1005,6 +1005,22 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("订正单下载已开始", HTML)
         self.assertNotIn("alert(e.message || '导出订正单失败，请稍后重试')", HTML)
 
+    def test_analysis_result_can_download_its_correction_sheet_in_place(self):
+        self.assertIn('id="summaryCorrectionSheetBtn"', HTML)
+        self.assertIn('onclick="downloadCurrentCorrectionSheet()"', HTML)
+        self.assertIn(
+            'id="analysisResultActionStatus" role="status" aria-live="polite" hidden',
+            HTML,
+        )
+        self.assertIn("async function downloadCurrentCorrectionSheet()", HTML)
+        self.assertIn("const examId = Number(currentAnalysisData?.examIds?.[0])", HTML)
+        self.assertIn("Number(record.serverId) === examId", HTML)
+        self.assertIn("await exportCorrectionSheet(record.id)", HTML)
+        self.assertIn("正在下载订正单...", HTML)
+        self.assertIn("订正单下载已开始，可以直接打印给孩子作答。", HTML)
+        self.assertIn("return true", HTML)
+        self.assertIn("return false", HTML)
+
     def test_practice_generation_uses_the_saved_exam_endpoint(self):
         self.assertIn("const examId = currentAnalysisData.examIds?.[0]", HTML)
         self.assertRegex(

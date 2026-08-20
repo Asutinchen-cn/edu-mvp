@@ -2157,6 +2157,32 @@
             cursor: wait;
             box-shadow: none;
         }
+        .parent-action-buttons {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .parent-practice-button.secondary {
+            border: 1px solid rgba(23, 105, 232, 0.22);
+            background: #fff;
+            color: var(--brand-blue);
+            box-shadow: none;
+        }
+        .parent-practice-button.secondary:hover,
+        .parent-practice-button.secondary:focus-visible {
+            border-color: rgba(23, 105, 232, 0.48);
+            background: #edf5ff;
+            color: #0e57c6;
+        }
+        .analysis-result-action-status {
+            margin-top: 10px;
+            color: #41516b;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .analysis-result-action-status.success { color: #13734a; }
+        .analysis-result-action-status.error { color: #b42318; }
         .seven-day-plan {
             margin-top: 18px;
         }
@@ -3145,6 +3171,7 @@
                 border-left: 0;
                 border-top: 1px solid rgba(23, 105, 232, 0.1);
             }
+            .parent-action-buttons { display: grid; grid-template-columns: 1fr; }
             .parent-practice-button { width: 100%; }
             .result-section .close-result { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
             .result-section .parent-practice-button,
@@ -5071,6 +5098,10 @@ function renderAnalysisResult(data) {
     };
     const evidenceStatus = evidenceLabels[data.evidenceStatus] ? data.evidenceStatus : 'insufficient';
     const wrongCountLabel = data.practiceFromWrongBank ? '本次参考错题' : '本次识别错题';
+    const correctionExamId = Number(data.examIds?.[0]);
+    const correctionRecord = !data.practiceFromWrongBank
+        ? historyRecords.find(record => Number(record.serverId) === correctionExamId)
+        : null;
 
     document.getElementById('summaryCard').innerHTML = `
         <div class="summary-top">
@@ -5102,7 +5133,11 @@ function renderAnalysisResult(data) {
                 <div class="parent-action">
                     <strong>今天做什么</strong>
                     <span>${escapeHtml(plan.today)}</span>
-                    <button type="button" class="parent-practice-button" id="summaryGenerateBtn" onclick="startPracticeFromSummary()">开始本次巩固</button>
+                    <div class="parent-action-buttons">
+                        <button type="button" class="parent-practice-button" id="summaryGenerateBtn" onclick="startPracticeFromSummary()">开始本次巩固</button>
+                        ${correctionRecord ? '<button type="button" class="parent-practice-button secondary" id="summaryCorrectionSheetBtn" onclick="downloadCurrentCorrectionSheet()">下载错题订正单</button>' : ''}
+                    </div>
+                    <p class="analysis-result-action-status" id="analysisResultActionStatus" role="status" aria-live="polite" hidden></p>
                 </div>
                 <div class="parent-action"><strong>本周怎么练</strong><span>${escapeHtml(plan.thisWeek)}</span></div>
                 <div class="parent-action"><strong>家长怎么检查</strong><span>${escapeHtml(plan.parentCheck)}</span></div>
@@ -5296,6 +5331,39 @@ function normalizePracticePdfPayload(value) {
 function startPracticeFromSummary() {
     document.getElementById('practiceSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
     generatePractice();
+}
+
+function setAnalysisResultActionStatus(type, message) {
+    const status = document.getElementById('analysisResultActionStatus');
+    if (!status) return;
+    status.textContent = message || '';
+    status.hidden = !message;
+    status.classList.toggle('success', type === 'success');
+    status.classList.toggle('error', type === 'error');
+}
+
+async function downloadCurrentCorrectionSheet() {
+    const button = document.getElementById('summaryCorrectionSheetBtn');
+    if (!button || button.disabled) return;
+    const examId = Number(currentAnalysisData?.examIds?.[0]);
+    const record = historyRecords.find(record => Number(record.serverId) === examId);
+    if (!Number.isInteger(examId) || !record) {
+        setAnalysisResultActionStatus('error', '暂时找不到这份试卷的订正单，请从历史记录重新打开。');
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = '正在下载订正单...';
+    setAnalysisResultActionStatus('', '正在整理错题和答题空间，请稍候。');
+    const downloaded = await exportCorrectionSheet(record.id);
+    setAnalysisResultActionStatus(
+        downloaded ? 'success' : 'error',
+        downloaded
+            ? '订正单下载已开始，可以直接打印给孩子作答。'
+            : '订正单暂时没有下载成功，可以点击按钮重试。'
+    );
+    button.disabled = false;
+    button.textContent = '下载错题订正单';
 }
 
 async function generatePractice() {
@@ -6449,7 +6517,7 @@ async function openProtectedExamImage(id) {
 
 async function exportCorrectionSheet(id) {
     const record = historyRecords.find(item => item.id === id);
-    if (!record?.serverId || record.correctionExporting) return;
+    if (!record?.serverId || record.correctionExporting) return false;
 
     setHistorySyncStatus('', '');
     record.correctionExporting = true;
@@ -6473,8 +6541,10 @@ async function exportCorrectionSheet(id) {
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
         setHistorySyncStatus('success', '订正单下载已开始，请在浏览器下载记录中查看。');
+        return true;
     } catch (e) {
         setHistorySyncStatus('error', `订正单导出失败：${e.message || '服务器暂时不可用'}。按钮已恢复，可以重试。`);
+        return false;
     } finally {
         record.correctionExporting = false;
         renderHistory();
