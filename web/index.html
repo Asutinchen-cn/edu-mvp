@@ -1396,7 +1396,7 @@
         }
         .review-task-action {
             min-width: 104px;
-            min-height: 36px;
+            min-height: 40px;
             padding: 0 12px;
             border: 1px solid rgba(23, 105, 232, 0.25);
             border-radius: 8px;
@@ -1613,6 +1613,19 @@
             font-weight: 800;
         }
         .knowledge-question-meta .mastery-state.mastered { color: #176c54; }
+        .knowledge-question-schedule {
+            padding: 2px 7px;
+            border-radius: 6px;
+            font-weight: 800;
+        }
+        .knowledge-question-schedule.today {
+            background: #fff1f0;
+            color: #b42318;
+        }
+        .knowledge-question-schedule.upcoming {
+            background: #edf5ff;
+            color: #1769e8;
+        }
         .knowledge-question-answer {
             margin-top: 7px;
             color: #176c54;
@@ -1621,7 +1634,7 @@
             overflow-wrap: anywhere;
         }
         .knowledge-source-button {
-            min-height: 34px;
+            min-height: 40px;
             padding: 0 12px;
             border: 1px solid rgba(23, 105, 232, 0.24);
             border-radius: 8px;
@@ -1640,7 +1653,7 @@
             gap: 7px;
         }
         .knowledge-mastery-button {
-            min-height: 34px;
+            min-height: 40px;
             padding: 0 12px;
             border: 1px solid rgba(33, 166, 122, 0.3);
             border-radius: 8px;
@@ -7100,12 +7113,12 @@ function renderReviewDashboard(records) {
                                 <span class="review-task-subject">${escapeHtml(task.subject)}</span>
                                 <span class="review-task-due ${task.timing.rank === 0 ? 'urgent' : ''}">${escapeHtml(task.timing.label)}</span>
                                 ${task.mode === 'knowledge'
-                                    ? `<span>待复习错题 ${task.pendingCount} 道</span><span>来自 ${task.sourceExamCount} 份试卷</span>`
+                                    ? `<span>今日到期 ${task.duePendingCount} 道</span><span>共待复习 ${task.pendingCount} 道</span><span>来自 ${task.sourceExamCount} 份试卷</span>`
                                     : `<span>下一步：${escapeHtml(task.nextStep)}</span><span>完成 ${task.completedCount}/${task.total}</span>`}
                             </div>
                         </div>
                         ${task.mode === 'knowledge'
-                            ? `<button type="button" class="review-task-action" onclick="openKnowledgeReviewTask(${escapeHtml(JSON.stringify(task.subjectKey))}, ${escapeHtml(JSON.stringify(task.focus))})">查看错题 →</button>`
+                            ? `<button type="button" class="review-task-action" onclick="openKnowledgeReviewTask(${escapeHtml(JSON.stringify(task.subjectKey))}, ${escapeHtml(JSON.stringify(task.focus))})">查看今日题 →</button>`
                             : `<button type="button" class="review-task-action" onclick="openReviewTask(${escapeHtml(JSON.stringify(task.id))})">开始${escapeHtml(task.nextStep)} →</button>`}
                     </div>`).join('') : '<p class="review-task-empty">今天没有到期任务，不用提前做隔天回测。</p>'}
             </div>
@@ -7761,6 +7774,16 @@ function wrongQuestionReviewTiming(question) {
     return reviewTaskTiming(schedule);
 }
 
+function wrongQuestionNextReviewAction(question) {
+    const progress = normalizeReviewProgress(question.review_progress);
+    const savedSchedule = normalizeReviewSchedule(question.review_schedule);
+    if (savedSchedule.status === 'completed' || (!savedSchedule.nextStep && !progress.nextStep)) {
+        return '重新巩固';
+    }
+    const nextStep = savedSchedule.nextStep || progress.nextStep;
+    return REVIEW_STEP_DEFINITIONS.find(step => step.id === nextStep)?.label || '继续复习';
+}
+
 function getFilteredWrongQuestions() {
     let questions = getDateFilteredWrongQuestions();
     if (currentSubjectArchive !== 'all') {
@@ -7851,6 +7874,18 @@ function renderKnowledgeQuestionBank() {
         }
         groups.get(key).questions.push(item);
     });
+    groups.forEach(group => {
+        group.questions.sort((a, b) => {
+            if (currentMasteryFilter === 'pending') {
+                const aTiming = wrongQuestionReviewTiming(a);
+                const bTiming = wrongQuestionReviewTiming(b);
+                return aTiming.rank - bTiming.rank
+                    || aTiming.dueTime - bTiming.dueTime
+                    || new Date(b.created) - new Date(a.created);
+            }
+            return new Date(b.created) - new Date(a.created);
+        });
+    });
     const groupedQuestions = [...groups.values()].sort((a, b) => {
         const aDate = new Date(a.questions[0]?.created || 0).getTime();
         const bDate = new Date(b.questions[0]?.created || 0).getTime();
@@ -7899,6 +7934,8 @@ function renderKnowledgeQuestionBank() {
                         const mastered = wrongQuestionMasteryStatus(item) === 'mastered';
                         const sourceLoading = sourceExamLoadingId === Number(item.exam_id);
                         const reviewStatus = mastered ? '已掌握' : '待复习';
+                        const timing = wrongQuestionReviewTiming(item);
+                        const nextReviewAction = wrongQuestionNextReviewAction(item);
                         const studentAnswer = item.student_answer
                             ? `<span>学生答案：${escapeHtml(item.student_answer)}</span>`
                             : '';
@@ -7915,6 +7952,7 @@ function renderKnowledgeQuestionBank() {
                                         <span>错因：${escapeHtml(item.error_type || '待确认')}</span>
                                         ${studentAnswer}
                                         <span class="mastery-state ${mastered ? 'mastered' : ''}">${reviewStatus}</span>
+                                        ${mastered ? '' : `<span class="knowledge-question-schedule ${timing.bucket === 'today' ? 'today' : 'upcoming'}">${escapeHtml(timing.label)} · ${escapeHtml(nextReviewAction)}</span>`}
                                     </div>
                                     ${correctAnswer}
                                 </div>

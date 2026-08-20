@@ -1142,6 +1142,19 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("继续复习", HTML)
         self.assertIn("setMasteryFilter('pending')", HTML)
 
+    def test_today_knowledge_tasks_separate_due_work_and_sort_each_question_by_schedule(self):
+        self.assertIn("今日到期 ${task.duePendingCount} 道", HTML)
+        self.assertIn("共待复习 ${task.pendingCount} 道", HTML)
+        self.assertIn("查看今日题 →", HTML)
+        self.assertIn("function wrongQuestionNextReviewAction(question)", HTML)
+        self.assertIn("group.questions.sort((a, b) =>", HTML)
+        self.assertIn("aTiming.rank - bTiming.rank", HTML)
+        self.assertIn("aTiming.dueTime - bTiming.dueTime", HTML)
+        self.assertIn('class="knowledge-question-schedule ${timing.bucket === \'today\' ? \'today\' : \'upcoming\'}"', HTML)
+        self.assertIn("${escapeHtml(timing.label)} · ${escapeHtml(nextReviewAction)}", HTML)
+        self.assertIn(".knowledge-question-schedule.today", HTML)
+        self.assertIn(".knowledge-question-schedule.upcoming", HTML)
+
     def test_parent_dashboard_can_expand_every_due_task_in_place(self):
         self.assertIn("let reviewTasksExpanded = false", HTML)
         self.assertIn(
@@ -1174,6 +1187,12 @@ class FrontendCurriculumContractTest(unittest.TestCase):
             '            .knowledge-mastery-button { min-height: 44px; }',
             mobile_css,
         )
+
+    def test_desktop_review_actions_keep_a_readable_minimum_height(self):
+        desktop_css = HTML.split('@media (max-width: 768px)', 1)[0]
+        self.assertRegex(desktop_css, r"\.review-task-action \{[^}]*min-height: 40px;")
+        self.assertRegex(desktop_css, r"\.knowledge-source-button \{[^}]*min-height: 40px;")
+        self.assertRegex(desktop_css, r"\.knowledge-mastery-button \{[^}]*min-height: 40px;")
 
     def test_mobile_practice_answer_controls_have_44px_touch_targets(self):
         mobile_css = HTML.split('@media (max-width: 768px)', 1)[1]
@@ -1268,7 +1287,7 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("待复习错题", HTML)
         self.assertIn("function openKnowledgeReviewTask(subject, knowledgePoint)", HTML)
         self.assertIn("data-knowledge-point=", HTML)
-        self.assertIn("查看错题", HTML)
+        self.assertIn("查看今日题", HTML)
 
     def test_parent_dashboard_closes_the_loop_with_real_daily_mastery_progress(self):
         self.assertIn("今日完成度", HTML)
