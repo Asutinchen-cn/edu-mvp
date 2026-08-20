@@ -994,6 +994,21 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("原复习状态未改变，请重试", HTML)
         self.assertNotIn("alert('保存单题状态失败：' + error.message)", HTML)
 
+    def test_mastery_updates_keep_today_progress_visible_and_focus_the_next_action(self):
+        status_style = re.search(r"\.history-sync-status\.show\s*\{(?P<body>[^}]*)\}", HTML)
+        self.assertIsNotNone(status_style)
+        self.assertRegex(status_style.group("body"), r"position:\s*sticky")
+        self.assertRegex(status_style.group("body"), r"top:\s*8px")
+        self.assertIn("function countDuePendingQuestionsForCurrentSubject()", HTML)
+        self.assertIn("wrongQuestionReviewTiming(question).bucket === 'today'", HTML)
+        self.assertIn("今天还剩 ${remainingToday} 道到期错题", HTML)
+        self.assertIn("今日到期错题已全部完成", HTML)
+        self.assertIn('data-question-id="${escapeHtml(String(item.id))}"', HTML)
+        self.assertIn("function focusMasteryActionAfterRender(questionId, fallbackQuestionId)", HTML)
+        self.assertIn("button.focus({ preventScroll: true })", HTML)
+        self.assertIn("window.requestAnimationFrame(() =>", HTML)
+        self.assertIn("focusMasteryActionAfterRender(questionId, fallbackQuestionId)", HTML)
+
     def test_history_can_export_a_protected_correction_sheet(self):
         self.assertIn("function exportCorrectionSheet(id)", HTML)
         self.assertIn("/correction-sheet?${params.toString()}", HTML)

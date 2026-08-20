@@ -897,7 +897,17 @@
             font-size: 13px;
             line-height: 1.6;
         }
-        .history-sync-status.show { display: block; }
+        .history-sync-status.show {
+            display: block;
+            position: sticky;
+            top: 8px;
+            z-index: 8;
+            box-shadow: 0 10px 24px rgba(21, 34, 58, 0.12);
+        }
+        .history-sync-status:focus-visible {
+            outline: 3px solid rgba(23, 105, 232, 0.24);
+            outline-offset: 2px;
+        }
         .history-sync-status.error {
             border-left-color: var(--danger);
             background: #fff3f1;
@@ -7910,6 +7920,7 @@ function renderKnowledgeQuestionBank() {
                                 </div>
                                 <div class="knowledge-row-actions">
                                     <button type="button" class="knowledge-mastery-button ${mastered ? 'mastered' : ''}"
+                                        data-question-id="${escapeHtml(String(item.id))}"
                                         aria-pressed="${mastered ? 'true' : 'false'}"
                                         ${item.mastery_saving ? 'disabled' : ''}
                                         onclick="toggleWrongQuestionMastery(${escapeHtml(JSON.stringify(item.id))})">${item.mastery_saving ? '正在保存...' : (mastered ? '重新复习' : '标记已掌握')}</button>
@@ -7924,11 +7935,43 @@ function renderKnowledgeQuestionBank() {
     }).join('') + `</div>${archiveProgress}`;
 }
 
+function countDuePendingQuestionsForCurrentSubject() {
+    return wrongQuestionBank.questions.filter(question => {
+        const subject = question.subject === 'english' ? 'english' : 'math';
+        return (currentSubjectArchive === 'all' || subject === currentSubjectArchive)
+            && wrongQuestionMasteryStatus(question) === 'pending'
+            && wrongQuestionReviewTiming(question).bucket === 'today';
+    }).length;
+}
+
+function focusMasteryActionAfterRender(questionId, fallbackQuestionId) {
+    const buttons = [...document.querySelectorAll('.knowledge-mastery-button[data-question-id]')];
+    const preferredIds = [questionId, fallbackQuestionId]
+        .map(value => String(value ?? ''))
+        .filter(Boolean);
+    const button = preferredIds
+        .map(id => buttons.find(candidate => candidate.dataset.questionId === id))
+        .find(Boolean) || buttons[0];
+    if (button) {
+        button.focus({ preventScroll: true });
+        return;
+    }
+    const status = document.getElementById('historySyncStatus');
+    if (!status?.classList.contains('show')) return;
+    status.setAttribute('tabindex', '-1');
+    status.focus({ preventScroll: true });
+}
+
 async function toggleWrongQuestionMastery(questionId) {
     const item = wrongQuestionBank.questions.find(question => question.id === questionId);
     const questionNumber = Number(item?.question_number);
     if (!item || item.mastery_saving || !Number.isInteger(questionNumber) || questionNumber < 1) return;
 
+    const visibleQuestionIds = getFilteredWrongQuestions().map(question => String(question.id));
+    const currentQuestionIndex = visibleQuestionIds.indexOf(String(questionId));
+    const fallbackQuestionId = currentQuestionIndex >= 0
+        ? (visibleQuestionIds[currentQuestionIndex + 1] || visibleQuestionIds[currentQuestionIndex - 1] || '')
+        : '';
     const mastered = wrongQuestionMasteryStatus(item) !== 'mastered';
     setHistorySyncStatus('', '');
     item.mastery_saving = true;
@@ -7945,14 +7988,21 @@ async function toggleWrongQuestionMastery(questionId) {
         item.mastered = Boolean(data.mastered);
         item.mastered_at = data.mastered_at || null;
         refreshHistoryQuestionMasteryFromBank(new Set([item.exam_id]));
+        const remainingToday = countDuePendingQuestionsForCurrentSubject();
+        const partialNote = wrongQuestionBank.hasMore ? '当前已加载记录中，' : '';
         setHistorySyncStatus('success', item.mastered
-            ? '这道错题已标记为“已掌握”，可在已掌握筛选中查看。'
-            : '这道错题已重新放回“待复习”。');
+            ? (remainingToday
+                ? `已标记掌握。${partialNote}今天还剩 ${remainingToday} 道到期错题，继续下一题。`
+                : '已标记掌握。今日到期错题已全部完成，可以查看下一次复习安排。')
+            : `已重新放回待复习。${partialNote}今天共有 ${remainingToday} 道到期错题。`);
     } catch (error) {
         setHistorySyncStatus('error', `保存单题状态失败：${error.message || '服务器暂时不可用'}。原复习状态未改变，请重试。`);
     } finally {
         item.mastery_saving = false;
         renderHistory();
+        window.requestAnimationFrame(() => {
+            focusMasteryActionAfterRender(questionId, fallbackQuestionId);
+        });
     }
 }
 
