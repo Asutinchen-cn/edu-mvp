@@ -1373,6 +1373,23 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         )
         self.assertIn("错题内容仅在验证访问码后显示", HTML)
 
+    def test_changing_family_identity_immediately_hides_previously_verified_data(self):
+        self.assertIn("let activeFamilyDataScope = null", HTML)
+        self.assertIn("function setupFamilyDataScopeGuard()", HTML)
+        self.assertIn("function invalidateLoadedFamilyDataIfIdentityChanged()", HTML)
+        invalidation = HTML.split(
+            "function invalidateLoadedFamilyDataIfIdentityChanged()",
+            1,
+        )[1].split("function generatedFamilyCodeNeedsSaving()", 1)[0]
+        self.assertIn("historyRecords = []", invalidation)
+        self.assertIn("wrongQuestionBank = {", invalidation)
+        self.assertIn("currentAnalysisData = null", invalidation)
+        self.assertIn("resultSection').classList.remove('show')", invalidation)
+        self.assertIn("家庭信息已更改，原孩子的错题已隐藏", invalidation)
+        self.assertIn("重新查询家庭错题库后再显示记录", invalidation)
+        self.assertIn("rememberLoadedFamilyScope(grade, name)", HTML)
+        self.assertIn("rememberLoadedFamilyScope(grade, studentName)", HTML)
+
 
 if __name__ == "__main__":
     unittest.main()

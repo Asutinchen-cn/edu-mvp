@@ -3961,6 +3961,7 @@ let deleteSaving = false;
 let pendingFamilyDeletion = null;
 let familyDeleteSaving = false;
 let verifiedFamilyDeleteScope = null;
+let activeFamilyDataScope = null;
 let worksheetUnits = [];
 let worksheetMeta = null;
 const WORKSHEET_CATALOG_RETRY_DELAYS = [0, 1000, 3000];
@@ -4007,6 +4008,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMobileQuickNav();
     setupFamilyAccessCodeGuard();
     setupFamilyDeleteVerificationGuard();
+    setupFamilyDataScopeGuard();
     setupWorksheetOutputInvalidation();
     loadWorksheetUnits();
     const wrongBankDialog = document.getElementById('wrongBankDialog');
@@ -4696,6 +4698,58 @@ function setupFamilyDeleteVerificationGuard() {
     });
 }
 
+function rememberLoadedFamilyScope(grade, studentName) {
+    activeFamilyDataScope = {
+        grade: grade,
+        studentName: String(studentName || '').trim(),
+        familyCode: document.getElementById('familyAccessCode').value.trim()
+    };
+}
+
+function loadedFamilyDataScopeMatchesCurrentInputs() {
+    return Boolean(
+        activeFamilyDataScope
+        && activeFamilyDataScope.grade === document.getElementById('gradeSelect').value
+        && activeFamilyDataScope.studentName === document.getElementById('studentName').value.trim()
+        && activeFamilyDataScope.familyCode === document.getElementById('familyAccessCode').value.trim()
+    );
+}
+
+function setupFamilyDataScopeGuard() {
+    ['gradeSelect', 'studentName', 'familyAccessCode'].forEach(inputId => {
+        document.getElementById(inputId).addEventListener('input', invalidateLoadedFamilyDataIfIdentityChanged);
+    });
+}
+
+function invalidateLoadedFamilyDataIfIdentityChanged() {
+    if (!activeFamilyDataScope || loadedFamilyDataScopeMatchesCurrentInputs()) return;
+
+    activeFamilyDataScope = null;
+    historyRecords = [];
+    wrongQuestionBank = {
+        loaded: false,
+        loading: false,
+        loadingMore: false,
+        loadingAllHistory: false,
+        error: '',
+        questions: [],
+        knowledgePoints: [],
+        subjectArchive: { all: 0, math: 0, english: 0 },
+        totalCount: 0,
+        hasMore: false,
+        nextOffset: 0
+    };
+    selectedRecordId = null;
+    reviewTasksExpanded = false;
+    wrongQuestionSearchQuery = '';
+    currentAnalysisData = null;
+    document.getElementById('resultSection').classList.remove('show');
+    document.getElementById('wrongQuestionSearch').value = '';
+    document.getElementById('wrongQuestionSearchClear').hidden = true;
+    renderHistory();
+    setHistorySyncStatus('', '家庭信息已更改，原孩子的错题已隐藏。请重新查询家庭错题库后再显示记录。');
+}
+
 function generatedFamilyCodeNeedsSaving() {
     const currentCode = document.getElementById('familyAccessCode').value.trim();
     return Boolean(
@@ -4903,6 +4957,7 @@ async function startAnalysis() {
         const analysisData = parseApiResponse(analysisPayload, name, grade, subject);
         if (!analysisData) throw new Error('分析结果格式异常，请重新上传清晰试卷后再试');
         rememberFamilyProfile(grade, name, document.getElementById('rememberFamilyProfile').checked);
+        rememberLoadedFamilyScope(grade, name);
 
         // Save to history
         const createdAt = new Date().toISOString();
@@ -4950,6 +5005,7 @@ async function startAnalysis() {
         renderHistory();
     } catch(e) {
         if (uploadedExam?.id) {
+            rememberLoadedFamilyScope(grade, name);
             const pendingRecord = savePendingAnalysisRecord(
                 uploadedExam,
                 name,
@@ -7411,6 +7467,7 @@ async function confirmFamilyDataDeletion(event) {
     generatedFamilyAccessCode = '';
     copiedFamilyAccessCode = '';
     verifiedFamilyDeleteScope = null;
+    activeFamilyDataScope = null;
     try {
         rememberFamilyProfile('', '', false);
     } catch (error) {
@@ -7460,6 +7517,7 @@ async function submitWrongBankQuery(event) {
     document.getElementById('gradeSelect').value = grade;
     document.getElementById('studentName').value = studentName;
     document.getElementById('familyAccessCode').value = familyCode;
+    invalidateLoadedFamilyDataIfIdentityChanged();
     setSubjectArchive(subject);
     status.textContent = '正在查询家庭错题库...';
     submitButton.disabled = true;
@@ -7700,6 +7758,7 @@ async function syncServerWrongBank(options = {}) {
             studentName: studentName,
             familyCode: document.getElementById('familyAccessCode').value.trim()
         };
+        rememberLoadedFamilyScope(grade, studentName);
         setHistoryFilter('all');
         renderHistory();
         const subjectText = currentSubjectArchive === 'all' ? '全部学科' : (currentSubjectArchive === 'english' ? '英语' : '数学');
