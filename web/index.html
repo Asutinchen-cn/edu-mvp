@@ -1520,6 +1520,50 @@
             outline: none;
         }
         .knowledge-archive-more-button:disabled { cursor: wait; opacity: 0.68; }
+        .knowledge-review-focus {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin: 14px 0 2px;
+            padding: 12px 14px;
+            border-left: 3px solid var(--brand-orange);
+            border-radius: 6px;
+            background: #fff8f1;
+        }
+        .knowledge-review-focus-copy { min-width: 0; }
+        .knowledge-review-focus strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13px;
+            overflow-wrap: anywhere;
+        }
+        .knowledge-review-focus span {
+            display: block;
+            margin-top: 3px;
+            color: #74513b;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+        .knowledge-review-focus-button {
+            flex: 0 0 auto;
+            min-height: 36px;
+            padding: 0 13px;
+            border: 1px solid rgba(23, 105, 232, 0.24);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--brand-blue);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .knowledge-review-focus-button:hover,
+        .knowledge-review-focus-button:focus-visible {
+            background: #edf5ff;
+            outline: none;
+        }
         .knowledge-group {
             padding: 18px 0;
             border-bottom: 1px solid var(--line);
@@ -3257,6 +3301,8 @@
             .wrong-question-search-clear { min-height: 44px; }
             .knowledge-archive-more { align-items: stretch; flex-direction: column; }
             .knowledge-archive-more-button { min-height: 44px; width: 100%; }
+            .knowledge-review-focus { align-items: stretch; flex-direction: column; }
+            .knowledge-review-focus-button { min-height: 44px; width: 100%; }
             .knowledge-group-head { gap: 8px; }
             .knowledge-group-actions { align-items: flex-end; flex-direction: column; gap: 6px; }
             .knowledge-question-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
@@ -3939,6 +3985,7 @@ let currentSubjectArchive = 'all';
 let currentMasteryFilter = 'pending';
 let currentHistoryView = 'exams';
 let wrongQuestionSearchQuery = '';
+let activeKnowledgeReviewFocus = null;
 let sourceExamLoadingId = null;
 let wrongQuestionBank = {
     loaded: false,
@@ -4742,6 +4789,7 @@ function invalidateLoadedFamilyDataIfIdentityChanged() {
     selectedRecordId = null;
     reviewTasksExpanded = false;
     wrongQuestionSearchQuery = '';
+    activeKnowledgeReviewFocus = null;
     currentAnalysisData = null;
     document.getElementById('resultSection').classList.remove('show');
     document.getElementById('wrongQuestionSearch').value = '';
@@ -7224,6 +7272,7 @@ async function openKnowledgeReviewTask(subject, knowledgePoint) {
     resetHistoryDateFilters();
     setSubjectArchive(subject);
     setMasteryFilter('pending');
+    activeKnowledgeReviewFocus = { subject: subject, knowledgePoint: knowledgePoint };
     await setHistoryView('knowledge');
     window.requestAnimationFrame(() => {
         const target = [...document.querySelectorAll('.knowledge-group')].find(group => (
@@ -7253,6 +7302,7 @@ function resetHistoryDateFilters() {
 
 async function setHistoryView(view) {
     if (!['exams', 'knowledge'].includes(view)) return;
+    if (view !== 'knowledge') activeKnowledgeReviewFocus = null;
     currentHistoryView = view;
     document.querySelectorAll('[data-history-view]').forEach(button => {
         const active = button.dataset.historyView === view;
@@ -7270,6 +7320,7 @@ async function setHistoryView(view) {
 }
 
 function setSubjectArchive(subject) {
+    activeKnowledgeReviewFocus = null;
     currentSubjectArchive = subject;
     document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(t => {
         t.classList.toggle('active', t.dataset.subjectFilter === subject);
@@ -7279,6 +7330,7 @@ function setSubjectArchive(subject) {
 
 function setMasteryFilter(status) {
     if (!['pending', 'mastered', 'all'].includes(status)) return;
+    activeKnowledgeReviewFocus = null;
     currentMasteryFilter = status;
     document.querySelectorAll('.filter-tab[data-mastery-filter]').forEach(tab => {
         const active = tab.dataset.masteryFilter === status;
@@ -7309,6 +7361,7 @@ function goToTodayReview() {
         return;
     }
     resetHistoryDateFilters();
+    activeKnowledgeReviewFocus = null;
     currentSubjectArchive = 'all';
     document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.subjectFilter === 'all');
@@ -7451,6 +7504,7 @@ async function confirmFamilyDataDeletion(event) {
     selectedRecordId = null;
     reviewTasksExpanded = false;
     wrongQuestionSearchQuery = '';
+    activeKnowledgeReviewFocus = null;
     currentHistoryView = 'exams';
     currentSubjectArchive = 'all';
     currentMasteryFilter = 'pending';
@@ -7759,6 +7813,7 @@ async function syncServerWrongBank(options = {}) {
             familyCode: document.getElementById('familyAccessCode').value.trim()
         };
         rememberLoadedFamilyScope(grade, studentName);
+        activeKnowledgeReviewFocus = null;
         setHistoryFilter('all');
         renderHistory();
         const subjectText = currentSubjectArchive === 'all' ? '全部学科' : (currentSubjectArchive === 'english' ? '英语' : '数学');
@@ -7851,6 +7906,13 @@ function getFilteredWrongQuestions() {
     if (currentMasteryFilter !== 'all') {
         questions = questions.filter(item => wrongQuestionMasteryStatus(item) === currentMasteryFilter);
     }
+    if (activeKnowledgeReviewFocus) {
+        questions = questions.filter(item => (
+            item.subject === activeKnowledgeReviewFocus.subject
+            && item.knowledge_point === activeKnowledgeReviewFocus.knowledgePoint
+            && wrongQuestionReviewTiming(item).bucket === 'today'
+        ));
+    }
     const query = wrongQuestionSearchQuery.trim().toLocaleLowerCase('zh-CN');
     if (query) {
         questions = questions.filter(item => {
@@ -7865,6 +7927,14 @@ function getFilteredWrongQuestions() {
         });
     }
     return questions;
+}
+
+function clearKnowledgeReviewFocus() {
+    activeKnowledgeReviewFocus = null;
+    renderHistory();
+    window.requestAnimationFrame(() => {
+        document.querySelector('[data-mastery-filter="pending"]')?.focus();
+    });
 }
 
 function updateKnowledgeViewCounts() {
@@ -7924,6 +7994,14 @@ function renderKnowledgeQuestionBank() {
             <button type="button" class="knowledge-archive-more-button" onclick="loadMoreWrongQuestions()"
                 ${wrongQuestionBank.loadingMore ? 'disabled' : ''}>${wrongQuestionBank.loadingMore ? '正在加载...' : '加载更早错题'}</button>
         </div>` : '';
+    const reviewFocusBanner = activeKnowledgeReviewFocus ? `
+        <div class="knowledge-review-focus" role="status">
+            <div class="knowledge-review-focus-copy">
+                <strong>今日任务 · ${escapeHtml(activeKnowledgeReviewFocus.knowledgePoint)}</strong>
+                <span>仅显示今天到期的 ${questions.length} 道题，明天及以后回测不会提前出现。</span>
+            </div>
+            <button type="button" class="knowledge-review-focus-button" onclick="clearKnowledgeReviewFocus()">查看全部待复习</button>
+        </div>` : '';
     const groups = new Map();
     questions.forEach(item => {
         const knowledgePoint = item.knowledge_point || '待归类';
@@ -7954,23 +8032,27 @@ function renderKnowledgeQuestionBank() {
 
     if (!groupedQuestions.length) {
         const hasSearchQuery = Boolean(wrongQuestionSearchQuery.trim());
+        const focusCompleted = Boolean(activeKnowledgeReviewFocus && !hasSearchQuery);
         list.innerHTML = `
+            ${reviewFocusBanner}
             <div class="empty-state">
                 <div class="empty-title">${hasSearchQuery
                     ? `没有找到“${escapeHtml(wrongQuestionSearchQuery.trim())}”`
-                    : '当前筛选下没有错题'}</div>
+                    : (focusCompleted ? '今日到期题已完成' : '当前筛选下没有错题')}</div>
                 <div class="empty-desc">${hasSearchQuery
                     ? (archiveHasMore
                         ? '当前搜索只覆盖已加载记录；可以先加载更早错题，再继续使用同一关键词。'
                         : '可以换一个关键词，或清除搜索查看当前筛选下的全部错题。')
-                    : '可以切换学科、复习状态或日期范围继续查看。'}</div>
+                    : (focusCompleted
+                        ? '这个知识点今天到期的题已经处理完，可以查看全部待复习安排。'
+                        : '可以切换学科、复习状态或日期范围继续查看。')}</div>
                 ${hasSearchQuery ? '<button type="button" class="history-action" onclick="clearWrongQuestionSearch()">清除搜索</button>' : ''}
                 ${archiveProgress}
             </div>`;
         return;
     }
 
-    list.innerHTML = '<div class="knowledge-bank">' + groupedQuestions.map(group => {
+    list.innerHTML = reviewFocusBanner + '<div class="knowledge-bank">' + groupedQuestions.map(group => {
         const subjectLabel = group.subject === 'english' ? '英语' : '数学';
         const latestDate = new Date(group.questions[0]?.created).toLocaleDateString('zh-CN');
         const practiceButton = group.name !== '待归类'
@@ -8162,6 +8244,7 @@ function prepareKnowledgePractice(knowledgePoint, subject) {
 async function openQuestionSourceExam(examId) {
     const normalizedExamId = Number(examId);
     if (!Number.isInteger(normalizedExamId) || normalizedExamId < 1) return;
+    activeKnowledgeReviewFocus = null;
 
     let record = historyRecords.find(item => Number(item.serverId) === normalizedExamId);
     if (!record) {
@@ -8421,13 +8504,18 @@ function prepareHistoryPractice(id) {
 }
 
 function filterHistory(filter, btn) {
+    activeKnowledgeReviewFocus = null;
     setHistoryFilter(filter);
     renderHistory();
 }
 
 function setupDateFilters() {
-    document.getElementById('dateFrom').addEventListener('change', renderHistory);
-    document.getElementById('dateTo').addEventListener('change', renderHistory);
+    ['dateFrom', 'dateTo'].forEach(id => {
+        document.getElementById(id).addEventListener('change', () => {
+            activeKnowledgeReviewFocus = null;
+            renderHistory();
+        });
+    });
 }
 
 // ===== DELETE =====

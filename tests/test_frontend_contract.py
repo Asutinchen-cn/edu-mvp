@@ -1155,6 +1155,27 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn(".knowledge-question-schedule.today", HTML)
         self.assertIn(".knowledge-question-schedule.upcoming", HTML)
 
+    def test_opening_a_today_task_excludes_future_review_questions(self):
+        self.assertIn("let activeKnowledgeReviewFocus = null", HTML)
+        self.assertIn("activeKnowledgeReviewFocus = { subject: subject, knowledgePoint: knowledgePoint }", HTML)
+        self.assertIn("wrongQuestionReviewTiming(item).bucket === 'today'", HTML)
+        self.assertIn("item.subject === activeKnowledgeReviewFocus.subject", HTML)
+        self.assertIn("item.knowledge_point === activeKnowledgeReviewFocus.knowledgePoint", HTML)
+        self.assertIn("明天及以后回测不会提前出现", HTML)
+        self.assertIn("查看全部待复习", HTML)
+        self.assertIn("function clearKnowledgeReviewFocus()", HTML)
+        self.assertIn("今日到期题已完成", HTML)
+
+    def test_leaving_a_today_task_clears_its_hidden_focus_state(self):
+        source_handler = re.search(
+            r"async function openQuestionSourceExam\(examId\) \{(?P<body>.*?)\n\}",
+            HTML,
+            re.S,
+        )
+        self.assertIsNotNone(source_handler)
+        self.assertIn("activeKnowledgeReviewFocus = null", source_handler.group("body"))
+        self.assertIn(".knowledge-review-focus-button:focus-visible", HTML)
+
     def test_parent_dashboard_can_expand_every_due_task_in_place(self):
         self.assertIn("let reviewTasksExpanded = false", HTML)
         self.assertIn(
