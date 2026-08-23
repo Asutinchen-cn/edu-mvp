@@ -31,6 +31,7 @@ from api.main import (
     delete_family_records,
     export_correction_sheet,
     export_family_review_report,
+    export_today_review_sheets,
     export_practice_pdf,
     generate_knowledge_practice,
     generate_practice,
@@ -968,6 +969,61 @@ class FamilyAccessEndpointTest(unittest.TestCase):
         self.assertEqual(response.media_type, "application/pdf")
         self.assertIn("attachment", response.headers["content-disposition"])
 
+    def test_today_review_sheets_return_two_pdfs_for_due_pending_questions(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.created_at = datetime(2026, 8, 23, 2, 0)
+        db.commit()
+        db.close()
+
+        now = datetime(2026, 8, 23, 6, 0, tzinfo=timezone.utc)
+        with (
+            patch("api.main._utc_now", return_value=now),
+            patch(
+                "api.main.generate_today_review_sheet_pdf",
+                side_effect=[b"%PDF-question", b"%PDF-answer"],
+            ) as render_pdf,
+        ):
+            response = asyncio.run(export_today_review_sheets(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                family_code="Home2026A",
+            ))
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["question_count"], 1)
+        self.assertEqual(base64.b64decode(payload["question_pdf"]["data_url"].split(",", 1)[1]), b"%PDF-question")
+        self.assertEqual(base64.b64decode(payload["answer_pdf"]["data_url"].split(",", 1)[1]), b"%PDF-answer")
+        self.assertIn("今日复习题目卷", payload["question_pdf"]["filename"])
+        self.assertIn("今日复习家长答案单", payload["answer_pdf"]["filename"])
+        self.assertEqual(
+            [call.kwargs["include_answers"] for call in render_pdf.call_args_list],
+            [False, True],
+        )
+        self.assertNotIn("correct_answer", payload["questions"][-1])
+        self.assertNotIn("student_answer", payload["questions"][-1])
+
+    def test_today_review_sheets_return_a_clear_error_when_nothing_is_due(self):
+        db = self.session_factory()
+        exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
+        exam.created_at = datetime(2026, 8, 23, 2, 0)
+        exam.wrong_question_mastery = json.dumps({"1": True})
+        db.commit()
+        db.close()
+
+        with patch("api.main._utc_now", return_value=datetime(2026, 8, 23, 6, 0, tzinfo=timezone.utc)):
+            response = asyncio.run(export_today_review_sheets(
+                grade="六年级",
+                student_name="小明",
+                subject="math",
+                family_code="Home2026A",
+            ))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("今天暂无到期的待复习错题", json.loads(response.body)["error"])
+
     def test_family_review_report_uses_question_mastery_even_when_exam_progress_is_pending(self):
         db = self.session_factory()
         exam = db.query(Exam).filter(Exam.id == self.first_exam_id).one()
@@ -1124,6 +1180,9 @@ class FamilyAccessEndpointTest(unittest.TestCase):
                 self.first_exam_id, "六年级", "小明", family_code="Other2026B"
             ),
             lambda: export_family_review_report(
+                "六年级", "小明", subject="math", family_code="Other2026B"
+            ),
+            lambda: export_today_review_sheets(
                 "六年级", "小明", subject="math", family_code="Other2026B"
             ),
             lambda: get_exam_image(
@@ -1432,6 +1491,7 @@ class FamilyAccessEndpointTest(unittest.TestCase):
 
         self.assertNotIn("location /uploads", nginx_config)
         self.assertIn("family-review-report", nginx_config)
+        self.assertIn("today-review-sheets", nginx_config)
         self.assertIn("wrong-questions", nginx_config)
         self.assertIn("generate-knowledge-practice", nginx_config)
         self.assertEqual(compose_config.count("./uploads:/uploads"), 1)

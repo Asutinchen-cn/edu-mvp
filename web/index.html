@@ -1131,6 +1131,61 @@
             opacity: 0.56;
             cursor: wait;
         }
+        .today-review-generate-btn {
+            min-height: 36px;
+            padding: 0 13px;
+            border: 1px solid var(--brand-blue);
+            border-radius: 8px;
+            background: var(--brand-blue);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .today-review-generate-btn:hover { background: #0f5dcc; }
+        .today-review-generate-btn:disabled {
+            opacity: 0.56;
+            cursor: wait;
+        }
+        .today-review-downloads {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 16px;
+            padding: 13px 14px;
+            border: 1px solid rgba(33, 166, 122, 0.2);
+            border-radius: 8px;
+            background: #f2fbf7;
+        }
+        .today-review-downloads p {
+            color: #315f50;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .today-review-download-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .today-review-download {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 0 14px;
+            border: 1px solid rgba(20, 100, 55, 0.28);
+            border-radius: 8px;
+            background: #fff;
+            color: #146437;
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .today-review-download:hover { background: #e7f8ef; }
         .review-dashboard-body {
             display: grid;
             grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
@@ -3257,7 +3312,10 @@
             .date-range { width: 100%; flex-wrap: wrap; }
             .review-dashboard-head { flex-direction: column; gap: 6px; }
             .review-dashboard-actions { width: 100%; justify-content: space-between; }
-            .review-report-btn { flex: 1 1 160px; }
+            .review-report-btn,
+            .today-review-generate-btn { flex: 1 1 160px; }
+            .today-review-downloads { align-items: stretch; flex-direction: column; }
+            .today-review-download-actions { display: grid; grid-template-columns: 1fr 1fr; }
             .review-coverage { align-items: stretch; flex-direction: column; }
             .review-coverage-button { min-height: 44px; width: 100%; }
             .review-dashboard-gate { align-items: flex-start; flex-direction: column; gap: 12px; }
@@ -3344,6 +3402,7 @@
             .history-action { min-height: 44px; }
             .remember-profile,
             .worksheet-check { min-height: 44px; }
+            .today-review-generate-btn { min-height: 44px; }
             .review-report-btn,
             .review-task-action,
             .review-task-more-button,
@@ -4001,6 +4060,8 @@ let wrongQuestionBank = {
     nextOffset: 0
 };
 let familyReportExporting = false;
+let todayReviewSheetsGenerating = false;
+let todayReviewSheets = null;
 let reviewTasksExpanded = false;
 let selectedRecordId = null;
 let pendingDeleteId = null;
@@ -4773,6 +4834,7 @@ function invalidateLoadedFamilyDataIfIdentityChanged() {
 
     activeFamilyDataScope = null;
     historyRecords = [];
+    todayReviewSheets = null;
     wrongQuestionBank = {
         loaded: false,
         loading: false,
@@ -5844,6 +5906,7 @@ async function confirmKnowledgeMastery() {
                 ))
                 .map(question => question.exam_id)
         ));
+        todayReviewSheets = null;
         practiceMasteryConfirmed = true;
         renderHistory();
         setHistorySyncStatus('success', `已将“${currentAnalysisData.practiceKnowledgePoint}”的 ${Number(data.matched_count || 0)} 道原错题标记为已掌握。`);
@@ -6718,6 +6781,72 @@ async function exportFamilyReviewReport() {
     }
 }
 
+async function generateTodayReviewSheets() {
+    if (todayReviewSheetsGenerating) return;
+    const grade = document.getElementById('gradeSelect').value;
+    const studentName = document.getElementById('studentName').value.trim();
+    if (!grade || !studentName) {
+        setHistorySyncStatus('error', '请先选择年级并填写学生姓名，再生成今日复习单。');
+        return;
+    }
+
+    setHistorySyncStatus('', '');
+    todayReviewSheetsGenerating = true;
+    todayReviewSheets = null;
+    renderHistory();
+    try {
+        const params = new URLSearchParams({ grade: grade, student_name: studentName });
+        if (currentSubjectArchive !== 'all') params.set('subject', currentSubjectArchive);
+        const data = await requestJson(`/today-review-sheets?${params.toString()}`, {
+            method: 'GET',
+            headers: familyAccessHeaders()
+        });
+        const questionPdf = data.question_pdf || {};
+        const answerPdf = data.answer_pdf || {};
+        if (
+            !String(questionPdf.data_url || '').startsWith('data:application/pdf;base64,')
+            || !String(answerPdf.data_url || '').startsWith('data:application/pdf;base64,')
+        ) {
+            throw new Error('服务器没有返回完整的 PDF 文件');
+        }
+        todayReviewSheets = {
+            questionCount: Math.max(0, Number(data.question_count) || 0),
+            questionPdf: {
+                filename: String(questionPdf.filename || '今日复习题目卷.pdf'),
+                dataUrl: questionPdf.data_url
+            },
+            answerPdf: {
+                filename: String(answerPdf.filename || '今日复习家长答案单.pdf'),
+                dataUrl: answerPdf.data_url
+            }
+        };
+        setHistorySyncStatus('success', `今日复习单已生成，共 ${todayReviewSheets.questionCount} 道。请分别下载孩子题目卷和家长答案单。`);
+    } catch (error) {
+        todayReviewSheets = null;
+        const message = error.message || '服务器暂时不可用';
+        setHistorySyncStatus('error', `生成今日复习单失败：${message}。按钮已恢复，可以重试。`);
+    } finally {
+        todayReviewSheetsGenerating = false;
+        renderHistory();
+    }
+}
+
+function downloadTodayReviewSheet(kind) {
+    const item = kind === 'answer'
+        ? todayReviewSheets?.answerPdf
+        : todayReviewSheets?.questionPdf;
+    if (!item?.dataUrl) {
+        setHistorySyncStatus('error', '复习单已失效，请重新生成后下载。');
+        return;
+    }
+    const link = document.createElement('a');
+    link.href = item.dataUrl;
+    link.download = item.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
 function normalizeWrongCount(value) {
     if (value === null || value === undefined || value === '') return null;
     const count = Number(value);
@@ -7115,6 +7244,9 @@ function renderReviewDashboard(records) {
     const reportButtonTitle = summary.canExportWeeklyReport
         ? '导出当前学科近 7 天家庭复习报告'
         : '近 7 天有新错题或掌握记录后可导出';
+    const todaySheetsButtonTitle = summary.duePendingCount === 0
+        ? '今天暂无到期的待复习错题'
+        : `按当前学科生成 ${summary.duePendingCount} 道今日复习题`;
     dashboard.innerHTML = `
         <div class="review-dashboard-head">
             <div>
@@ -7123,9 +7255,18 @@ function renderReviewDashboard(records) {
             </div>
             <div class="review-dashboard-actions">
                 <span class="review-scope">${escapeHtml(scopeLabel)}</span>
+                <button type="button" class="today-review-generate-btn" onclick="generateTodayReviewSheets()" title="${escapeHtml(todaySheetsButtonTitle)}" ${!wrongQuestionBank.loaded || summary.duePendingCount === 0 || todayReviewSheetsGenerating ? 'disabled' : ''}>${todayReviewSheetsGenerating ? '正在生成...' : '生成今日复习单'}</button>
                 <button type="button" class="review-report-btn" onclick="exportFamilyReviewReport()" title="${escapeHtml(reportButtonTitle)}" ${!summary.canExportWeeklyReport || familyReportExporting ? 'disabled' : ''}>${familyReportExporting ? '正在导出...' : '导出近 7 天报告'}</button>
             </div>
         </div>
+        ${todayReviewSheets ? `
+            <div class="today-review-downloads" role="status">
+                <p><strong>今日复习单已就绪</strong><br>共 ${todayReviewSheets.questionCount} 道，答案只在家长答案单中。</p>
+                <div class="today-review-download-actions">
+                    <button type="button" class="today-review-download" onclick="downloadTodayReviewSheet('question')">下载孩子题目卷</button>
+                    <button type="button" class="today-review-download" onclick="downloadTodayReviewSheet('answer')">下载家长答案单</button>
+                </div>
+            </div>` : ''}
         ${wrongQuestionBank.loaded && !summary.historyComplete ? `
             <div class="review-coverage" role="status">
                 <div class="review-coverage-copy">
@@ -7321,6 +7462,7 @@ async function setHistoryView(view) {
 
 function setSubjectArchive(subject) {
     activeKnowledgeReviewFocus = null;
+    todayReviewSheets = null;
     currentSubjectArchive = subject;
     document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(t => {
         t.classList.toggle('active', t.dataset.subjectFilter === subject);
@@ -7362,6 +7504,7 @@ function goToTodayReview() {
     }
     resetHistoryDateFilters();
     activeKnowledgeReviewFocus = null;
+    todayReviewSheets = null;
     currentSubjectArchive = 'all';
     document.querySelectorAll('.filter-tab[data-subject-filter]').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.subjectFilter === 'all');
@@ -7488,6 +7631,7 @@ async function confirmFamilyDataDeletion(event) {
     const deletedExamCount = Math.max(0, Number(data.deleted_exam_count) || 0);
     const deletedFileCount = Math.max(0, Number(data.deleted_file_count) || 0);
     historyRecords = [];
+    todayReviewSheets = null;
     wrongQuestionBank = {
         loaded: false,
         loading: false,
@@ -7626,6 +7770,7 @@ async function loadWrongQuestionBank(options = {}) {
             headers: accessHeaders
         });
         const questions = Array.isArray(data.questions) ? data.questions : [];
+        todayReviewSheets = null;
         wrongQuestionBank = {
             loaded: true,
             loading: false,
@@ -8166,6 +8311,7 @@ async function toggleWrongQuestionMastery(questionId) {
         });
         item.mastered = Boolean(data.mastered);
         item.mastered_at = data.mastered_at || null;
+        todayReviewSheets = null;
         refreshHistoryQuestionMasteryFromBank(new Set([item.exam_id]));
         const remainingToday = countDuePendingQuestionsForCurrentSubject();
         const partialNote = wrongQuestionBank.hasMore ? '当前已加载记录中，' : '';

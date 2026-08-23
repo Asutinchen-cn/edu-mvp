@@ -3280,6 +3280,62 @@ def _build_review_schedule(
     }
 
 
+def _collect_today_review_questions(
+    exams: list[Exam],
+    *,
+    now: datetime | None = None,
+) -> list[dict]:
+    """收集今天已到期且仍未掌握的逐题错题。"""
+    current_time = _parse_review_datetime(now) or _utc_now()
+    questions = []
+    for exam in exams:
+        review_progress = _normalize_review_progress(exam.review_progress)
+        review_schedule = _build_review_schedule(
+            exam.created_at,
+            review_progress,
+            now=current_time,
+        )
+        if review_schedule["status"] not in {"overdue", "today"}:
+            continue
+
+        analysis = _analysis_history_detail(
+            exam.ai_analysis,
+            exam.weak_points,
+            exam.recommendations,
+        )
+        fallback_point = next(iter(analysis.get("weak_points", [])), "待归类")
+        question_mastery = _normalize_wrong_question_mastery(exam.wrong_question_mastery)
+        exam_mastered = review_progress["completed_count"] == review_progress["total"]
+        subject = exam.subject if exam.subject in SUBJECT_LABELS else "math"
+        for question_number, item in enumerate(analysis.get("wrong_questions", []), start=1):
+            if not item.get("question") or question_mastery.get(str(question_number), exam_mastered):
+                continue
+            questions.append({
+                "exam_id": exam.id,
+                "subject": subject,
+                "knowledge_point": item.get("knowledge_point") or fallback_point,
+                "question_number": question_number,
+                "source_question_number": item.get("source_question_number") or "",
+                "question": item["question"],
+                "correct_answer": item.get("correct_answer") or "请结合原卷核对",
+                "error_type": item.get("error_type") or "请结合原卷回顾错因",
+                "review_status": review_schedule["status"],
+                "due_at": review_schedule["due_at"],
+            })
+
+    subject_rank = {"math": 0, "english": 1}
+    status_rank = {"overdue": 0, "today": 1}
+    questions.sort(key=lambda item: (
+        subject_rank.get(item["subject"], 2),
+        item["knowledge_point"],
+        status_rank.get(item["review_status"], 2),
+        item.get("due_at") or "",
+        item["exam_id"],
+        item["question_number"],
+    ))
+    return questions
+
+
 @app.get("/exams")
 async def list_exams(
     grade: str = None,
@@ -4757,6 +4813,174 @@ def generate_family_review_report_pdf(
     return bytes(pdf.output())
 
 
+def generate_today_review_sheet_pdf(
+    student_name: str,
+    grade: str,
+    questions: list[dict],
+    include_answers: bool,
+    generated_at: datetime | None = None,
+) -> bytes:
+    """生成今日复习题目卷或家长答案单。"""
+    from fpdf import FPDF
+
+    def clean(value) -> str:
+        text_value = str(value or "")
+        return "".join(
+            char for char in text_value if char >= " " or char in "\n\t"
+        ).strip()
+
+    pdf = FPDF()
+    pdf.set_margins(18, 16, 18)
+    pdf.set_auto_page_break(auto=True, margin=18)
+    document_font = _register_pdf_fonts(pdf)
+    pdf.add_page()
+
+    def write_text(value, line_height=7, bold=False, color=(21, 34, 58), align="L"):
+        text_value = clean(value)
+        if not text_value:
+            return
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font(document_font, "B" if bold else "", 11)
+        pdf.set_text_color(*color)
+        pdf.multi_cell(
+            pdf.epw,
+            line_height,
+            text_value,
+            align=align,
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+
+    title = "今日复习家长答案单" if include_answers else "今日复习题目卷"
+    generated = (_parse_review_datetime(generated_at) or _utc_now()).astimezone(SHANGHAI_TIMEZONE)
+    pdf.set_font(document_font, "B", 19)
+    pdf.set_text_color(21, 34, 58)
+    pdf.cell(0, 11, title, new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font(document_font, "", 10)
+    pdf.set_text_color(65, 81, 107)
+    pdf.cell(
+        0,
+        7,
+        f"学生：{clean(student_name)}    年级：{clean(grade)}    日期：{generated:%Y-%m-%d}    共 {len(questions)} 道",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
+    )
+    pdf.ln(4)
+    if include_answers:
+        write_text(
+            "供家长核对：先让孩子独立完成题目卷，再查看本页答案与原错因。",
+            7,
+            color=(65, 81, 107),
+            align="C",
+        )
+    else:
+        write_text(
+            "独立完成，不查看原卷答案。写清思路后再请家长核对。",
+            7,
+            color=(65, 81, 107),
+            align="C",
+        )
+    pdf.ln(4)
+
+    active_group = None
+    for index, question in enumerate(questions, start=1):
+        group = (question.get("subject"), question.get("knowledge_point"))
+        if group != active_group:
+            if pdf.get_y() > pdf.h - 55:
+                pdf.add_page()
+            elif active_group is not None:
+                pdf.ln(3)
+            active_group = group
+            subject_label = SUBJECT_LABELS.get(group[0], "数学")
+            pdf.set_fill_color(239, 246, 255)
+            pdf.set_text_color(23, 105, 232)
+            pdf.set_font(document_font, "B", 12)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(
+                pdf.epw,
+                9,
+                f"{subject_label} · {clean(group[1])}",
+                fill=True,
+                align="L",
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
+            pdf.ln(2)
+
+        source_number = clean(question.get("source_question_number"))
+        source = f"来源：第 {question.get('exam_id')} 份试卷"
+        if source_number:
+            source += f" · 原题号 {source_number}"
+        with pdf.unbreakable() as block:
+            block.set_text_color(21, 34, 58)
+            block.set_font(document_font, "B", 11)
+            block.set_x(block.l_margin)
+            block.multi_cell(
+                block.epw,
+                7,
+                f"{index}. {clean(question.get('question'))}",
+                align="L",
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
+            block.set_font(document_font, "", 9)
+            block.set_text_color(100, 116, 139)
+            block.set_x(block.l_margin)
+            block.multi_cell(
+                block.epw,
+                6,
+                source,
+                align="L",
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
+            block.set_font(document_font, "", 11)
+            if include_answers:
+                block.set_text_color(20, 100, 55)
+                block.set_x(block.l_margin)
+                block.multi_cell(
+                    block.epw,
+                    7,
+                    f"正确答案：{clean(question.get('correct_answer'))}",
+                    align="L",
+                    new_x="LMARGIN",
+                    new_y="NEXT",
+                )
+                block.set_text_color(65, 81, 107)
+                block.set_x(block.l_margin)
+                block.multi_cell(
+                    block.epw,
+                    7,
+                    f"原错因：{clean(question.get('error_type'))}",
+                    align="L",
+                    new_x="LMARGIN",
+                    new_y="NEXT",
+                )
+            else:
+                block.set_text_color(65, 81, 107)
+                for line_index in range(3):
+                    prefix = "答：" if line_index == 0 else "    "
+                    block.set_x(block.l_margin)
+                    block.multi_cell(
+                        block.epw,
+                        8,
+                        f"{prefix}____________________________________________",
+                        align="L",
+                        new_x="LMARGIN",
+                        new_y="NEXT",
+                    )
+            block.ln(3)
+
+    pdf.set_auto_page_break(auto=False)
+    pdf.set_y(-13)
+    pdf.set_font(document_font, "", 8)
+    pdf.set_text_color(100, 116, 139)
+    footer = "答案单请由家长保管" if include_answers else "完成后请家长核对并在错题库标记掌握"
+    pdf.cell(0, 7, footer, align="C")
+    return bytes(pdf.output())
+
+
 def generate_unit_worksheet_pdf(body: UnitWorksheetRequest, questions: list, include_answers: bool) -> bytes:
     """生成按单元筛选的题目卷或答案解析卷。"""
     from fpdf import FPDF
@@ -5148,12 +5372,116 @@ async def export_family_review_report(
         headers={"Content-Disposition": content_disposition},
     )
 
+@app.get("/today-review-sheets")
+async def export_today_review_sheets(
+    grade: str = None,
+    student_name: str = None,
+    subject: str = None,
+    family_code: str | None = Header(default=None, alias="X-Family-Code"),
+):
+    """按家庭错题库生成今日题目卷与家长答案单。"""
+    try:
+        grade, student_name, family_code = _normalize_family_access_request(
+            grade, student_name, family_code
+        )
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    subject = (subject or "").strip()
+    if subject and subject not in SUBJECT_LABELS:
+        return JSONResponse(
+            {"success": False, "error": "subject 必须是 math 或 english"},
+            status_code=400,
+        )
+
+    db = SessionLocal()
+    candidates = (
+        db.query(Exam)
+        .filter(Exam.grade == grade, Exam.student_name == student_name)
+        .order_by(Exam.created_at.desc())
+        .all()
+    )
+    if subject:
+        candidates = [exam for exam in candidates if exam.subject == subject]
+    accessible_exams = [
+        exam for exam in candidates
+        if _exam_has_family_access(exam, grade, student_name, family_code)
+    ]
+    if not accessible_exams:
+        db.close()
+        return JSONResponse(
+            {"success": False, "error": FAMILY_ACCESS_DENIED_ERROR},
+            status_code=403,
+        )
+
+    generated_at = _utc_now()
+    questions = _collect_today_review_questions(accessible_exams, now=generated_at)
+    db.close()
+    if not questions:
+        return JSONResponse(
+            {"success": False, "error": "今天暂无到期的待复习错题"},
+            status_code=400,
+        )
+
+    try:
+        question_pdf = generate_today_review_sheet_pdf(
+            student_name=student_name,
+            grade=grade,
+            questions=questions,
+            include_answers=False,
+            generated_at=generated_at,
+        )
+        answer_pdf = generate_today_review_sheet_pdf(
+            student_name=student_name,
+            grade=grade,
+            questions=questions,
+            include_answers=True,
+            generated_at=generated_at,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": f"生成今日复习单失败：{str(e)[:160]}"},
+            status_code=500,
+        )
+
+    safe_student_name = re.sub(r'[\\/:*?"<>|]+', "_", student_name)
+    date_label = generated_at.astimezone(SHANGHAI_TIMEZONE).strftime("%Y-%m-%d")
+    question_filename = f"今日复习题目卷_{grade}_{safe_student_name}_{date_label}.pdf"
+    answer_filename = f"今日复习家长答案单_{grade}_{safe_student_name}_{date_label}.pdf"
+    preview = [
+        {
+            "subject": item["subject"],
+            "knowledge_point": item["knowledge_point"],
+            "question": item["question"],
+            "source_question_number": item["source_question_number"],
+        }
+        for item in questions
+    ]
+    return JSONResponse({
+        "question_count": len(questions),
+        "questions": preview,
+        "question_pdf": {
+            "filename": question_filename,
+            "data_url": (
+                "data:application/pdf;base64,"
+                f"{base64.b64encode(question_pdf).decode('ascii')}"
+            ),
+        },
+        "answer_pdf": {
+            "filename": answer_filename,
+            "data_url": (
+                "data:application/pdf;base64,"
+                f"{base64.b64encode(answer_pdf).decode('ascii')}"
+            ),
+        },
+    })
+
+
 @app.get("/api-info")
 async def api_info():
     """API信息"""
     return {
         "message": "🎓 虾胡闹教育 API运行中",
-        "version": "0.10.2",
+        "version": "0.10.3",
         "ai_provider": "DeepSeek",
         "ocr_provider": "Baidu",
         "endpoints": {
@@ -5170,6 +5498,7 @@ async def api_info():
             "image": "GET /exams/{id}/image?grade=...&student_name=...（请求头 X-Family-Code）",
             "correction_sheet": "GET /exams/{id}/correction-sheet?grade=...&student_name=...（请求头 X-Family-Code）",
             "family_review_report": "GET /family-review-report?grade=...&student_name=...（请求头 X-Family-Code）",
+            "today_review_sheets": "GET /today-review-sheets?grade=...&student_name=...（请求头 X-Family-Code）",
             "wrong_question_mastery": "PATCH /exams/{id}/wrong-questions/{question_number}/mastery（请求头 X-Family-Code）",
             "knowledge_point_mastery": "PATCH /wrong-questions/mastery-by-knowledge?grade=...&student_name=...&subject=...&knowledge_point=...（请求头 X-Family-Code）",
             "delete": "DELETE /exams/{id}?grade=...&student_name=...（请求头 X-Family-Code）",

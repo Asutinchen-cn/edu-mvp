@@ -13,6 +13,7 @@ from api.main import (
     _analysis_history_detail,
     _analysis_history_summary,
     _build_review_schedule,
+    _collect_today_review_questions,
     _family_report_window_start,
     _normalize_ai_analysis,
     _normalize_review_progress,
@@ -22,7 +23,138 @@ from api.main import (
     generate_correction_sheet_pdf,
     generate_family_review_report_pdf,
     generate_practice_pdf,
+    generate_today_review_sheet_pdf,
 )
+
+
+class TodayReviewSheetTest(unittest.TestCase):
+    def test_collects_only_due_pending_questions_in_stable_subject_groups(self):
+        now = datetime(2026, 8, 23, 6, 0, tzinfo=timezone.utc)
+
+        def exam(subject, created_at, question, point, *, progress=None, mastery=None):
+            from api.main import Exam
+
+            return Exam(
+                id={
+                    "过期数学题": 11,
+                    "今日英语题": 12,
+                    "明日数学题": 13,
+                    "已掌握数学题": 14,
+                }[question],
+                grade="六年级",
+                subject=subject,
+                student_name="小明",
+                created_at=created_at,
+                ai_analysis=json.dumps({
+                    "wrong_questions": [{
+                        "source_question_number": "三、2",
+                        "question": question,
+                        "error_type": "原错因",
+                        "student_answer": "原答案",
+                        "correct_answer": "正确答案",
+                        "knowledge_point": point,
+                    }],
+                    "weak_points": [point],
+                }, ensure_ascii=False),
+                review_progress=json.dumps(progress or {}, ensure_ascii=False),
+                wrong_question_mastery=json.dumps(mastery or {}, ensure_ascii=False),
+            )
+
+        exams = [
+            exam("english", datetime(2026, 8, 23, 2, 0), "今日英语题", "一般过去时"),
+            exam("math", datetime(2026, 8, 20, 2, 0), "过期数学题", "一元一次方程"),
+            exam(
+                "math",
+                datetime(2026, 8, 22, 2, 0),
+                "明日数学题",
+                "有理数运算",
+                progress={
+                    "completed": ["corrected", "practiced"],
+                    "completed_at": {"practiced": "2026-08-23T02:00:00Z"},
+                },
+            ),
+            exam(
+                "math",
+                datetime(2026, 8, 23, 1, 0),
+                "已掌握数学题",
+                "一元一次方程",
+                mastery={"1": True},
+            ),
+        ]
+
+        questions = _collect_today_review_questions(exams, now=now)
+
+        self.assertEqual(
+            [(item["subject"], item["knowledge_point"], item["question"]) for item in questions],
+            [
+                ("math", "一元一次方程", "过期数学题"),
+                ("english", "一般过去时", "今日英语题"),
+            ],
+        )
+        self.assertEqual([item["review_status"] for item in questions], ["overdue", "today"])
+
+    def test_question_and_parent_answer_pdfs_keep_answers_separate(self):
+        questions = [
+            {
+                "exam_id": 11,
+                "subject": "math",
+                "knowledge_point": "一元一次方程",
+                "source_question_number": "三、2",
+                "question_number": 1,
+                "question": "解方程 2x + 3 = 9",
+                "student_answer": "x = 6",
+                "correct_answer": "x = 3",
+                "error_type": "移项符号错误",
+                "review_status": "today",
+            },
+            {
+                "exam_id": 12,
+                "subject": "english",
+                "knowledge_point": "一般过去时",
+                "source_question_number": "II. 4",
+                "question_number": 1,
+                "question": "Yesterday Tom ___ to school.",
+                "student_answer": "goed",
+                "correct_answer": "went",
+                "error_type": "动词过去式混淆",
+                "review_status": "overdue",
+            },
+        ]
+
+        question_pdf = generate_today_review_sheet_pdf(
+            student_name="小明",
+            grade="六年级",
+            questions=questions,
+            include_answers=False,
+            generated_at=datetime(2026, 8, 23, 6, 0, tzinfo=timezone.utc),
+        )
+        answer_pdf = generate_today_review_sheet_pdf(
+            student_name="小明",
+            grade="六年级",
+            questions=questions,
+            include_answers=True,
+            generated_at=datetime(2026, 8, 23, 6, 0, tzinfo=timezone.utc),
+        )
+
+        question_reader = PdfReader(io.BytesIO(question_pdf))
+        answer_reader = PdfReader(io.BytesIO(answer_pdf))
+        question_text = "\n".join(page.extract_text() or "" for page in question_reader.pages)
+        answer_text = "\n".join(page.extract_text() or "" for page in answer_reader.pages)
+
+        self.assertEqual(len(question_reader.pages), 1)
+        self.assertEqual(len(answer_reader.pages), 1)
+        self.assertIn("今日复习题目卷", question_text)
+        self.assertIn("数学 · 一元一次方程", question_text)
+        self.assertIn("英语 · 一般过去时", question_text)
+        self.assertIn("来源：第 11 份试卷 · 原题号 三、2", question_text)
+        self.assertNotIn("x = 3", question_text)
+        self.assertNotIn("x = 6", question_text)
+        self.assertNotIn("移项符号错误", question_text)
+        self.assertNotIn("正确答案", question_text)
+        self.assertIn("今日复习家长答案单", answer_text)
+        self.assertIn("正确答案：x = 3", answer_text)
+        self.assertIn("原错因：移项符号错误", answer_text)
+        self.assertIn("来源：第 12 份试卷 · 原题号 II. 4", answer_text)
 
 
 class AiAnalysisNormalizationTest(unittest.TestCase):

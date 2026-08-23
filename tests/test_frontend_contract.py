@@ -1370,6 +1370,25 @@ class FrontendCurriculumContractTest(unittest.TestCase):
         self.assertIn("近 7 天复习报告下载已开始", HTML)
         self.assertNotIn("alert(e.message || '导出近 7 天报告失败，请稍后重试')", HTML)
 
+    def test_parent_can_generate_separate_today_question_and_answer_pdfs(self):
+        self.assertIn("let todayReviewSheetsGenerating = false", HTML)
+        self.assertIn("let todayReviewSheets = null", HTML)
+        self.assertIn("function generateTodayReviewSheets()", HTML)
+        self.assertIn("/today-review-sheets?${params.toString()}", HTML)
+        self.assertIn("headers: familyAccessHeaders()", HTML)
+        self.assertIn("生成今日复习单", HTML)
+        self.assertIn("孩子题目卷", HTML)
+        self.assertIn("家长答案单", HTML)
+        self.assertIn("summary.duePendingCount === 0", HTML)
+        self.assertIn("今天暂无到期的待复习错题", HTML)
+        self.assertIn("todayReviewSheets = null", HTML.split(
+            "function invalidateLoadedFamilyDataIfIdentityChanged()", 1
+        )[1].split("function generatedFamilyCodeNeedsSaving()", 1)[0])
+        self.assertRegex(
+            HTML,
+            r"\.today-review-download[^}]*min-height:\s*44px",
+        )
+
     def test_weekly_report_export_uses_question_activity_instead_of_visible_exams(self):
         self.assertIn("const canExportWeeklyReport = Boolean(weeklyTrend && (", HTML)
         self.assertIn("weeklyTrend.recordedCount > 0", HTML)

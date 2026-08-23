@@ -82,7 +82,7 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
         no_store_rule = (
             '~^/(upload|upload-batch|analyze|exams|wrong-questions|generate-practice|'
             'generate-knowledge-practice|generate-unit-worksheet|export-practice-pdf|'
-            'family-review-report|family-records|api-info)(?:/|$) "no-store";'
+            'family-review-report|today-review-sheets|family-records|api-info)(?:/|$) "no-store";'
         )
         for config in (NGINX_CONFIG, fallback):
             self.assertIn(no_store_rule, config)
@@ -99,7 +99,7 @@ class NginxUploadAndPrivacyContractTest(unittest.TestCase):
             self.assertRegex(
                 config,
                 r"location ~ \^/\(exams\|wrong-questions\|export-practice-pdf\|"
-                r"family-review-report\|family-records\)\(/\|\$\) \{"
+                r"family-review-report\|today-review-sheets\|family-records\)\(/\|\$\) \{"
                 r"[^}]*limit_req zone=edu_private",
             )
 
